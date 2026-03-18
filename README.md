@@ -296,7 +296,7 @@ GLOBAL FLAGS
   --verbose           Verbose output
 
 EXAMPLES
-  $ reforge
+  $ qfg
 ```
 
 _See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/interactive.ts)_

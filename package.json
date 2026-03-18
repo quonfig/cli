@@ -1,8 +1,7 @@
 {
   "packageManager": "yarn@4.11.0",
   "name": "@quonfig/cli",
-  "version": "0.0.14",
-  "author": "Jeffrey Chupp @semanticart",
+  "version": "0.1.0",
   "bugs": {
     "url": "https://github.com/quonfig/cli/issues"
   },

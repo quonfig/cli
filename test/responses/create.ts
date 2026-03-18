@@ -337,7 +337,7 @@ const encryptionKeyResponse = {
         value: {
           provided: {
             source: 'ENV_VAR',
-            lookup: 'REFORGE_INTEGRATION_TEST_ENCRYPTION_KEY',
+            lookup: 'QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY',
           },
         },
       },
@@ -374,7 +374,7 @@ const newFormatEncryptionKeyResponse = {
           type: 'provided',
           value: {
             source: 'ENV_VAR',
-            lookup: 'REFORGE_INTEGRATION_TEST_ENCRYPTION_KEY',
+            lookup: 'QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY',
           },
         },
       },
