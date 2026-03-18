@@ -1,0 +1,10 @@
+---
+description: eslint issues before they happen
+globs: *.ts
+---
+
+# Your rule content
+
+- Don't generate code that will have the issue: Missing braces in case clause.eslintunicorn/switch-case-braces
+- Fix Expected "accessorMethods" to come before "schemaLines"eslintperfectionist/sort-objects lint issues in your generated code
+- Don't generate code that will have the issue: Expected blank line before this statement.eslintpadding-line-between-statements

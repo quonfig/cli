@@ -1,0 +1,6 @@
+src/quonfig-common/
+.eslintignore
+.prettierignore
+package.json
+yarn.lock
+README.md

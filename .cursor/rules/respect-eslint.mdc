@@ -1,0 +1,9 @@
+---
+description: make cursor behave
+globs: *.ts
+---
+
+# Your rule content
+
+- respect the [.eslintrc.json](mdc:.eslintrc.json) file rules
+- When writing imports order them so i don't get:  Expected "./types.js" to come before "../index.js"

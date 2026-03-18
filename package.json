@@ -1,0 +1,102 @@
+{
+  "packageManager": "yarn@4.11.0",
+  "name": "@quonfig/cli",
+  "version": "0.0.14",
+  "author": "Jeffrey Chupp @semanticart",
+  "bugs": {
+    "url": "https://github.com/quonfig/cli/issues"
+  },
+  "homepage": "https://github.com/quonfig/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quonfig/cli.git"
+  },
+  "keywords": [
+    "oclif"
+  ],
+  "bin": {
+    "qfg": "./bin/run.js"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^5.0.0",
+    "@oclif/core": "^3.18.2",
+    "@oclif/plugin-help": "^6",
+    "@oclif/plugin-plugins": "^4",
+    "@quonfig/node": "^0.0.4",
+    "acorn": "^8.10.0",
+    "acorn-walk": "^8.2.0",
+    "chalk": "^5.4.1",
+    "comment-json": "^4.2.5",
+    "common-tags": "^1.8.2",
+    "fuzzy": "^0.1.3",
+    "inquirer-autocomplete-standalone": "^0.8.1",
+    "lodash.camelcase": "^4.3.0",
+    "mustache": "^4.2.0",
+    "node-forge": "^1.3.1",
+    "zod": "^4.1.12"
+  },
+  "description": "Quonfig CLI",
+  "devDependencies": {
+    "@oclif/prettier-config": "^0.2.1",
+    "@oclif/test": "^3",
+    "@types/chai": "^4",
+    "@types/common-tags": "^1.8.4",
+    "@types/lodash.camelcase": "^4.3.9",
+    "@types/mocha": "^10",
+    "@types/mustache": "^4.2.5",
+    "@types/node": "^18",
+    "@types/node-forge": "^1.3.14",
+    "chai": "^4",
+    "eslint": "^8",
+    "eslint-config-oclif": "^5",
+    "eslint-config-oclif-typescript": "^3",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-markdown": "^5.1.0",
+    "eslint-plugin-only-error": "^1.0.2",
+    "mocha": "^10",
+    "msw": "^2.0.6",
+    "oclif": "^4.22.29",
+    "prettier": "^3.6.2",
+    "shx": "^0.3.4",
+    "ts-node": "^10.9.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "/bin",
+    "/dist",
+    "/oclif.manifest.json"
+  ],
+  "license": "MIT",
+  "main": "",
+  "oclif": {
+    "bin": "qfg",
+    "dirname": "qfg",
+    "commands": "./dist/commands",
+    "plugins": [],
+    "topicSeparator": " ",
+    "helpClass": "./dist/help",
+    "stacktrace": false
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsc -b",
+    "lint": "eslint --cache=true \"**/*.{ts,md,json}\"",
+    "lint:fix": "eslint --cache=true --fix \"**/*.{ts,md,json}\"",
+    "postpack": "shx rm -f oclif.manifest.json",
+    "posttest": "yarn lint",
+    "prepack": "yarn readme",
+    "prettier": "prettier -l \"**/*.{ts,md,json}\"",
+    "prettier:fix": "prettier --write \"**/*.{ts,md,json}\"",
+    "readme": "yarn build && oclif manifest && oclif readme",
+    "test": "NODE_ENV=test mocha \"test/**/*.test.ts\" --exit",
+    "test:ci": "NODE_ENV=test mocha --forbid-only \"test/**/*.test.ts\" --exit",
+    "test:debug:single": "node --inspect-brk --loader ts-node/esm --no-warnings=ExperimentalWarning ./node_modules/.bin/mocha --exit",
+    "update-submodule": "git submodule update --remote src/quonfig-common"
+  },
+  "types": "dist/index.d.ts",
+  "exports": "./lib/index.js",
+  "type": "module"
+}

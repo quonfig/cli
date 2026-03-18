@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "alwaysStrict": true,
+    "declaration": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noErrorTruncation": true,
+    "noImplicitReturns": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "target": "es2022"
+  },
+  "exclude": ["./src/quonfig-common/**/*.test.ts"],
+  "include": ["src/**/*.ts"],
+  "ts-node": {
+    "esm": true
+  }
+}

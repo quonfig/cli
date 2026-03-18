@@ -1,0 +1,52 @@
+{
+  "configServicePointer": {"projectEnvId": "588"},
+  "configs": [
+    {
+      "changedBy": {"sdkKeyId": "", "email": "test@example.com", "userId": "0"},
+      "configType": "CONFIG",
+      "id": "16777738077090689",
+      "key": "intprop",
+      "projectId": "2",
+      "rows": [{"values": [{"value": {"int": "8"}}]}],
+      "valueType": "INT",
+      "sendToClientSdk": true
+    },
+    {
+      "changedBy": {"sdkKeyId": "", "email": "test@example.com", "userId": "0"},
+      "configType": "CONFIG",
+      "id": "16777738077090698",
+      "key": "notSenttoClient",
+      "projectId": "2",
+      "rows": [{"values": [{"value": {"int": "2"}}]}],
+      "valueType": "INT",
+      "sendToClientSdk": false
+    },
+    {
+      "id": "17023190805036677",
+      "projectId": "202",
+      "key": "flag.list.environments",
+      "changedBy": {"email": "test@example.com"},
+      "rows": [
+        {
+          "projectEnvId": "308",
+          "values": [
+            {
+              "criteria": [
+                {
+                  "propertyName": "user.key",
+                  "operator": "PROP_IS_ONE_OF",
+                  "valueToMatch": {"stringList": {"values": ["5905ecd1-9bbf-4711-a663-4f713628a78c"]}}
+                }
+              ],
+              "value": {"bool": true}
+            },
+            {"value": {"bool": false}}
+          ]
+        }
+      ],
+      "allowableValues": [{"bool": false}, {"bool": true}],
+      "configType": "FEATURE_FLAG",
+      "valueType": "BOOL"
+    }
+  ]
+}

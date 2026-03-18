@@ -1,0 +1,9 @@
+/dist
+/tmp
+src/quonfig-common/
+package.json
+yarn.lock
+generated/
+.vscode/
+reforge.*.config.json
+test/fixtures

@@ -1,0 +1,68 @@
+name: tests
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+# Note, this comes from https://github.com/oclif/github-workflows/blob/main/.github/workflows/unitTest.yml because I couldn't figure out how to make `env` work with the default content from oclif
+#
+# jobs:
+#   unit-tests:
+#     uses: oclif/github-workflows/.github/workflows/unitTest.yml@main
+#
+jobs:
+  unit-tests:
+    env:
+      QUONFIG_DOMAIN: goatsofquonfig.com
+      QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: ${{ secrets.QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY }}
+      FAKE_PROD_SECRET: ${{ secrets.FAKE_PROD_SECRET }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    strategy:
+      matrix:
+        os: ['ubuntu-latest', 'windows-latest']
+        node_version: [lts/-1, lts/*, latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node_version }}
+      - name: Get Node.js major version
+        id: node-version
+        shell: bash
+        run: |
+          NODE_MAJOR=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+          echo "major=$NODE_MAJOR" >> $GITHUB_OUTPUT
+      - name: Install Corepack (Node 25+)
+        if: ${{ fromJSON(steps.node-version.outputs.major) >= 25 }}
+        run: npm install -g corepack --force
+      - name: Enable Corepack
+        run: corepack enable
+      - name: cache yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.yarn/cache
+          key: ${{ runner.os }}-yarn-${{ hashfiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+      - run: yarn install --immutable
+      - run: yarn prettier
+      - run: yarn lint
+      - run: yarn build
+      - run: yarn test:ci
+      - run: yarn oclif manifest
+      - run: yarn oclif readme
+      - name: Check for uncommitted changes
+        # We don't need to check on windows, which results in other differences as well
+        if: matrix.os == 'ubuntu-latest'
+        # NOTE: We expclude the arch type because CI runs on a different arc than our macs
+        shell: bash
+        run: |
+          if ! git diff -I"linux-x64" -I"darwin-arm64" --quiet; then
+            echo "Error: README is out of date. Please run 'yarn readme' and commit the changes."
+            git diff -I"linux-x64" -I"darwin-arm64"
+            exit 1
+          fi

@@ -1,0 +1,44 @@
+{
+  "extends": ["oclif", "oclif-typescript", "prettier", "plugin:markdown/recommended-legacy"],
+  "plugins": ["only-error"],
+  "rules": {
+    "complexity": "off",
+    "max-depth": "off",
+    "max-params": "off",
+    "no-inner-declarations": "off",
+    "no-throw-literal": "off",
+    "no-warning-comments": "off",
+    "unicorn/consistent-destructuring": "off",
+    "unicorn/no-array-for-each": "off",
+    "unicorn/no-array-reduce": "off",
+    "unicorn/prefer-ternary": "off",
+    "unicorn/switch-case-braces": "off",
+    "padding-line-between-statements": "off",
+    "prefer-destructuring": "off",
+    "perfectionist/sort-objects": "off",
+    "perfectionist/sort-object-types": "off",
+    "perfectionist/sort-union-types": "off",
+    "perfectionist/sort-imports": "off",
+    "perfectionist/sort-named-imports": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/codegen/**/*", "test/codegen/**/*"],
+      "rules": {
+        "valid-jsdoc": "off"
+      }
+    },
+    {
+      "files": ["test/codegen/python/*.ts"],
+      "rules": {
+        "camelcase": "off"
+      }
+    },
+    {
+      "files": ["test/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    }
+  ]
+}

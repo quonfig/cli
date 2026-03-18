@@ -1,0 +1,9 @@
+---
+description: use 
+globs: 
+---
+
+# Your rule content
+
+- Use import { expect } from '@oclif/test' for generating tests. 
+- This has equals methods like expect(ZodUtils.zodToString(schema)).to.equal('z.string()');
