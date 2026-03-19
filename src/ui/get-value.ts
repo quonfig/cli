@@ -1,14 +1,17 @@
 import {Quonfig} from '@quonfig/node'
-
-import type {Environment} from '../quonfig-common/src/api/getEnvironmentsFromApi.js'
-import type {Config, ConfigValue} from '../quonfig-common/src/types.js'
+import type {Value, ConfigResponse} from '@quonfig/node'
 
 import {defaultValueFor} from '../quonfig.js'
-import {valueOfToString} from '../quonfig-common/src/valueOf.js'
 import {Result, failure, noop, success} from '../result.js'
 import autocomplete from '../util/autocomplete.js'
 import validateValue from '../validations/value.js'
 import getString from './get-string.js'
+
+// Simplified Environment type (the full type comes from quonfig-common which is being removed)
+interface Environment {
+  id: string
+  name: string
+}
 
 const getValue = async ({
   allowBlank = true,
@@ -43,7 +46,7 @@ const getValue = async ({
 
   const currentDefault = environment ? defaultValueFor(environment.id, key) : undefined
 
-  const config = quonfig.raw(key)
+  const config = quonfig.rawConfig(key)
 
   if (!config) {
     return failure(`Could not find config named ${key}`)
@@ -55,11 +58,17 @@ const getValue = async ({
     return noop()
   }
 
-  if (selectedValue === currentDefault?.toString()) {
+  if (selectedValue === currentDefault?.value?.toString()) {
     return noop(`The default is already \`${selectedValue}\``)
   }
 
   return validateValue(quonfig, key, selectedValue)
+}
+
+const valueToString = (v: Value | undefined): string => {
+  if (!v) return ''
+  if (v.value === undefined || v.value === null) return ''
+  return String(v.value)
 }
 
 const promptForValue = async ({
@@ -69,25 +78,19 @@ const promptForValue = async ({
   message,
 }: {
   allowBlank: boolean
-  config?: Config
-  currentDefault?: ConfigValue | undefined
+  config?: ConfigResponse
+  currentDefault?: Value | undefined
   message: string
 }) => {
-  const choices = (config?.allowableValues ?? []).map((v) => valueOfToString(v))
-
-  if (choices === undefined || choices.length === 0) {
+  // In the new quonfig format, allowable values aren't stored at the config level.
+  // Just prompt for a string input.
+  if (!currentDefault) {
     return getString({allowBlank, message})
   }
 
-  const autoCompleteMessage =
-    currentDefault === undefined
-      ? `Choose your new default.`
-      : `The current default is \`${valueOfToString(currentDefault)}\`. Choose your new default.`
+  const autoCompleteMessage = `The current default is \`${valueToString(currentDefault)}\`. Enter your new default.`
 
-  return autocomplete({
-    message: autoCompleteMessage,
-    source: choices.filter((v) => v.toString() !== currentDefault?.toString()),
-  })
+  return getString({allowBlank, message: autoCompleteMessage})
 }
 
 export default getValue

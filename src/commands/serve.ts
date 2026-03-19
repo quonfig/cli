@@ -1,5 +1,6 @@
 import {Args, Flags} from '@oclif/core'
-import {ConfigType, Quonfig} from '@quonfig/node'
+import {ConfigType} from '@quonfig/node'
+import type {Quonfig} from '@quonfig/node'
 import * as fs from 'node:fs'
 import http, {IncomingMessage, ServerResponse} from 'node:http'
 
@@ -110,9 +111,9 @@ export default class Serve extends BaseCommand {
         const config: Record<string, Record<string, unknown>> = {}
 
         for (const key of quonfig.keys()) {
-          const raw = quonfig.raw(key)
+          const raw = quonfig.rawConfig(key)
 
-          if (raw && (ALWAYS_SEND_CONFIG_TYPES.has(raw.configType) || raw.sendToClientSdk)) {
+          if (raw && (ALWAYS_SEND_CONFIG_TYPES.has(raw.type) || raw.sendToClientSdk)) {
             const valueType = valueTypeStringForConfig(raw) ?? '?'
 
             config[key] = {value: {[valueType]: quonfig.get(key, context)}}

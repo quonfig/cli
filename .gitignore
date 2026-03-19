@@ -19,3 +19,4 @@ generated/*
 src/reforge
 .yarn/install-state.gz
 test-*.sh
+_verify_build/

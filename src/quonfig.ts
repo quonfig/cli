@@ -1,6 +1,5 @@
 import {Quonfig} from '@quonfig/node'
-
-import type {ConfigValue} from './quonfig-common/src/types.js'
+import type {ConfigResponse, Value, Rule} from '@quonfig/node'
 
 import {CommandLike} from './ui/get-key.js'
 
@@ -29,37 +28,38 @@ export const initQuonfig = async (_ctx: CommandLike, flagsOrDatafile: FlagsOrDat
     sdkKey = flagsOrDatafile['sdk-key']
   }
 
-  const options: ConstructorParameters<typeof Quonfig>[0] = {
+  const apiUrl = process.env.QUONFIG_API_URL || 'https://api.quonfig.com'
+
+  quonfig = new Quonfig({
     sdkKey,
     collectEvaluationSummaries: false,
     collectLoggerCounts: false,
     contextUploadMode: 'none',
     datafile,
     enableSSE: false,
-  }
-
-  options.sources = process.env.QUONFIG_API_URL ? [process.env.QUONFIG_API_URL] : ['https://api.prefab.cloud']
-
-  quonfig = new Quonfig(options)
+    apiUrl,
+  })
 
   await quonfig.init()
 
   return quonfig
 }
 
-const getUserId = (): string =>
-  quonfig.defaultContext()?.get(DEFAULT_CONTEXT_USER_ID_NAMESPACE)?.get(DEFAULT_CONTEXT_USER_ID) as string
+export const getQuonfig = () => quonfig
 
-const getRowInEnvironment = ({desiredEnvId, key}: {desiredEnvId: string; key: string}) => {
-  const envId = desiredEnvId
+/**
+ * Get the raw ConfigResponse for a key (new quonfig JSON format).
+ * The new format uses `default.rules` and `environment.rules` instead of `rows`.
+ */
+const getRawConfig = (key: string): ConfigResponse | undefined => {
+  return quonfig.rawConfig?.(key)
+}
 
-  const config = quonfig.raw(key)
-
-  if (!config) {
-    return
-  }
-
-  return config.rows.find((row) => row.projectEnvId?.toString() === envId)
+/**
+ * Find rules in an environment that target a specific user via criteria.
+ */
+const getEnvironmentRules = (config: ConfigResponse): Rule[] | undefined => {
+  return config.environment?.rules
 }
 
 export const overrideFor = ({
@@ -68,20 +68,19 @@ export const overrideFor = ({
 }: {
   currentEnvironmentId: string
   key: string
-}): ConfigValue | undefined => {
-  const userId = getUserId()
+}): Value | undefined => {
+  const config = getRawConfig(key)
 
-  const row = getRowInEnvironment({desiredEnvId: currentEnvironmentId, key})
+  if (!config) return undefined
 
-  if (row) {
-    for (const value of row.values) {
-      for (const criterion of value.criteria) {
-        if (
-          criterion.propertyName === `${DEFAULT_CONTEXT_USER_ID_NAMESPACE}.${DEFAULT_CONTEXT_USER_ID}` &&
-          criterion.valueToMatch?.stringList?.values.includes(userId)
-        ) {
-          return value.value
-        }
+  // In the new format, environment-specific rules are in config.environment.rules
+  const rules = getEnvironmentRules(config)
+  if (!rules) return undefined
+
+  for (const rule of rules) {
+    for (const criterion of rule.criteria) {
+      if (criterion.propertyName === `${DEFAULT_CONTEXT_USER_ID_NAMESPACE}.${DEFAULT_CONTEXT_USER_ID}`) {
+        return rule.value
       }
     }
   }
@@ -89,8 +88,21 @@ export const overrideFor = ({
   return undefined
 }
 
-export const defaultValueFor = (envId: string, key: string): ConfigValue | undefined => {
-  const row = getRowInEnvironment({desiredEnvId: envId, key})
+export const defaultValueFor = (_envId: string, key: string): Value | undefined => {
+  const config = getRawConfig(key)
 
-  return row?.values.at(-1)?.value
+  if (!config) return undefined
+
+  // In the new format, the default value is the last rule in environment rules, or default rules
+  const envRules = config.environment?.rules
+  if (envRules && envRules.length > 0) {
+    return envRules[envRules.length - 1]?.value
+  }
+
+  const defaultRules = config.default?.rules
+  if (defaultRules && defaultRules.length > 0) {
+    return defaultRules[defaultRules.length - 1]?.value
+  }
+
+  return undefined
 }
