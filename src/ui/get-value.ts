@@ -7,7 +7,7 @@ import autocomplete from '../util/autocomplete.js'
 import validateValue from '../validations/value.js'
 import getString from './get-string.js'
 
-// Simplified Environment type (the full type comes from quonfig-common which is being removed)
+// Simplified Environment type for CLI use
 interface Environment {
   id: string
   name: string

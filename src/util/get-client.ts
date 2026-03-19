@@ -1,7 +1,7 @@
 import type {JsonObj, RequestResult} from '../result.js'
 
 import {APICommand} from '../index.js'
-import {Client} from '../quonfig-common/src/api/client.js'
+import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
 import {introspectToken} from '../util/oauth-client.js'

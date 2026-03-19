@@ -1,4 +1,5 @@
-import {ConfigValue, ConfigValueType} from '../quonfig-common/src/types.js'
+import type {ConfigValue} from '@quonfig/node'
+import {ConfigValueType} from '@quonfig/node'
 
 const TRUE_VALUES = new Set(['true', '1', 't'])
 const BOOLEAN_VALUES = new Set([...TRUE_VALUES, 'false', '0', 'f'])

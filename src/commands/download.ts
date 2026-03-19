@@ -5,7 +5,7 @@ import * as path from 'node:path'
 import type {JsonObj} from '../result.js'
 
 import {APICommand} from '../index.js'
-import {getProjectEnvFromSdkKey} from '../quonfig-common/src/getProjectEnvFromSdkKey.js'
+import {getProjectEnvFromSdkKey} from '@quonfig/node'
 import getEnvironment from '../ui/get-environment.js'
 import {checkmark} from '../util/color.js'
 import getClient from '../util/get-client.js'

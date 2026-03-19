@@ -2,7 +2,7 @@ import {Flags} from '@oclif/core'
 import {ProvidedSource} from '@quonfig/node'
 
 import {APICommand} from '../index.js'
-import {ConfigValueType} from '../quonfig-common/src/types.js'
+import {ConfigValueType} from '@quonfig/node'
 import {JsonObj} from '../result.js'
 import getConfirmation, {confirmFlag} from '../ui/get-confirmation.js'
 import getEnvironment from '../ui/get-environment.js'

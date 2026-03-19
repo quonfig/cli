@@ -1,4 +1,5 @@
-import {ConfigValue, ConfigValueType} from '../quonfig-common/src/types.js'
+import type {ConfigValue} from '@quonfig/node'
+import {ConfigValueType} from '@quonfig/node'
 
 /**
  * Maps a ConfigValue to the DTO format expected by the API.

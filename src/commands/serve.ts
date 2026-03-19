@@ -6,7 +6,7 @@ import http, {IncomingMessage, ServerResponse} from 'node:http'
 
 import {BaseCommand} from '../index.js'
 import {initQuonfig} from '../quonfig.js'
-import {valueTypeStringForConfig} from '../quonfig-common/src/valueType.js'
+import {valueTypeStringForConfig} from '@quonfig/node'
 import {javaScriptClientFormattedContextToContext} from '../util/context.js'
 
 const allowCORSPreflight = (res: ServerResponse) => {

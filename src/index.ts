@@ -1,8 +1,8 @@
 export {run} from '@oclif/core'
 import {Command, Flags} from '@oclif/core'
 
-import {Client} from './quonfig-common/src/api/client.js'
-import {ProjectEnvId} from './quonfig-common/src/getProjectEnvFromSdkKey.js'
+import {Client} from '@quonfig/node'
+import type {ProjectEnvId} from '@quonfig/node'
 import {JsonObj, Result} from './result.js'
 import rawGetClient, {unwrapRequest} from './util/get-client.js'
 
