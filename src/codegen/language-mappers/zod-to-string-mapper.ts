@@ -48,6 +48,10 @@ export class ZodToStringMapper extends ZodBaseMapper {
     return 'z.null()'
   }
 
+  literal(value: string | number | boolean | null) {
+    return `z.literal(${JSON.stringify(value)})`
+  }
+
   number(isInteger: boolean = false) {
     const base = 'z.number()'
 
@@ -71,6 +75,10 @@ export class ZodToStringMapper extends ZodBaseMapper {
 
   optional(wrappedType: string) {
     return `${wrappedType}.optional()`
+  }
+
+  never() {
+    return 'z.never()'
   }
 
   record(keyType: string, valueType: string) {

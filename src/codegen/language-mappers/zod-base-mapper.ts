@@ -56,6 +56,11 @@ export abstract class ZodBaseMapper {
       return this.enum(values)
     }
 
+    if (introspect.isLiteral(type)) {
+      const value = introspect.getLiteralValue(type)
+      return this.literal(value)
+    }
+
     if (introspect.isFunction(type)) {
       const {args, returns} = introspect.getFunctionSignature(type)
       const argsStr = this.functionArguments(args)
@@ -121,6 +126,10 @@ export abstract class ZodBaseMapper {
       return this.unknown()
     }
 
+    if (introspect.isNever(type)) {
+      return this.never()
+    }
+
     console.warn(`Unknown zod type:`, type)
     // If the type is not recognized, default to 'any'
     return this.any()
@@ -134,9 +143,11 @@ export abstract class ZodBaseMapper {
   protected abstract functionArguments(value?: $ZodFunctionArgs): string
   protected abstract functionReturns(value: $ZodFunctionOut): string
   protected abstract null(): string
+  protected abstract literal(value: string | number | boolean | null): string
   protected abstract number(isInteger: boolean): string
   protected abstract object(properties: [string, z.ZodTypeAny][]): string
   protected abstract optional(wrappedType: string): string
+  protected abstract never(): string
   protected abstract record(keyType: string, valueType: string): string
   protected abstract string(): string
   protected abstract tuple(wrappedTypes: string[]): string

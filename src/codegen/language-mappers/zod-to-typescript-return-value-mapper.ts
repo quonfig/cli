@@ -54,6 +54,10 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
     return `raw${this.printPropertyPath()}`
   }
 
+  literal() {
+    return `raw${this.printPropertyPath()}`
+  }
+
   number() {
     return `raw${this.printPropertyPath()}`
   }
@@ -80,6 +84,10 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
 
     // Fallback to a union type w/undefined for inline optional definitions
     return this.union([wrappedType, 'undefined'])
+  }
+
+  never() {
+    return `raw${this.printPropertyPath()}`
   }
 
   record() {

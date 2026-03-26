@@ -136,6 +136,10 @@ const ConfigRuleSchema = z.object({
   value: RuleValueSchema,
 });
 
+/** Environment ID must be a slug: lowercase alphanumeric + dashes, not a UUID. */
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const ConfigEnvironmentSchema = z.object({
   id: z.string(),
   rules: z.array(ConfigRuleSchema),
@@ -167,6 +171,8 @@ const StoredConfigSchema = z.object({
   variants: z.array(VariantSchema).default([]),
 }).passthrough(); // Allow extra fields (tags, schemaUsageMode, etc.)
 
+const SchemaDocumentSchema = z.object({}).passthrough();
+
 // ── Types ───────────────────────────────────────────────────────────────
 
 export type Severity = "error" | "warning";
@@ -184,16 +190,17 @@ export interface ValidationResult {
   valid: boolean;
 }
 
-/** Maps directory names to their expected config type. */
+/** Maps config directory names to their expected config type. */
 const DIR_TO_TYPE: Record<string, string> = {
   "configs": "config",
   "feature-flags": "feature_flag",
   "segments": "segment",
   "log-levels": "log_level",
-  "schemas": "schema",
 };
 
-const KNOWN_DIRS = new Set(Object.keys(DIR_TO_TYPE));
+const CONFIG_DIRS = new Set(Object.keys(DIR_TO_TYPE));
+const SCHEMA_DIRS = new Set(["schemas", "schemas-protected"]);
+const KNOWN_DIRS = new Set([...CONFIG_DIRS, ...SCHEMA_DIRS]);
 
 // Operators that reference segments
 const SEGMENT_OPERATORS = new Set(["IN_SEG", "NOT_IN_SEG"]);
@@ -232,6 +239,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
 
   // Collect all configs for cross-reference checks
   const allConfigs: Array<{ key: string; type: string; dir: string; file: string }> = [];
+  const allSchemaFiles: Array<{ key: string; file: string }> = [];
   const segmentKeys = new Set<string>();
   const schemaKeys = new Set<string>();
 
@@ -292,6 +300,26 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
           message: `Invalid JSON: ${(err as Error).message}`,
           severity: "error",
         });
+        continue;
+      }
+
+      if (SCHEMA_DIRS.has(dir)) {
+        const result = SchemaDocumentSchema.safeParse(parsed);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            issues.push({
+              file: relPath,
+              message: `Schema: ${issue.path.join(".")} - ${issue.message}`,
+              severity: "error",
+            });
+          }
+          continue;
+        }
+
+        const schemaKey = file.replace(/\.json$/, "");
+        schemaKeys.add(schemaKey);
+        validateKey(schemaKey, relPath, issues);
+        allSchemaFiles.push({key: schemaKey, file: relPath});
         continue;
       }
 
@@ -362,9 +390,8 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         });
       }
 
-      if (config.type === "schema") {
-        schemaKeys.add(config.key);
-      }
+      // Validate environment IDs are slugs, not UUIDs
+      validateEnvironmentIds(config.environments, relPath, issues);
 
       // Validate rules
       validateRules(config.default.rules, relPath, "default", config.valueType, issues);
@@ -391,6 +418,10 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     for (const file of files) {
       const filePath = path.join(dirPath, file);
       const relPath = `${dir}/${file}`;
+
+      if (SCHEMA_DIRS.has(dir)) {
+        continue;
+      }
 
       let raw: string;
       try {
@@ -430,7 +461,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
           file: relPath,
           message: `References schema "${config.schemaKey}" which does not exist`,
           severity: "error",
-          suggestion: `Create schemas/${config.schemaKey}.json or remove schemaKey`,
+          suggestion: `Create schemas/${config.schemaKey}.json or schemas-protected/${config.schemaKey}.json, or remove schemaKey`,
         });
       }
     }
@@ -454,6 +485,23 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     }
   }
 
+  const schemaKeyToFiles = new Map<string, string[]>();
+  for (const schemaFile of allSchemaFiles) {
+    const existing = schemaKeyToFiles.get(schemaFile.key) || [];
+    existing.push(schemaFile.file);
+    schemaKeyToFiles.set(schemaFile.key, existing);
+  }
+  for (const [key, files] of schemaKeyToFiles) {
+    if (files.length > 1) {
+      issues.push({
+        file: files.join(", "),
+        message: `Duplicate schema key "${key}" found in multiple files`,
+        severity: "error",
+        suggestion: `Each schema key must be unique across schema directories`,
+      });
+    }
+  }
+
   const hasErrors = issues.some(i => i.severity === "error");
   return { issues, filesChecked, valid: !hasErrors };
 }
@@ -470,6 +518,7 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
 
   const segmentKeys = new Set<string>();
   const schemaKeys = new Set<string>();
+  const allSchemaFiles: Array<{ key: string; file: string }> = [];
   const allConfigs: Array<{ key: string; file: string }> = [];
   const parsedConfigs: Array<{ relPath: string; config: z.infer<typeof StoredConfigSchema>; dir: string }> = [];
 
@@ -489,6 +538,26 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
       parsed = JSON.parse(content);
     } catch (err: unknown) {
       issues.push({ file: relPath, message: `Invalid JSON: ${(err as Error).message}`, severity: "error" });
+      continue;
+    }
+
+    if (SCHEMA_DIRS.has(dir)) {
+      const result = SchemaDocumentSchema.safeParse(parsed);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          issues.push({
+            file: relPath,
+            message: `Schema: ${issue.path.join(".")} - ${issue.message}`,
+            severity: "error",
+          });
+        }
+        continue;
+      }
+
+      const schemaKey = file.replace(/\.json$/, "");
+      schemaKeys.add(schemaKey);
+      validateKey(schemaKey, relPath, issues);
+      allSchemaFiles.push({key: schemaKey, file: relPath});
       continue;
     }
 
@@ -542,7 +611,7 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
       issues.push({ file: relPath, message: `Log level must have valueType "log_level", got "${config.valueType}"`, severity: "error" });
     }
 
-    if (config.type === "schema") schemaKeys.add(config.key);
+    validateEnvironmentIds(config.environments, relPath, issues);
 
     validateRules(config.default.rules, relPath, "default", config.valueType, issues);
     for (const env of config.environments) {
@@ -566,12 +635,13 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
         });
       }
     }
+
     if (config.schemaKey && !schemaKeys.has(config.schemaKey)) {
       issues.push({
         file: relPath,
         message: `References schema "${config.schemaKey}" which does not exist`,
         severity: "error",
-        suggestion: `Create schemas/${config.schemaKey}.json or remove schemaKey`,
+        suggestion: `Create schemas/${config.schemaKey}.json or schemas-protected/${config.schemaKey}.json, or remove schemaKey`,
       });
     }
   }
@@ -593,11 +663,51 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
     }
   }
 
+  const schemaKeyToFiles = new Map<string, string[]>();
+  for (const schemaFile of allSchemaFiles) {
+    const existing = schemaKeyToFiles.get(schemaFile.key) || [];
+    existing.push(schemaFile.file);
+    schemaKeyToFiles.set(schemaFile.key, existing);
+  }
+  for (const [key, fileList] of schemaKeyToFiles) {
+    if (fileList.length > 1) {
+      issues.push({
+        file: fileList.join(", "),
+        message: `Duplicate schema key "${key}" found in multiple files`,
+        severity: "error",
+      });
+    }
+  }
+
   const hasErrors = issues.some(i => i.severity === "error");
   return { issues, filesChecked, valid: !hasErrors };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
+
+function validateEnvironmentIds(
+  environments: z.infer<typeof ConfigEnvironmentSchema>[],
+  file: string,
+  issues: ValidationIssue[],
+): void {
+  for (const env of environments) {
+    if (UUID_RE.test(env.id)) {
+      issues.push({
+        file,
+        message: `Environment ID "${env.id}" is a UUID — must be a human-readable slug (e.g., "production", "my-ci-env")`,
+        severity: "error",
+        suggestion: `Replace the UUID with the environment's slugified name`,
+      });
+    } else if (!SLUG_RE.test(env.id)) {
+      issues.push({
+        file,
+        message: `Environment ID "${env.id}" is not a valid slug (expected lowercase alphanumeric + dashes)`,
+        severity: "error",
+        suggestion: `Use a slugified name like "production" or "my-ci-env"`,
+      });
+    }
+  }
+}
 
 function validateKey(key: string, file: string, issues: ValidationIssue[]): void {
   if (key.length === 0) {

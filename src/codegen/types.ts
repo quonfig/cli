@@ -22,6 +22,11 @@ export interface ConfigValue {
   }
 }
 
+export interface SchemaFile {
+  path: string
+  schema: Record<string, unknown>
+}
+
 export interface ConfigRow {
   values: ConfigValue[]
 }
@@ -37,6 +42,7 @@ export interface Config {
 
 export interface ConfigFile {
   configs: Config[]
+  schemas?: SchemaFile[]
 }
 
 /**
@@ -50,10 +56,12 @@ export type ZodTypeSupported =
   | z.ZodEnum<util.EnumLike>
   | z.ZodFunction<$ZodFunctionArgs, $ZodFunctionOut>
   | z.ZodNull
+  | z.ZodLiteral<string | number | boolean | null>
   | z.ZodNumber
   | z.ZodObject<z.ZodRawShape>
   | z.ZodOptional<z.ZodTypeAny>
   | z.ZodRecord
+  | z.ZodNever
   | z.ZodString
   | z.ZodTuple
   | z.ZodUndefined

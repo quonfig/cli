@@ -106,7 +106,7 @@ async function runGitHook() {
  */
 function readFilesFromCommit(commitOid: string): Map<string, string> {
   const files = new Map<string, string>();
-  const dirs = ["configs", "feature-flags", "segments", "log-levels", "schemas"];
+  const dirs = ["configs", "feature-flags", "segments", "log-levels", "schemas", "schemas-protected"];
 
   for (const dir of dirs) {
     // List files in this directory at the given commit

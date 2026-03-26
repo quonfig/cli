@@ -29,12 +29,20 @@ export function isNull(schema: $ZodType): schema is z.ZodNull {
   return schema instanceof z.ZodNull
 }
 
+export function isLiteral(schema: $ZodType): schema is z.ZodLiteral<string | number | boolean | null> {
+  return schema instanceof z.ZodLiteral
+}
+
 export function isUndefined(schema: $ZodType): schema is z.ZodUndefined {
   return schema instanceof z.ZodUndefined
 }
 
 export function isUnknown(schema: $ZodType): schema is z.ZodUnknown {
   return schema instanceof z.ZodUnknown
+}
+
+export function isNever(schema: $ZodType): schema is z.ZodNever {
+  return schema instanceof z.ZodNever
 }
 
 export function isAny(schema: $ZodType): schema is z.ZodAny {
@@ -136,6 +144,10 @@ export function getEnumValues(schema: z.ZodEnum<util.EnumLike>): util.EnumValue[
   return []
 }
 
+export function getLiteralValue(schema: z.ZodLiteral<string | number | boolean | null>): string | number | boolean | null {
+  return schema.def.values[0] as string | number | boolean | null
+}
+
 /**
  * Gets the options from a union schema
  */
@@ -232,6 +244,14 @@ export function getMetaDescription(schema: $ZodType): string | undefined {
   const keys = Object.keys(meta)
   if (keys.length === 1 && keys[0] === 'description' && typeof meta.description === 'string') {
     return meta.description
+  }
+
+  if (typeof meta.description === 'string') {
+    return meta.description
+  }
+
+  if (typeof meta.title === 'string') {
+    return meta.title
   }
 
   // Otherwise, return JSON representation of the entire meta object

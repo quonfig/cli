@@ -1,5 +1,6 @@
 import {z} from 'zod'
 
+import {jsonSchemaToZod, isLegacySchemaWrapper} from './json-schema-to-zod.js'
 import {JsonToZodMapper} from './language-mappers/json-to-zod-mapper.js'
 import {ZodToStringMapper} from './language-mappers/zod-to-string-mapper.js'
 import {MustacheExtractor} from './mustache-extractor.js'
@@ -274,24 +275,59 @@ export class SchemaExtractor {
   private resolveUserSchema(config: Config, configFile: ConfigFile) {
     const {schemaKey} = config
 
-    const schemaConfig = schemaKey
-      ? configFile.configs.find((c) => c.key === schemaKey && c.configType === 'SCHEMA')
-      : undefined
+    if (!schemaKey) {
+      return
+    }
 
-    if (schemaConfig) {
-      for (const row of schemaConfig.rows) {
-        for (const valueObj of row.values) {
-          if (valueObj.value.schema?.schema) {
-            const schemaStr = valueObj.value.schema.schema
-            const result = secureEvaluateSchema(schemaStr)
+    const schemaFile = configFile.schemas?.find((schema) => {
+      const schemaPath = schema.path.replace(/\\/g, '/')
+      const derivedKey = schemaPath.split('/').at(-1)?.replace(/\.json$/, '')
+      return derivedKey === schemaKey
+    })
 
-            if (result.success && result.schema) {
-              this.log(`Successfully parsed schema from schema config: ${schemaConfig.key}`)
-              return result.schema
-            }
+    if (schemaFile) {
+      const schema = schemaFile.schema
 
-            console.warn(`Failed to parse schema from schema config ${schemaConfig.key}: ${result.error}`)
+      if (isLegacySchemaWrapper(schema)) {
+        const legacySchema = schema as Record<string, unknown>
+        const defaultSection = legacySchema.default as Record<string, unknown> | undefined
+        const rules = Array.isArray(defaultSection?.rules) ? defaultSection.rules : []
+        const firstRule = rules[0] as Record<string, unknown> | undefined
+        const value = firstRule?.value as Record<string, unknown> | undefined
+        const legacySchemaValue = value?.schema as Record<string, unknown> | undefined
+        const schemaStr = legacySchemaValue?.schema
+        if (typeof schemaStr === 'string') {
+          const result = secureEvaluateSchema(schemaStr)
+          if (result.success && result.schema) {
+            this.log(`Successfully parsed legacy schema wrapper: ${schemaKey}`)
+            return result.schema
           }
+
+          console.warn(`Failed to parse legacy schema wrapper ${schemaKey}: ${result.error}`)
+        }
+      } else {
+        this.log(`Successfully parsed JSON Schema document: ${schemaKey}`)
+        return jsonSchemaToZod(schema)
+      }
+    }
+
+    const legacySchemaConfig = configFile.configs.find((c) => c.key === schemaKey && c.configType === 'SCHEMA')
+    if (!legacySchemaConfig) {
+      return
+    }
+
+    for (const row of legacySchemaConfig.rows) {
+      for (const valueObj of row.values) {
+        if (valueObj.value.schema?.schema) {
+          const schemaStr = valueObj.value.schema.schema
+          const result = secureEvaluateSchema(schemaStr)
+
+          if (result.success && result.schema) {
+            this.log(`Successfully parsed schema from schema config: ${legacySchemaConfig.key}`)
+            return result.schema
+          }
+
+          console.warn(`Failed to parse schema from schema config ${legacySchemaConfig.key}: ${result.error}`)
         }
       }
     }

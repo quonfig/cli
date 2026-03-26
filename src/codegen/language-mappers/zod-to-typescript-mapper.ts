@@ -62,6 +62,10 @@ export class ZodToTypescriptMapper extends ZodBaseMapper {
     return 'null'
   }
 
+  literal(value: string | number | boolean | null) {
+    return JSON.stringify(value)
+  }
+
   number() {
     return 'number'
   }
@@ -86,6 +90,10 @@ export class ZodToTypescriptMapper extends ZodBaseMapper {
 
     // Fallback to a union type w/undefined for inline optional definitions
     return this.union([wrappedType, 'undefined'])
+  }
+
+  never() {
+    return 'never'
   }
 
   record(keyType: string, valueType: string) {

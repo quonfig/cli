@@ -74,6 +74,46 @@ describe('SchemaExtractor', () => {
       )
     })
 
+    it('should use first-class JSON Schema documents when available', () => {
+      const config: Config = {
+        configType: 'CONFIG',
+        key: 'user_config',
+        rows: [],
+        schemaKey: 'user_schema',
+        valueType: 'JSON',
+      }
+
+      const configFile: ConfigFile = {
+        configs: [config],
+        schemas: [
+          {
+            path: 'schemas/user_schema.json',
+            schema: {
+              title: 'User schema',
+              type: 'object',
+              properties: {
+                name: {type: 'string'},
+                age: {type: 'integer'},
+              },
+              required: ['name'],
+            },
+          },
+        ],
+      }
+
+      const result = schemaExtractor.execute({config, configFile})
+
+      expectSchemaMatchesString(
+        result,
+        `
+          z.object({
+            name: z.string();
+            age: z.number().int().optional()
+          })
+        `,
+      )
+    })
+
     it('should infer schema when no user-defined schema is available', () => {
       // Create a config without a schema reference
       const config: Config = {
