@@ -14,7 +14,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.1 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.0.1 darwin-arm64 node-v24.4.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
