@@ -49,7 +49,7 @@ export default class Override extends APICommand {
     }
 
     // Fetch all configs from metadata endpoint
-    const metadataRequest = await this.apiClient.get('/all-config-types/v1/metadata')
+    const metadataRequest = await this.apiClient.post('/api/v1/metadata/list', {workspaceId: this.workspaceId})
 
     if (!metadataRequest.ok) {
       const errorMsg = metadataRequest.error?.error || `Failed to fetch configs: ${metadataRequest.status}`

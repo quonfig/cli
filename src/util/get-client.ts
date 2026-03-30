@@ -4,8 +4,8 @@ import {APICommand} from '../index.js'
 import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
-import {introspectToken} from '../util/oauth-client.js'
-import {getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
+import {decodeJWT, refreshAccessToken} from '../util/oauth-client.js'
+import {getActiveProfile, loadAuthConfig, loadTokens, saveTokens} from '../util/token-storage.js'
 import version from '../version.js'
 
 let clientInstance: Client | undefined
@@ -28,48 +28,76 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
   let jwt: string | undefined
   let workspaceId: string | undefined
 
-  // If no API key provided, try to get JWT from OAuth tokens
+  // If no SDK key provided, use WorkOS OAuth tokens
   if (!sdkKey) {
     const authConfig = await loadAuthConfig()
-    const tokens = await loadTokens()
+    let tokens = await loadTokens()
 
     command.verboseLog('OAuth auth', {
       hasAuthConfig: Boolean(authConfig),
       hasAccessToken: Boolean(tokens?.accessToken),
     })
 
-    if (authConfig && tokens?.accessToken) {
-      // Get the active profile (from flag, env var, or default)
-      const activeProfile = getActiveProfile(profile)
-      const profileData =
-        authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
+    if (!authConfig || !tokens?.accessToken) {
+      command.error('No authentication found. Please run `qfg login`.', {exit: 401})
+    }
 
-      command.verboseLog('Profile lookup', {
-        activeProfile,
-        hasProfileData: Boolean(profileData),
-        workspaceId: profileData?.workspace,
-      })
+    // Check if token is expired and refresh if needed.
+    // Prefer the JWT's actual exp claim over the stored expiresAt.
+    let tokenExpired = tokens.expiresAt ? tokens.expiresAt < Date.now() : false
+    try {
+      const payload = decodeJWT(tokens.accessToken)
+      if (typeof payload.exp === 'number') {
+        tokenExpired = payload.exp * 1000 < Date.now()
+      }
+    } catch {
+      // If we can't decode, fall back to stored expiresAt
+    }
 
-      if (profileData) {
-        workspaceId = profileData.workspace
-
-        // Call identity endpoint to get fresh authz JWT for the active workspace
-        // Domain is automatically picked up from QUONFIG_DOMAIN env var via getIdApiUrl()
-        const introspection = await introspectToken(tokens.accessToken, undefined, command.isVerbose)
-        const workspace = introspection.organizations
-          .flatMap((org) => org.workspaces)
-          .find((ws) => ws.id === profileData.workspace)
-
-        command.verboseLog('JWT lookup', {
-          foundWorkspace: Boolean(workspace),
-          hasAuthzJwt: Boolean(workspace?.authz_jwt),
-        })
-
-        if (workspace) {
-          jwt = workspace.authz_jwt
+    if (tokenExpired && tokens.refreshToken) {
+      command.verboseLog('Token expired, refreshing...')
+      try {
+        const refreshed = await refreshAccessToken(tokens.refreshToken)
+        // Use the JWT's actual exp claim for expiry, not a hardcoded duration
+        let expiresAt = Date.now() + 300 * 1000 // fallback: 5 minutes
+        try {
+          const payload = decodeJWT(refreshed.access_token)
+          if (typeof payload.exp === 'number') {
+            expiresAt = payload.exp * 1000 // convert seconds to ms
+          }
+        } catch {
+          // Use fallback
         }
+        tokens = {
+          ...tokens,
+          accessToken: refreshed.access_token,
+          expiresAt,
+          refreshToken: refreshed.refresh_token,
+        }
+        await saveTokens(tokens)
+        command.verboseLog('Token refreshed successfully')
+      } catch (error) {
+        command.error('Session expired. Please run `qfg login` to re-authenticate.', {exit: 401})
       }
     }
+
+    // Get the active profile to find the workspace
+    const activeProfile = getActiveProfile(profile)
+    const profileData =
+      authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
+
+    command.verboseLog('Profile lookup', {
+      activeProfile,
+      hasProfileData: Boolean(profileData),
+      workspaceId: profileData?.workspace,
+    })
+
+    if (profileData) {
+      workspaceId = profileData.workspace
+    }
+
+    // Use the WorkOS access token directly as the JWT
+    jwt = tokens.accessToken
 
     // If still no JWT, user needs to login
     if (!jwt) {

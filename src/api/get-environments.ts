@@ -14,15 +14,16 @@ interface ProjectEnvironmentsResponse {
 }
 
 export const getEnvironments = async (command: APICommand): Promise<Environment[]> => {
-  const request = await command.apiClient.get('/environments/v1')
+  const request = await command.apiClient.post('/api/v1/environments/list', {workspaceId: command.workspaceId})
 
   if (!request.ok) {
     const errorMsg = request.error?.error || `Failed to fetch environments: ${request.status}`
     return command.err(errorMsg, {serverError: request.error})
   }
 
-  const response = request.json as unknown as ProjectEnvironmentsResponse
+  // oRPC returns the array directly (not wrapped in { environments: [] })
+  const environments = (Array.isArray(request.json) ? request.json : (request.json as unknown as ProjectEnvironmentsResponse).environments) as Environment[]
 
   // Filter out deleted environments and sort by name
-  return response.environments.filter((env) => !env.deletedAt).sort((a, b) => a.name.localeCompare(b.name))
+  return environments.filter((env) => !env.deletedAt).sort((a, b) => a.name.localeCompare(b.name))
 }

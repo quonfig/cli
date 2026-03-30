@@ -81,7 +81,7 @@ export async function makeConfidentialValue(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<Result<any>> {
   // First check if the encryption key exists in metadata
-  const metadataRequest = await command.apiClient.get('/all-config-types/v1/metadata')
+  const metadataRequest = await command.apiClient.post('/api/v1/metadata/list', {workspaceId: command.workspaceId})
 
   if (!metadataRequest.ok) {
     return failure(`Failed to check if encryption key exists: ${metadataRequest.status}`, {
@@ -111,7 +111,7 @@ export async function makeConfidentialValue(
   }
 
   // Fetch the encryption key config
-  const configRequest = await command.apiClient.get(`/all-config-types/v1/config/${encodeURIComponent(secret.keyName)}`)
+  const configRequest = await command.apiClient.post('/api/v1/metadata/getByKey', {workspaceId: command.workspaceId, key: secret.keyName})
 
   if (!configRequest.ok) {
     const message =

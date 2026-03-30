@@ -33,7 +33,7 @@ export default class List extends APICommand {
   public async run() {
     const {flags} = await this.parse(List)
 
-    const request = await this.apiClient.get('/all-config-types/v1/metadata')
+    const request = await this.apiClient.post('/api/v1/metadata/list', {workspaceId: this.workspaceId})
 
     if (!request.ok) {
       const errorMsg = request.error?.error || `Failed to fetch configs: ${request.status}`

@@ -23,7 +23,7 @@ export default class Info extends APICommand {
     const {args, flags} = await this.parse(Info)
 
     // Fetch all configs from metadata endpoint
-    const metadataRequest = await this.apiClient.get('/all-config-types/v1/metadata')
+    const metadataRequest = await this.apiClient.post('/api/v1/metadata/list', {workspaceId: this.workspaceId})
 
     if (!metadataRequest.ok) {
       const errorMsg = metadataRequest.error?.error || `Failed to fetch configs: ${metadataRequest.status}`
@@ -60,7 +60,7 @@ export default class Info extends APICommand {
     }
 
     // Fetch full config details
-    const configRequest = await this.apiClient.get(`/all-config-types/v1/config/${encodeURIComponent(key)}`)
+    const configRequest = await this.apiClient.post('/api/v1/metadata/getByKey', {workspaceId: this.workspaceId, key})
 
     if (!configRequest.ok) {
       let errorMsg = configRequest.error?.error || `Failed to fetch config: ${configRequest.status}`
@@ -240,22 +240,20 @@ export default class Info extends APICommand {
 
     const statsPerEnv: JsonObj = {}
 
-    // Fetch stats for each environment
+    // Fetch stats for each environment via oRPC
     for (const env of environments) {
-      const queryParams = new URLSearchParams({
-        projectEnvId: env.id,
-        key,
-        timeInterval,
-        startTime: String(startTime),
-        endTime: String(endTime),
+      // eslint-disable-next-line no-await-in-loop
+      const request = await this.apiClient.post('/api/v1/analytics/evaluationStats', {
+        workspaceId: this.workspaceId,
+        environment: env.id,
+        configKey: key,
+        days: 1,
       })
 
-      // eslint-disable-next-line no-await-in-loop
-      const request = await this.apiClient.get(`/evaluation-statistics/v1?${queryParams.toString()}`)
-
       if (request.ok) {
-        const response = request.json as Record<string, unknown>
-        statsPerEnv[env.name] = response
+        // oRPC returns EvalStatRow[] directly — wrap for display compatibility
+        const rows = request.json as unknown as Array<Record<string, unknown>>
+        statsPerEnv[env.name] = {intervals: [{data: rows}]}
       }
     }
 

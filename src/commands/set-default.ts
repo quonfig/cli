@@ -65,7 +65,7 @@ export default class SetDefault extends APICommand {
     }
 
     // Fetch all configs from metadata endpoint
-    const metadataRequest = await this.apiClient.get('/all-config-types/v1/metadata')
+    const metadataRequest = await this.apiClient.post('/api/v1/metadata/list', {workspaceId: this.workspaceId})
 
     if (!metadataRequest.ok) {
       const errorMsg = metadataRequest.error?.error || `Failed to fetch configs: ${metadataRequest.status}`
@@ -117,7 +117,7 @@ export default class SetDefault extends APICommand {
 
     // Check if existing config has encrypted values
     if (!secret.selected) {
-      const configDetailsRequest = await this.apiClient.get(`/all-config-types/v1/config/${encodeURIComponent(key)}`)
+      const configDetailsRequest = await this.apiClient.post('/api/v1/metadata/getByKey', {workspaceId: this.workspaceId, key})
       if (configDetailsRequest.ok) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const configDetails = configDetailsRequest.json as any

@@ -53,7 +53,7 @@ export default class Get extends APICommand {
     const {args, flags} = await this.parse(Get)
 
     // Fetch metadata first for validation and autocomplete
-    const metadataRequest = await this.apiClient.get('/all-config-types/v1/metadata')
+    const metadataRequest = await this.apiClient.post('/api/v1/metadata/list', {workspaceId: this.workspaceId})
 
     if (!metadataRequest.ok) {
       const errorMsg = metadataRequest.error?.error || `Failed to fetch configs: ${metadataRequest.status}`
@@ -113,17 +113,44 @@ export default class Get extends APICommand {
       return
     }
 
-    const request = await this.apiClient.get(
-      `/evaluation/v2/eval?key=${encodeURIComponent(key)}&envId=${encodeURIComponent(environment.id)}`,
-    )
+    const request = await this.apiClient.post('/api/v1/evaluations/evaluate', {
+      workspaceId: this.workspaceId,
+      environmentId: environment.id,
+      context: {},
+    })
 
     if (!request.ok) {
       const errorMsg = request.error?.error || `Failed to get config: ${request.status}`
       return this.err(errorMsg, {serverError: request.error})
     }
 
-    const response = request.json as unknown as EvaluationResponseV2
-    const config = response.config
+    // oRPC returns EvaluationResult[] — find the matching key
+    const results = (Array.isArray(request.json) ? request.json : []) as Array<{
+      key: string
+      configType: string
+      valueType: string
+      value: unknown
+      displayValue: string
+    }>
+
+    const result = results.find((r) => r.key === key)
+    if (!result) {
+      return this.err(`${key} could not be evaluated in this environment`)
+    }
+
+    // Adapt to the legacy response shape for downstream compatibility
+    const config: ConfigWithDependencies = {
+      key: result.key,
+      type: result.configType,
+      value: result.displayValue,
+      metadata: {
+        conditionalValueIndex: 0,
+        configRowIndex: 0,
+        id: 0,
+        type: result.configType,
+        valueType: result.valueType,
+      },
+    }
     let value = config.value
 
     // Check if this config has dependencies

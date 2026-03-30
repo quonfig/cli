@@ -127,6 +127,7 @@ export abstract class APICommand extends BaseCommand {
       post: async (path: string, payload: unknown) => unwrapRequest(this, this.rawApiClient.post(path, payload)),
 
       put: async (path: string, payload: unknown) => unwrapRequest(this, this.rawApiClient.put(path, payload)),
+
     }
   }
 

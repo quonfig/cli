@@ -1,22 +1,14 @@
-import {select} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
-import * as childProcess from 'node:child_process'
 
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {getDomain} from '../util/domain-urls.js'
-import {
-  createCodeVerifier,
-  exchangeCodeForTokens,
-  generateAuthUrl,
-  introspectToken,
-  startCallbackServer,
-} from '../util/oauth-client.js'
+import {decodeJWT, pollForToken, requestDeviceCode} from '../util/oauth-client.js'
+import {getApiUrl} from '../util/domain-urls.js'
 import {loadAuthConfig, saveAuthConfig, saveTokens} from '../util/token-storage.js'
 
 export default class Login extends BaseCommand {
-  static description = 'Log in to Quonfig using OAuth'
+  static description = 'Log in to Quonfig via WorkOS device authorization'
 
   static examples = ['<%= config.bin %> <%= command.id %>', '<%= config.bin %> <%= command.id %> --profile myprofile']
 
@@ -31,92 +23,92 @@ export default class Login extends BaseCommand {
     const {flags} = await this.parse(Login)
     const profileName = flags.profile || 'default'
 
-    this.log('Starting local callback server...')
+    // Step 1: Request device code from WorkOS
+    this.verboseLog('Requesting device authorization code...')
+    const deviceAuth = await requestDeviceCode()
 
-    const domain = getDomain()
+    // Step 2: Display code and URL to user
+    this.log(`\nTo authenticate, visit:\n`)
+    this.log(`  ${deviceAuth.verification_uri_complete}\n`)
+    this.log(`Or go to ${deviceAuth.verification_uri} and enter code: ${deviceAuth.user_code}\n`)
+    this.log('Waiting for authentication...')
 
-    // Generate PKCE code verifier
-    const codeVerifier = createCodeVerifier()
+    // Step 3: Poll for token
+    const tokenResponse = await pollForToken(
+      deviceAuth.device_code,
+      deviceAuth.interval,
+      deviceAuth.expires_in,
+      this.isVerbose,
+    )
 
-    // Start the callback server and get the port immediately
-    const {port, waitForCallback, close} = await startCallbackServer()
+    const user = tokenResponse.user
+    const userEmail = user.email
 
-    // Now we have the port, generate the auth URL and open the browser
-    const authUrl = generateAuthUrl(port, codeVerifier, domain)
-    this.verboseLog(`Using domain: ${domain}`)
-    this.verboseLog(`Auth URL: ${authUrl}`)
-    this.log('Opening browser for authentication...')
-
-    const opener = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open'
-    childProcess.exec(`${opener} "${authUrl}"`)
-
-    // Wait for the callback
-    const code = await waitForCallback()
-
-    this.verboseLog('Exchanging authorization code for tokens...')
-    const tokenResponse = await exchangeCodeForTokens(code, port, codeVerifier, domain)
-
-    // Decode JWT to extract email
-    const jwtParts = tokenResponse.access_token.split('.')
-    const payload = JSON.parse(Buffer.from(jwtParts[1], 'base64').toString('utf8'))
-    const userEmail = payload.email
-
-    // Display the JWT in verbose mode
+    // Decode JWT to inspect claims
     if (this.isVerbose) {
+      const payload = decodeJWT(tokenResponse.access_token)
       this.verboseLog('\n=== Decoded JWT Payload ===')
       this.verboseLog(JSON.stringify(payload, null, 2))
       this.verboseLog('===========================\n')
     }
 
+    // Extract org_id from JWT (WorkOS scopes the token to the selected org)
+    const jwtPayload = decodeJWT(tokenResponse.access_token)
+    const orgId = (jwtPayload.org_id as string) || user.organization_id
+
+    // Use the JWT's actual exp claim for expiry
+    let expiresAt = Date.now() + 300 * 1000 // fallback: 5 minutes
+    if (typeof jwtPayload.exp === 'number') {
+      expiresAt = (jwtPayload.exp as number) * 1000
+    }
+
     // Save tokens
     await saveTokens({
       accessToken: tokenResponse.access_token,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
+      expiresAt,
       refreshToken: tokenResponse.refresh_token,
+      userEmail,
+      userId: user.id,
     })
 
-    this.log('Fetching available workspaces...')
-    this.verboseLog(`Introspecting token at domain: ${domain}`)
-    const introspection = await introspectToken(tokenResponse.access_token, domain, this.isVerbose)
-
-    // Flatten workspaces from all organizations, keeping org info
-    const allWorkspaces = introspection.organizations.flatMap((org) =>
-      org.workspaces.map((ws) => ({
-        ...ws,
-        organizationName: org.name,
-      })),
-    )
-
-    if (allWorkspaces.length === 0) {
-      close()
-      return this.err('No workspaces found for this user')
-    }
-
-    // Let user select a workspace
-    let selectedWorkspace: string
-
-    if (allWorkspaces.length === 1) {
-      selectedWorkspace = allWorkspaces[0].id
-      this.log(`Using workspace: ${allWorkspaces[0].organizationName} - ${allWorkspaces[0].name}`)
-    } else {
-      selectedWorkspace = await select({
-        choices: allWorkspaces.map((ws) => ({
-          name: `${ws.organizationName} - ${ws.name}`,
-          value: ws.id,
-        })),
-        message: 'Select a workspace:',
+    // Resolve org_id → workspace UUID via the API
+    let workspaceId: string | undefined
+    let workspaceName: string | undefined
+    try {
+      const apiUrl = getApiUrl()
+      this.verboseLog('Resolving workspace...', {apiUrl, orgId})
+      const res = await fetch(`${apiUrl}/api/v1/userWorkspaces/list`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokenResponse.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({json: {}}),
       })
+
+      if (res.ok) {
+        const body = await res.json() as {json?: Array<{workspaceId: string; workosOrgId: string; organizationName: string}>}
+        const workspaces = body.json ?? body as unknown as Array<{workspaceId: string; workosOrgId: string; organizationName: string}>
+        const match = Array.isArray(workspaces)
+          ? workspaces.find((w) => w.workosOrgId === orgId) ?? workspaces[0]
+          : undefined
+
+        if (match) {
+          workspaceId = match.workspaceId
+          workspaceName = match.organizationName
+          this.verboseLog('Resolved workspace', {workspaceId, workspaceName})
+        }
+      } else {
+        this.verboseLog('Failed to resolve workspace', {status: res.status})
+      }
+    } catch (error) {
+      this.verboseLog('Failed to resolve workspace', {error: String(error)})
     }
 
     // Get or create config with profile
     const existingConfig = await loadAuthConfig()
 
-    const selectedWorkspaceInfo = allWorkspaces.find((ws) => ws.id === selectedWorkspace)
-    const workspaceName = selectedWorkspaceInfo
-      ? `${selectedWorkspaceInfo.organizationName} - ${selectedWorkspaceInfo.name}`
-      : undefined
-
-    // Save auth config - set default profile if this is the first profile or if we're updating default
+    // Save auth config
     const isFirstProfile = !existingConfig || Object.keys(existingConfig.profiles).length === 0
     const shouldSetDefault = isFirstProfile || profileName === 'default' || !existingConfig?.defaultProfile
 
@@ -125,31 +117,35 @@ export default class Login extends BaseCommand {
       profiles: {
         ...existingConfig?.profiles,
         [profileName]: {
-          workspace: selectedWorkspace,
-          workspaceName,
+          workspace: workspaceId || orgId || 'unknown',
+          workspaceName: workspaceName || (orgId ? `org:${orgId}` : undefined),
         },
       },
     })
 
     this.log(`\nProfile '${profileName}' configured.`)
     if (shouldSetDefault) {
-      this.log(`Set as default profile.`)
+      this.log('Set as default profile.')
     }
 
-    close()
-
-    const selectedWorkspaceName = allWorkspaces.find((ws) => ws.id === selectedWorkspace)?.name
-
-    this.log(`\nSuccessfully logged in!`)
+    this.log('\nSuccessfully logged in!')
     if (userEmail) {
       this.log(`Logged in as: ${userEmail}`)
     }
-    this.log(`Active workspace: ${selectedWorkspaceName}`)
+
+    if (workspaceName) {
+      this.log(`Workspace: ${workspaceName} (${workspaceId})`)
+    } else if (orgId) {
+      this.log(`Organization: ${orgId}`)
+    }
 
     return {
-      activeWorkspace: selectedWorkspace,
+      email: userEmail,
+      organizationId: orgId,
+      profile: profileName,
       success: true,
-      workspaces: allWorkspaces.map((ws) => ({id: ws.id, name: ws.name})),
+      userId: user.id,
+      workspaceId,
     }
   }
 }

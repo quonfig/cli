@@ -115,25 +115,27 @@ export default class Create extends APICommand {
       configValue.confidential = true
     }
 
-    // Map to CreateConfigRequestDto structure
-    const createConfigRequest = {
-      key: args.name,
-      type: 'config',
-      valueType: mapValueTypeToString(valueType),
-      sendToClientSdk: false,
-      default: {
-        rules: [
-          {
-            criteria: [],
-            value: mapConfigValueToDto(configValue, valueType),
-          },
-        ],
+    // Build oRPC input for configs/create
+    const createInput = {
+      workspaceId: this.workspaceId,
+      config: {
+        key: args.name,
+        valueType: mapValueTypeToString(valueType),
+        sendToClientSdk: false,
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: mapConfigValueToDto(configValue, valueType),
+            },
+          ],
+        },
       },
     }
 
-    this.verboseLog('POST /configs/v1', createConfigRequest)
+    this.verboseLog('RPC configs/create', createInput)
 
-    const request = await this.apiClient.post('/configs/v1', createConfigRequest)
+    const request = await this.apiClient.post('/api/v1/configs/create', createInput)
 
     if (!request.ok) {
       const errMsg =
@@ -156,46 +158,48 @@ export default class Create extends APICommand {
 
     const defaultValue = coerceBool(rawDefault ?? 'false')
 
-    // Create flag with true and false variants
-    const createFlagRequest = {
-      key,
-      type: 'feature_flag',
-      valueType: 'bool',
-      sendToClientSdk: true,
-      variants: [
-        {
-          value: {
-            type: 'bool',
-            value: true,
-          },
-          name: 'True',
-          description: 'Enabled',
-        },
-        {
-          value: {
-            type: 'bool',
-            value: false,
-          },
-          name: 'False',
-          description: 'Disabled',
-        },
-      ],
-      default: {
-        rules: [
+    // Build oRPC input for flags/create
+    const createInput = {
+      workspaceId: this.workspaceId,
+      flag: {
+        key,
+        valueType: 'bool',
+        sendToClientSdk: true,
+        variants: [
           {
-            criteria: [],
             value: {
               type: 'bool',
-              value: defaultValue,
+              value: true,
             },
+            name: 'True',
+            description: 'Enabled',
+          },
+          {
+            value: {
+              type: 'bool',
+              value: false,
+            },
+            name: 'False',
+            description: 'Disabled',
           },
         ],
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: {
+                type: 'bool',
+                value: defaultValue,
+              },
+            },
+          ],
+        },
       },
     }
 
-    this.verboseLog('POST /flags/v1', createFlagRequest)
+    this.verboseLog('RPC flags/create', createInput)
 
-    const request = await this.apiClient.post('/flags/v1', createFlagRequest)
+    const request = await this.apiClient.post('/api/v1/flags/create', createInput)
 
     if (!request.ok) {
       const errMsg =
