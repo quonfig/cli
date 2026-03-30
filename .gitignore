@@ -20,3 +20,4 @@ src/reforge
 .yarn/install-state.gz
 test-*.sh
 _verify_build/
+quonfig.*.config.json
