@@ -2123,7 +2123,7 @@ __metadata:
     "@oclif/plugin-plugins": "npm:^4"
     "@oclif/prettier-config": "npm:^0.2.1"
     "@oclif/test": "npm:^3"
-    "@quonfig/node": "portal:../sdk-node"
+    "@quonfig/node": "npm:^0.0.1"
     "@types/chai": "npm:^4"
     "@types/common-tags": "npm:^1.8.4"
     "@types/lodash.camelcase": "npm:^4.3.9"
@@ -2162,14 +2162,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@quonfig/node@portal:../sdk-node::locator=%40quonfig%2Fcli%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@quonfig/node@portal:../sdk-node::locator=%40quonfig%2Fcli%40workspace%3A."
+"@quonfig/node@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@quonfig/node@npm:0.0.1"
   dependencies:
     eventsource: "npm:^2.0.2"
     murmurhash: "npm:^2.0.1"
+  checksum: 10c0/11d54d832945991af462db4020b9bebc210804f0c29ff757a032daf81f029694779e4328bb54409cc0c8b70e7326518cb2d58267dd5fa6c4bc0eb806a8809e9d
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@rtsao/scc@npm:^1.1.0":
   version: 1.1.0

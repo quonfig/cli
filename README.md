@@ -14,7 +14,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.14 darwin-arm64 node-v24.6.0
+@quonfig/cli/0.0.1 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -41,6 +41,7 @@ USAGE
 * [`qfg schema NAME`](#qfg-schema-name)
 * [`qfg serve DATA-FILE`](#qfg-serve-data-file)
 * [`qfg set-default [NAME]`](#qfg-set-default-name)
+* [`qfg verify [PATH]`](#qfg-verify-path)
 * [`qfg whoami`](#qfg-whoami)
 * [`qfg workspace`](#qfg-workspace)
 
@@ -50,9 +51,9 @@ Create a new item in Quonfig
 
 ```
 USAGE
-  $ qfg create NAME --type boolean-flag|boolean|string|double|int|string-list|json [--json]
-    [--interactive] [--no-color] [--verbose] [-p <value>] [--confidential] [--env-var <value>] [--value <value>]
-    [--secret] [--secret-key-name <value>]
+  $ qfg create NAME --type boolean-flag|boolean|string|double|int|string-list|json [--json] [--interactive]
+    [--no-color] [--verbose] [-p <value>] [--confidential] [--env-var <value>] [--value <value>] [--secret]
+    [--secret-key-name <value>]
 
 ARGUMENTS
   NAME  name for your new item (e.g. my.new.flag)
@@ -91,7 +92,7 @@ EXAMPLES
   $ qfg create my.new.string --type json --value="{\"key\": \"value\"}"
 ```
 
-_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/create.ts)_
+_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/create.ts)_
 
 ## `qfg download`
 
@@ -124,7 +125,7 @@ EXAMPLES
   $ qfg download --environment=test --sdk-key=YOUR_SDK_KEY
 ```
 
-_See code: [src/commands/download.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/download.ts)_
+_See code: [src/commands/download.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/download.ts)_
 
 ## `qfg generate`
 
@@ -194,7 +195,7 @@ EXAMPLES
   $ qfg generate --targets node-ts -o ./dist # combine with targets
 ```
 
-_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/generate.ts)_
+_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/generate.ts)_
 
 ## `qfg generate-new-hex-key`
 
@@ -217,7 +218,7 @@ EXAMPLES
   $ qfg generate-new-hex-key
 ```
 
-_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/generate-new-hex-key.ts)_
+_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/generate-new-hex-key.ts)_
 
 ## `qfg get [NAME]`
 
@@ -225,8 +226,7 @@ Get the value of a config/feature-flag/etc.
 
 ```
 USAGE
-  $ qfg get [NAME] [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--environment
-    <value>]
+  $ qfg get [NAME] [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--environment <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -250,7 +250,7 @@ EXAMPLES
   $ qfg get my.config.name --environment=production
 ```
 
-_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/get.ts)_
+_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/get.ts)_
 
 ## `qfg info [NAME]`
 
@@ -258,8 +258,7 @@ Show details about the provided config/feature-flag/etc.
 
 ```
 USAGE
-  $ qfg info [NAME] [--json] [--interactive] [--no-color] [--verbose] [-p <value>]
-    [--exclude-evaluations]
+  $ qfg info [NAME] [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--exclude-evaluations]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -281,7 +280,7 @@ EXAMPLES
   $ qfg info my.config.name
 ```
 
-_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/info.ts)_
+_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/info.ts)_
 
 ## `qfg interactive`
 
@@ -299,7 +298,7 @@ EXAMPLES
   $ qfg
 ```
 
-_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/interactive.ts)_
+_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/interactive.ts)_
 
 ## `qfg list`
 
@@ -307,8 +306,8 @@ Show keys for your config/feature flags/etc.
 
 ```
 USAGE
-  $ qfg list [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--configs]
-    [--feature-flags] [--log-levels] [--schemas] [--segments]
+  $ qfg list [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--configs] [--feature-flags]
+    [--log-levels] [--schemas] [--segments]
 
 FLAGS
   --configs        include configs
@@ -336,11 +335,11 @@ EXAMPLES
   $ qfg list --feature-flags
 ```
 
-_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/list.ts)_
+_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/list.ts)_
 
 ## `qfg login`
 
-Log in to Quonfig using OAuth
+Log in to Quonfig via WorkOS device authorization
 
 ```
 USAGE
@@ -356,7 +355,7 @@ GLOBAL FLAGS
   --verbose           Verbose output
 
 DESCRIPTION
-  Log in to Quonfig using OAuth
+  Log in to Quonfig via WorkOS device authorization
 
 EXAMPLES
   $ qfg login
@@ -364,7 +363,7 @@ EXAMPLES
   $ qfg login --profile myprofile
 ```
 
-_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/login.ts)_
+_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/login.ts)_
 
 ## `qfg logout`
 
@@ -387,7 +386,7 @@ EXAMPLES
   $ qfg logout
 ```
 
-_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/logout.ts)_
+_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/logout.ts)_
 
 ## `qfg mcp`
 
@@ -417,10 +416,10 @@ EXAMPLES
 
   $ qfg mcp --editor cursor
 
-  $ qfg mcp --url http://local-launch.goatsofquonfig.com:3003/api/v1/mcp
+  $ qfg mcp --url http://local-app.goatsofquonfig.com:3003/api/v1/mcp
 ```
 
-_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/mcp.ts)_
+_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/mcp.ts)_
 
 ## `qfg override [NAME]`
 
@@ -428,8 +427,8 @@ Override the value of an item for your user/SDK key combo
 
 ```
 USAGE
-  $ qfg override [NAME] [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--environment
-    <value>] [--remove] [--value <value>]
+  $ qfg override [NAME] [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--environment <value>]
+    [--remove] [--value <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -459,7 +458,7 @@ EXAMPLES
   $ qfg override my.double.config --value=3.14159
 ```
 
-_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/override.ts)_
+_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/override.ts)_
 
 ## `qfg profile`
 
@@ -482,23 +481,25 @@ EXAMPLES
   $ qfg profile
 ```
 
-_See code: [src/commands/profile.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/profile.ts)_
+_See code: [src/commands/profile.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/profile.ts)_
 
 ## `qfg schema NAME`
 
-Manage schemas for Quonfig configs
+Get or update first-class schema documents
 
 ```
 USAGE
-  $ qfg schema NAME [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--get] [--set-zod
-    <value>]
+  $ qfg schema NAME [--json] [--interactive] [--no-color] [--verbose] [-p <value>] [--get] [--protected]
+    [--set-json-schema <value>] [--set-zod <value>]
 
 ARGUMENTS
-  NAME  name of the schema
+  NAME  schema key
 
 FLAGS
-  --get              get the schema definition
-  --set-zod=<value>  set a Zod schema definition
+  --get                      get the schema document
+  --protected                store the schema in protected storage
+  --set-json-schema=<value>  set a plain JSON Schema document (inline JSON or @file path)
+  --set-zod=<value>          compatibility alias for --set-json-schema; now expects plain JSON Schema
 
 GLOBAL FLAGS
   -p, --profile=<value>   Profile to use (defaults to ENV var QUONFIG_PROFILE or "default")
@@ -508,15 +509,17 @@ GLOBAL FLAGS
       --verbose           Verbose output
 
 DESCRIPTION
-  Manage schemas for Quonfig configs
+  Get or update first-class schema documents
 
 EXAMPLES
-  $ qfg schema my-schema --set-zod="z.object({url: z.string()})"
-
   $ qfg schema my-schema --get
+
+  $ qfg schema my-schema --set-json-schema='{"type":"object","properties":{}}'
+
+  $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
 ```
 
-_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/schema.ts)_
+_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/schema.ts)_
 
 ## `qfg serve DATA-FILE`
 
@@ -552,7 +555,7 @@ EXAMPLES
   $ qfg serve ./quonfig.test.588.config.json --port=3099
 ```
 
-_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/serve.ts)_
+_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/serve.ts)_
 
 ## `qfg set-default [NAME]`
 
@@ -596,7 +599,40 @@ EXAMPLES
   $ qfg set-default my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
 ```
 
-_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/set-default.ts)_
+_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/set-default.ts)_
+
+## `qfg verify [PATH]`
+
+Validate a Quonfig workspace directory
+
+```
+USAGE
+  $ qfg verify [PATH] [--json] [--interactive] [--no-color] [--verbose] [--strict]
+
+ARGUMENTS
+  PATH  [default: .] Path to workspace directory
+
+FLAGS
+  --strict  Treat warnings as errors
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Validate a Quonfig workspace directory
+
+EXAMPLES
+  $ qfg verify
+
+  $ qfg verify ./my-workspace
+
+  $ qfg verify --json
+```
+
+_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/verify.ts)_
 
 ## `qfg whoami`
 
@@ -619,11 +655,11 @@ EXAMPLES
   $ qfg whoami
 ```
 
-_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/whoami.ts)_
+_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/whoami.ts)_
 
 ## `qfg workspace`
 
-Switch active workspace or display current workspace
+Display current workspace. To switch workspaces, run `qfg login --profile <name>`.
 
 ```
 USAGE
@@ -636,13 +672,13 @@ GLOBAL FLAGS
   --verbose           Verbose output
 
 DESCRIPTION
-  Switch active workspace or display current workspace
+  Display current workspace. To switch workspaces, run `qfg login --profile <name>`.
 
 EXAMPLES
   $ qfg workspace
 ```
 
-_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.14/src/commands/workspace.ts)_
+_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/workspace.ts)_
 <!-- commandsstop -->
 
 ## Local Development

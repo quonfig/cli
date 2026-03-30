@@ -1,42 +1,6 @@
-import {HttpResponse, http} from 'msw'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-
-/**
- * Mock identity service response for tests
- */
-export const mockIdentityResponse = {
-  // eslint-disable-next-line camelcase
-  authn_jwt: 'mock-authn-jwt',
-  organizations: [
-    {
-      id: 'org-123',
-      name: 'Test Organization',
-      roles: ['admin'],
-      workspaces: [
-        {
-          // eslint-disable-next-line camelcase
-          authz_jwt: 'mock-authz-jwt-workspace-123',
-          id: 'workspace-123',
-          name: 'Test Workspace',
-        },
-      ],
-    },
-  ],
-}
-
-/**
- * MSW handlers for identity endpoint
- * Supports both default quonfig.com and test goatsofquonfig.com domains
- */
-export const identityHandler = http.get('https://id.quonfig.com/api/oauth/identity', () =>
-  HttpResponse.json(mockIdentityResponse),
-)
-
-export const identityHandlerTestDomain = http.get('https://id.goatsofquonfig.com/api/oauth/identity', () =>
-  HttpResponse.json(mockIdentityResponse),
-)
 
 /**
  * Setup authentication files for tests
@@ -51,11 +15,22 @@ export const setupTestAuth = () => {
   // Ensure directory exists
   fs.mkdirSync(quonfigDir, {recursive: true})
 
-  // Write tokens file
+  // Write tokens file with a valid-looking JWT (header.payload.signature)
+  const jwtPayload = Buffer.from(JSON.stringify({
+    email: 'test@example.com',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    iat: Math.floor(Date.now() / 1000),
+    org_id: 'org_workspace-123',
+    sub: 'user_test-123',
+  })).toString('base64url')
+  const mockJwt = `eyJhbGciOiJSUzI1NiJ9.${jwtPayload}.mock-signature`
+
   const mockTokens = {
-    accessToken: 'mock-access-token',
+    accessToken: mockJwt,
     expiresAt: Date.now() + 3_600_000, // 1 hour from now
     refreshToken: 'mock-refresh-token',
+    userEmail: 'test@example.com',
+    userId: 'user_test-123',
   }
   fs.writeFileSync(tokensFile, JSON.stringify(mockTokens, null, 2))
 

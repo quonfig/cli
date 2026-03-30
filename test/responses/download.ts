@@ -3,7 +3,6 @@ import {setupServer} from 'msw/node'
 
 import type {JsonObj} from '../../src/result.js'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 
 const environmentResponse = {
   environments: [
@@ -44,4 +43,4 @@ const downloadHandler = http.get('https://api.goatsofquonfig.com/all-config-type
   return HttpResponse.json({message: 'something went wrong'}, {status: 500})
 })
 
-export const server = setupServer(identityHandler, identityHandlerTestDomain, environmentsHandler, downloadHandler)
+export const server = setupServer(environmentsHandler, downloadHandler)

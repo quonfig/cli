@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 
 export const keyWithEvaluations = 'my-string-list-key'
 export const keyWithNoEvaluations = 'jeffreys.test.key.reforge'
@@ -277,8 +276,6 @@ const evaluationStatsHandler = http.get('https://api.goatsofquonfig.com/evaluati
 })
 
 export const server = setupServer(
-  identityHandler,
-  identityHandlerTestDomain,
   metadataHandler,
   configHandler,
   environmentsHandler,

@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 
 /**
  * Mock responses for set-default command tests
@@ -273,8 +272,6 @@ const setDefaultHandler = http.post('https://api.*/internal/ops/v1/set-default',
 })
 
 export const server = setupServer(
-  identityHandler,
-  identityHandlerTestDomain,
   metadataHandler,
   environmentsHandler,
   encryptionKeyHandler,

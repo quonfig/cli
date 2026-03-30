@@ -14,6 +14,8 @@ export interface TokenData {
   accessToken: string
   expiresAt: number
   refreshToken: string
+  userEmail?: string
+  userId?: string
 }
 
 export interface AuthConfig {

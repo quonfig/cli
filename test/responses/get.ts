@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 
 /**
  * Mock responses for get command tests
@@ -168,8 +167,6 @@ const evaluationHandler = http.get('https://api.goatsofquonfig.com/evaluation/v2
 })
 
 export const server = setupServer(
-  identityHandler,
-  identityHandlerTestDomain,
   metadataHandler,
   environmentsHandler,
   evaluationHandler,

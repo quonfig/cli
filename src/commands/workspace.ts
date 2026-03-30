@@ -1,38 +1,18 @@
-import {select} from '@inquirer/prompts'
-
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {getDomain} from '../util/domain-urls.js'
-import {introspectToken} from '../util/oauth-client.js'
-import {getActiveProfile, loadAuthConfig, loadTokens, saveAuthConfig} from '../util/token-storage.js'
+import {getActiveProfile, loadAuthConfig} from '../util/token-storage.js'
 
 export default class Workspace extends BaseCommand {
-  static description = 'Switch active workspace or display current workspace'
+  static description = 'Display current workspace. To switch workspaces, run `qfg login --profile <name>`.'
 
   static examples = ['<%= config.bin %> <%= command.id %>']
 
   public async run(): Promise<JsonObj | void> {
     const authConfig = await loadAuthConfig()
-    const tokens = await loadTokens()
 
-    if (!authConfig || !tokens?.accessToken) {
+    if (!authConfig || Object.keys(authConfig.profiles).length === 0) {
       return this.err('Not logged in. Please run `qfg login` first.')
-    }
-
-    const domain = getDomain()
-
-    // Fetch current workspaces
-    const introspection = await introspectToken(tokens.accessToken, domain, this.isVerbose)
-    const allWorkspaces = introspection.organizations.flatMap((org) =>
-      org.workspaces.map((ws) => ({
-        ...ws,
-        organizationName: org.name,
-      })),
-    )
-
-    if (allWorkspaces.length === 0) {
-      return this.err('No workspaces found for this user')
     }
 
     // Get the active profile
@@ -43,59 +23,30 @@ export default class Workspace extends BaseCommand {
       return this.err('No active profile found. Please run `qfg login` first.')
     }
 
-    const currentWorkspace = profile.workspace
-    const currentWorkspaceInfo = allWorkspaces.find((ws) => ws.id === currentWorkspace)
-    const currentWorkspaceName = currentWorkspaceInfo
-      ? `${currentWorkspaceInfo.organizationName} - ${currentWorkspaceInfo.name}`
-      : profile.workspaceName || 'None'
+    this.log(`Active profile: ${activeProfile}`)
+    this.log(`Workspace: ${profile.workspaceName || profile.workspace}`)
 
-    // If there's only one workspace, just display it
-    if (allWorkspaces.length === 1) {
-      this.log(`Current workspace (profile: ${activeProfile}): ${currentWorkspaceName}`)
-      this.log('\nYou only have access to one workspace.')
-      return {
-        activeWorkspace: currentWorkspace,
-        profile: activeProfile,
-        workspaces: allWorkspaces.map((ws) => ({id: ws.id, name: ws.name})),
+    // Show all profiles if more than one
+    const profileNames = Object.keys(authConfig.profiles)
+    if (profileNames.length > 1) {
+      this.log('\nAll profiles:')
+      for (const name of profileNames) {
+        const p = authConfig.profiles[name]
+        const marker = name === activeProfile ? ' (active)' : ''
+        this.log(`  ${name}: ${p.workspaceName || p.workspace}${marker}`)
       }
+
+      this.log('\nTo switch, use: qfg login --profile <name>')
+      this.log('To change default: qfg profile')
     }
 
-    // Show current workspace
-    this.log(`Current workspace (profile: ${activeProfile}): ${currentWorkspaceName}\n`)
-
-    // Let user select a new workspace
-    const newWorkspace = await select({
-      choices: allWorkspaces.map((ws) => ({
-        name: `${ws.organizationName} - ${ws.name}`,
-        value: ws.id,
-      })),
-      message: 'Select a workspace:',
-    })
-
-    const newWorkspaceInfo = allWorkspaces.find((ws) => ws.id === newWorkspace)
-    const newWorkspaceName = newWorkspaceInfo
-      ? `${newWorkspaceInfo.organizationName} - ${newWorkspaceInfo.name}`
-      : newWorkspace
-
-    // Update the active profile's workspace
-    await saveAuthConfig({
-      ...authConfig,
-      profiles: {
-        ...authConfig.profiles,
-        [activeProfile]: {
-          workspace: newWorkspace,
-          workspaceName: newWorkspaceName,
-        },
-      },
-    })
-
-    this.log(`\nSwitched to workspace: ${newWorkspaceName}`)
-
     return {
-      activeWorkspace: newWorkspace,
-      previousWorkspace: currentWorkspace,
-      profile: activeProfile,
-      success: true,
+      activeProfile,
+      profiles: Object.fromEntries(
+        profileNames.map((name) => [name, authConfig.profiles[name]]),
+      ),
+      workspace: profile.workspace,
+      workspaceName: profile.workspaceName,
     }
   }
 }

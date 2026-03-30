@@ -20,13 +20,18 @@ export default class Whoami extends BaseCommand {
       }
     }
 
-    // Decode the JWT to get user email
-    let userEmail: string | undefined
-    try {
-      const payload = decodeJWT(tokens.accessToken)
-      userEmail = payload.email as string
-    } catch {
-      // If we can't decode the token, continue without email
+    // Get email from stored user info or decode JWT
+    let userEmail = tokens.userEmail
+    let orgId: string | undefined
+
+    if (!userEmail) {
+      try {
+        const payload = decodeJWT(tokens.accessToken)
+        userEmail = payload.email as string
+        orgId = payload.org_id as string
+      } catch {
+        // If we can't decode the token, continue without email
+      }
     }
 
     // Get the active profile
@@ -48,7 +53,9 @@ export default class Whoami extends BaseCommand {
     return {
       email: userEmail,
       loggedIn: true,
+      organizationId: orgId || profile.workspace,
       profile: activeProfile,
+      userId: tokens.userId,
       workspace: profile.workspace,
       workspaceName: profile.workspaceName,
     }

@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 
 /**
  * Mock responses for list command tests
@@ -52,4 +51,4 @@ const metadataHandler = http.get('https://api.goatsofquonfig.com/all-config-type
   }),
 )
 
-export const server = setupServer(identityHandler, identityHandlerTestDomain, metadataHandler)
+export const server = setupServer(metadataHandler)

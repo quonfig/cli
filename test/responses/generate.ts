@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 
 // GET /all-config-types/v1/download-all-envs - download all configs
 const downloadAllEnvsHandler = http.get('https://api.goatsofquonfig.com/all-config-types/v1/download-all-envs', () =>
@@ -43,4 +42,4 @@ const downloadAllEnvsHandler = http.get('https://api.goatsofquonfig.com/all-conf
   }),
 )
 
-export const server = setupServer(identityHandler, identityHandlerTestDomain, downloadAllEnvsHandler)
+export const server = setupServer(downloadAllEnvsHandler)

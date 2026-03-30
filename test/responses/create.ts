@@ -1,7 +1,6 @@
 import {HttpResponse, http, passthrough} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {identityHandler, identityHandlerTestDomain} from '../test-auth-helper.js'
 import {CannedResponses, SECRET_VALUE, getCannedResponse} from '../test-helper.js'
 
 const recipeResponse = (key: string, defaultValue: boolean = false) => ({
@@ -427,8 +426,6 @@ const missingEncryptionKeyHandlerProd = http.get(
 )
 
 export const server = setupServer(
-  identityHandler,
-  identityHandlerTestDomain,
   flagsV1Handler,
   flagsV1HandlerProd,
   configsV1Handler,
