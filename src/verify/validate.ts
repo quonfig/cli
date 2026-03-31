@@ -184,10 +184,24 @@ export interface ValidationIssue {
   suggestion?: string;
 }
 
+export interface ValidationStats {
+  configs: number;
+  featureFlags: number;
+  segments: number;
+  logLevels: number;
+  schemas: number;
+  environmentOverrides: number;
+  rules: number;
+  segmentRefsChecked: number;
+  schemaRefsChecked: number;
+  uniqueKeysVerified: number;
+}
+
 export interface ValidationResult {
   issues: ValidationIssue[];
   filesChecked: number;
   valid: boolean;
+  stats: ValidationStats;
 }
 
 /** Maps config directory names to their expected config type. */
@@ -236,6 +250,18 @@ import * as path from "node:path";
 export function validateWorkspace(workspaceDir: string): ValidationResult {
   const issues: ValidationIssue[] = [];
   let filesChecked = 0;
+  const stats: ValidationStats = {
+    configs: 0,
+    featureFlags: 0,
+    segments: 0,
+    logLevels: 0,
+    schemas: 0,
+    environmentOverrides: 0,
+    rules: 0,
+    segmentRefsChecked: 0,
+    schemaRefsChecked: 0,
+    uniqueKeysVerified: 0,
+  };
 
   // Collect all configs for cross-reference checks
   const allConfigs: Array<{ key: string; type: string; dir: string; file: string }> = [];
@@ -256,6 +282,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
       }],
       filesChecked: 0,
       valid: false,
+      stats,
     };
   }
 
@@ -320,6 +347,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         schemaKeys.add(schemaKey);
         validateKey(schemaKey, relPath, issues);
         allSchemaFiles.push({key: schemaKey, file: relPath});
+        stats.schemas++;
         continue;
       }
 
@@ -399,13 +427,23 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         validateRules(env.rules, relPath, `environments[${env.id}]`, config.valueType, issues);
       }
 
+      // Count by type
+      switch (config.type) {
+        case "config": stats.configs++; break;
+        case "feature_flag": stats.featureFlags++; break;
+        case "segment": stats.segments++; break;
+        case "log_level": stats.logLevels++; break;
+      }
+
+      // Count rules and environment overrides
+      stats.rules += config.default.rules.length;
+      stats.environmentOverrides += config.environments.length;
+      for (const env of config.environments) {
+        stats.rules += env.rules.length;
+      }
+
       // Collect for cross-reference
       allConfigs.push({ key: config.key, type: config.type, dir, file: relPath });
-
-      // Check schemaKey reference (collected, validated in second pass)
-      if (config.schemaKey) {
-        // Will be checked after all files are parsed
-      }
     }
   }
 
@@ -445,6 +483,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
       // Check segment references in criteria
       const segRefs = collectSegmentReferences(config);
       for (const ref of segRefs) {
+        stats.segmentRefsChecked++;
         if (!segmentKeys.has(ref)) {
           issues.push({
             file: relPath,
@@ -456,13 +495,16 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
       }
 
       // Check schemaKey references
-      if (config.schemaKey && !schemaKeys.has(config.schemaKey)) {
-        issues.push({
-          file: relPath,
-          message: `References schema "${config.schemaKey}" which does not exist`,
-          severity: "error",
-          suggestion: `Create schemas/${config.schemaKey}.json or schemas-protected/${config.schemaKey}.json, or remove schemaKey`,
-        });
+      if (config.schemaKey) {
+        stats.schemaRefsChecked++;
+        if (!schemaKeys.has(config.schemaKey)) {
+          issues.push({
+            file: relPath,
+            message: `References schema "${config.schemaKey}" which does not exist`,
+            severity: "error",
+            suggestion: `Create schemas/${config.schemaKey}.json or schemas-protected/${config.schemaKey}.json, or remove schemaKey`,
+          });
+        }
       }
     }
   }
@@ -502,8 +544,19 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     }
   }
 
+  stats.uniqueKeysVerified = keyToFiles.size + schemaKeyToFiles.size;
+
   const hasErrors = issues.some(i => i.severity === "error");
-  return { issues, filesChecked, valid: !hasErrors };
+  return { issues, filesChecked, valid: !hasErrors, stats };
+}
+
+// Default empty stats for validateFileMap (which doesn't track detailed stats)
+function emptyStats(): ValidationStats {
+  return {
+    configs: 0, featureFlags: 0, segments: 0, logLevels: 0, schemas: 0,
+    environmentOverrides: 0, rules: 0, segmentRefsChecked: 0,
+    schemaRefsChecked: 0, uniqueKeysVerified: 0,
+  };
 }
 
 // ── Validate from in-memory file map (for git hook) ─────────────────────
@@ -680,7 +733,7 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
   }
 
   const hasErrors = issues.some(i => i.severity === "error");
-  return { issues, filesChecked, valid: !hasErrors };
+  return { issues, filesChecked, valid: !hasErrors, stats: emptyStats() };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -829,14 +882,37 @@ function typeToDir(type: string): string {
 
 export function formatResult(result: ValidationResult): string {
   const lines: string[] = [];
+  const s = result.stats;
 
   if (result.valid) {
-    lines.push(`OK: ${result.filesChecked} files checked, no errors found.`);
+    lines.push(`OK: ${result.filesChecked} files checked, no errors found.\n`);
   } else {
     const errors = result.issues.filter(i => i.severity === "error");
     const warnings = result.issues.filter(i => i.severity === "warning");
     lines.push(`FAILED: ${errors.length} error(s), ${warnings.length} warning(s) in ${result.filesChecked} files.\n`);
   }
+
+  // Show what was checked
+  const fileCounts: string[] = [];
+  if (s.configs > 0) fileCounts.push(`${s.configs} configs`);
+  if (s.featureFlags > 0) fileCounts.push(`${s.featureFlags} feature flags`);
+  if (s.segments > 0) fileCounts.push(`${s.segments} segments`);
+  if (s.logLevels > 0) fileCounts.push(`${s.logLevels} log levels`);
+  if (s.schemas > 0) fileCounts.push(`${s.schemas} schemas`);
+
+  if (fileCounts.length > 0) {
+    lines.push(`  Files:       ${fileCounts.join(", ")}`);
+  }
+
+  const checks: string[] = [];
+  checks.push(`${result.filesChecked} JSON parsed`);
+  checks.push(`${result.filesChecked} schema-validated`);
+  checks.push(`${s.uniqueKeysVerified} unique keys`);
+  checks.push(`${s.rules} rules checked`);
+  if (s.environmentOverrides > 0) checks.push(`${s.environmentOverrides} env overrides`);
+  if (s.segmentRefsChecked > 0) checks.push(`${s.segmentRefsChecked} segment refs`);
+  if (s.schemaRefsChecked > 0) checks.push(`${s.schemaRefsChecked} schema refs`);
+  lines.push(`  Checks:      ${checks.join(", ")}`);
 
   // Group issues by file
   const byFile = new Map<string, ValidationIssue[]>();
@@ -844,6 +920,10 @@ export function formatResult(result: ValidationResult): string {
     const existing = byFile.get(issue.file) || [];
     existing.push(issue);
     byFile.set(issue.file, existing);
+  }
+
+  if (byFile.size > 0) {
+    lines.push("");
   }
 
   for (const [file, fileIssues] of byFile) {
