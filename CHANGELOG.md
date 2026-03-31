@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.0.2 - 2026-03-31
+
+- feat: `qfg init` — initialize or update a Quonfig workspace. Creates directory structure, managed docs (README.md, CLAUDE.md, AGENTS.md), `quonfig.schema.json`, git repo, and pre-commit hook. Idempotent — safe to re-run for updates.
+  - `--samples` / `--no-samples` to control example config generation
+  - `--dry-run` to preview without writing
+- feat: `qfg verify` now shows detailed summary of checks performed: file counts by type, rules validated, unique keys verified, segment and schema ref integrity.
+- fix: staging and production token storage separated by domain so credentials don't collide.
 
 ## 0.0.13 - 2025-12-08
 

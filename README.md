@@ -14,7 +14,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.1 darwin-arm64 node-v24.4.1
+@quonfig/cli/0.0.2 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -31,6 +31,7 @@ USAGE
 * [`qfg generate-new-hex-key`](#qfg-generate-new-hex-key)
 * [`qfg get [NAME]`](#qfg-get-name)
 * [`qfg info [NAME]`](#qfg-info-name)
+* [`qfg init [DIRECTORY]`](#qfg-init-directory)
 * [`qfg interactive`](#qfg-interactive)
 * [`qfg list`](#qfg-list)
 * [`qfg login`](#qfg-login)
@@ -92,7 +93,7 @@ EXAMPLES
   $ qfg create my.new.string --type json --value="{\"key\": \"value\"}"
 ```
 
-_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/create.ts)_
+_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/create.ts)_
 
 ## `qfg download`
 
@@ -125,7 +126,7 @@ EXAMPLES
   $ qfg download --environment=test --sdk-key=YOUR_SDK_KEY
 ```
 
-_See code: [src/commands/download.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/download.ts)_
+_See code: [src/commands/download.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/download.ts)_
 
 ## `qfg generate`
 
@@ -195,7 +196,7 @@ EXAMPLES
   $ qfg generate --targets node-ts -o ./dist # combine with targets
 ```
 
-_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/generate.ts)_
+_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/generate.ts)_
 
 ## `qfg generate-new-hex-key`
 
@@ -218,7 +219,7 @@ EXAMPLES
   $ qfg generate-new-hex-key
 ```
 
-_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/generate-new-hex-key.ts)_
+_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/generate-new-hex-key.ts)_
 
 ## `qfg get [NAME]`
 
@@ -250,7 +251,7 @@ EXAMPLES
   $ qfg get my.config.name --environment=production
 ```
 
-_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/get.ts)_
+_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/get.ts)_
 
 ## `qfg info [NAME]`
 
@@ -280,7 +281,45 @@ EXAMPLES
   $ qfg info my.config.name
 ```
 
-_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/info.ts)_
+_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/info.ts)_
+
+## `qfg init [DIRECTORY]`
+
+Initialize or update a Quonfig workspace
+
+```
+USAGE
+  $ qfg init [DIRECTORY] [--json] [--interactive] [--no-color] [--verbose] [--dry-run] [--samples]
+
+ARGUMENTS
+  DIRECTORY  [default: .] Target directory (default: current directory)
+
+FLAGS
+  --dry-run       Show what would be done without writing anything
+  --[no-]samples  Include sample configs (default: yes on first init, no on update)
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Initialize or update a Quonfig workspace
+
+EXAMPLES
+  $ qfg init
+
+  $ qfg init ./my-workspace
+
+  $ qfg init --no-samples
+
+  $ qfg init --samples
+
+  $ qfg init --dry-run
+```
+
+_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/init.ts)_
 
 ## `qfg interactive`
 
@@ -298,7 +337,7 @@ EXAMPLES
   $ qfg
 ```
 
-_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/interactive.ts)_
+_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/interactive.ts)_
 
 ## `qfg list`
 
@@ -335,7 +374,7 @@ EXAMPLES
   $ qfg list --feature-flags
 ```
 
-_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/list.ts)_
+_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/list.ts)_
 
 ## `qfg login`
 
@@ -363,7 +402,7 @@ EXAMPLES
   $ qfg login --profile myprofile
 ```
 
-_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/login.ts)_
+_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/login.ts)_
 
 ## `qfg logout`
 
@@ -386,7 +425,7 @@ EXAMPLES
   $ qfg logout
 ```
 
-_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/logout.ts)_
+_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/logout.ts)_
 
 ## `qfg mcp`
 
@@ -419,7 +458,7 @@ EXAMPLES
   $ qfg mcp --url http://local-app.goatsofquonfig.com:3003/api/v1/mcp
 ```
 
-_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/mcp.ts)_
+_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/mcp.ts)_
 
 ## `qfg override [NAME]`
 
@@ -458,7 +497,7 @@ EXAMPLES
   $ qfg override my.double.config --value=3.14159
 ```
 
-_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/override.ts)_
+_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/override.ts)_
 
 ## `qfg profile`
 
@@ -481,7 +520,7 @@ EXAMPLES
   $ qfg profile
 ```
 
-_See code: [src/commands/profile.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/profile.ts)_
+_See code: [src/commands/profile.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/profile.ts)_
 
 ## `qfg schema NAME`
 
@@ -519,7 +558,7 @@ EXAMPLES
   $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
 ```
 
-_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/schema.ts)_
+_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/schema.ts)_
 
 ## `qfg serve DATA-FILE`
 
@@ -555,7 +594,7 @@ EXAMPLES
   $ qfg serve ./quonfig.test.588.config.json --port=3099
 ```
 
-_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/serve.ts)_
+_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/serve.ts)_
 
 ## `qfg set-default [NAME]`
 
@@ -599,7 +638,7 @@ EXAMPLES
   $ qfg set-default my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
 ```
 
-_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/set-default.ts)_
+_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/set-default.ts)_
 
 ## `qfg verify [PATH]`
 
@@ -632,7 +671,7 @@ EXAMPLES
   $ qfg verify --json
 ```
 
-_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/verify.ts)_
+_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/verify.ts)_
 
 ## `qfg whoami`
 
@@ -655,7 +694,7 @@ EXAMPLES
   $ qfg whoami
 ```
 
-_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/whoami.ts)_
+_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/whoami.ts)_
 
 ## `qfg workspace`
 
@@ -678,7 +717,7 @@ EXAMPLES
   $ qfg workspace
 ```
 
-_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.1/src/commands/workspace.ts)_
+_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.2/src/commands/workspace.ts)_
 <!-- commandsstop -->
 
 ## Local Development
