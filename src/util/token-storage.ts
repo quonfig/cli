@@ -2,12 +2,18 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import {getDomain} from './domain-urls.js'
+
 export interface TokenStorageOptions {
   quonfigDir?: string
 }
 
 const getQuonfigDir = (options?: TokenStorageOptions) => options?.quonfigDir || path.join(os.homedir(), '.quonfig')
-const getTokenFile = (options?: TokenStorageOptions) => path.join(getQuonfigDir(options), 'tokens.json')
+const getTokenFile = (options?: TokenStorageOptions) => {
+  const domain = getDomain()
+  const filename = domain !== 'quonfig.com' ? `tokens-${domain.replaceAll('.', '-')}.json` : 'tokens.json'
+  return path.join(getQuonfigDir(options), filename)
+}
 const getConfigFile = (options?: TokenStorageOptions) => path.join(getQuonfigDir(options), 'config')
 
 export interface TokenData {
