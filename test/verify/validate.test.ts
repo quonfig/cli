@@ -13,6 +13,11 @@ function createWorkspace(): string {
   fs.mkdirSync(path.join(dir, 'schemas-protected'), {recursive: true})
 
   fs.writeFileSync(
+    path.join(dir, 'quonfig.json'),
+    JSON.stringify({environments: []}, null, 2),
+  )
+
+  fs.writeFileSync(
     path.join(dir, 'configs', 'feature.json'),
     JSON.stringify(
       {
@@ -83,6 +88,296 @@ describe('validate', () => {
     } finally {
       fs.rmSync(workspace, {recursive: true, force: true})
     }
+  })
+
+  describe('variant validation', () => {
+    it('passes when rule values match defined variants', () => {
+      const files = new Map<string, string>([
+        [
+          'feature-flags/my-flag.json',
+          JSON.stringify({
+            key: 'my-flag',
+            type: 'feature_flag',
+            valueType: 'bool',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'bool', value: false},
+                },
+              ],
+            },
+            environments: [],
+            variants: [
+              {name: 'On', value: {type: 'bool', value: true}},
+              {name: 'Off', value: {type: 'bool', value: false}},
+            ],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('errors when a rule value does not match any variant', () => {
+      const files = new Map<string, string>([
+        [
+          'configs/my-config.json',
+          JSON.stringify({
+            key: 'my-config',
+            type: 'config',
+            valueType: 'string',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'string', value: 'invalid-value'},
+                },
+              ],
+            },
+            environments: [],
+            variants: [
+              {name: 'A', value: {type: 'string', value: 'alpha'}},
+              {name: 'B', value: {type: 'string', value: 'beta'}},
+            ],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.false
+      const variantIssues = result.issues.filter((i) => i.message.includes('does not match any defined variant'))
+      expect(variantIssues).to.have.length(1)
+      expect(variantIssues[0].severity).to.equal('error')
+      expect(variantIssues[0].message).to.include('default.rules[0]')
+    })
+
+    it('errors when an environment rule value does not match any variant', () => {
+      const files = new Map<string, string>([
+        [
+          'feature-flags/my-flag.json',
+          JSON.stringify({
+            key: 'my-flag',
+            type: 'feature_flag',
+            valueType: 'bool',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'bool', value: true},
+                },
+              ],
+            },
+            environments: [
+              {
+                id: 'production',
+                rules: [
+                  {
+                    criteria: [{operator: 'ALWAYS_TRUE'}],
+                    value: {type: 'bool', value: false},
+                  },
+                ],
+              },
+            ],
+            variants: [
+              {name: 'On', value: {type: 'bool', value: true}},
+            ],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.false
+      const variantIssues = result.issues.filter((i) => i.message.includes('does not match any defined variant'))
+      expect(variantIssues).to.have.length(1)
+      expect(variantIssues[0].message).to.include('environments[production].rules[0]')
+    })
+
+    it('passes when weighted values all match defined variants', () => {
+      const files = new Map<string, string>([
+        [
+          'feature-flags/rollout.json',
+          JSON.stringify({
+            key: 'rollout',
+            type: 'feature_flag',
+            valueType: 'bool',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {
+                    type: 'weighted_values',
+                    value: {
+                      weightedValues: [
+                        {value: {type: 'bool', value: true}, weight: 50000},
+                        {value: {type: 'bool', value: false}, weight: 50000},
+                      ],
+                      hashByPropertyName: 'user.key',
+                    },
+                  },
+                },
+              ],
+            },
+            environments: [],
+            variants: [
+              {name: 'On', value: {type: 'bool', value: true}},
+              {name: 'Off', value: {type: 'bool', value: false}},
+            ],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('errors when a weighted value does not match any variant', () => {
+      const files = new Map<string, string>([
+        [
+          'configs/color.json',
+          JSON.stringify({
+            key: 'color',
+            type: 'config',
+            valueType: 'string',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {
+                    type: 'weighted_values',
+                    value: {
+                      weightedValues: [
+                        {value: {type: 'string', value: 'red'}, weight: 50000},
+                        {value: {type: 'string', value: 'purple'}, weight: 50000},
+                      ],
+                      hashByPropertyName: 'user.key',
+                    },
+                  },
+                },
+              ],
+            },
+            environments: [],
+            variants: [
+              {name: 'Red', value: {type: 'string', value: 'red'}},
+              {name: 'Blue', value: {type: 'string', value: 'blue'}},
+            ],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.false
+      const variantIssues = result.issues.filter((i) => i.message.includes('does not match any defined variant'))
+      expect(variantIssues).to.have.length(1)
+      expect(variantIssues[0].message).to.include('weightedValues[1]')
+    })
+
+    it('skips variant check when variants array is empty', () => {
+      const files = new Map<string, string>([
+        [
+          'configs/timeout.json',
+          JSON.stringify({
+            key: 'timeout',
+            type: 'config',
+            valueType: 'int',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'int', value: 30},
+                },
+              ],
+            },
+            environments: [],
+            variants: [],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('skips variant check for provided value types', () => {
+      const files = new Map<string, string>([
+        [
+          'configs/provided-config.json',
+          JSON.stringify({
+            key: 'provided-config',
+            type: 'config',
+            valueType: 'string',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'provided', value: {source: 'context', lookup: 'user.email'}},
+                },
+              ],
+            },
+            environments: [],
+            variants: [
+              {name: 'A', value: {type: 'string', value: 'alpha'}},
+            ],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('validates variant matching with validateWorkspace', () => {
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-variant-'))
+
+      try {
+        fs.mkdirSync(path.join(workspace, 'feature-flags'), {recursive: true})
+        fs.writeFileSync(
+          path.join(workspace, 'quonfig.json'),
+          JSON.stringify({environments: []}, null, 2),
+        )
+        fs.writeFileSync(
+          path.join(workspace, 'feature-flags', 'bad-flag.json'),
+          JSON.stringify({
+            key: 'bad-flag',
+            type: 'feature_flag',
+            valueType: 'string',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'string', value: 'invalid'},
+                },
+              ],
+            },
+            environments: [],
+            variants: [
+              {name: 'A', value: {type: 'string', value: 'alpha'}},
+              {name: 'B', value: {type: 'string', value: 'beta'}},
+            ],
+          }),
+        )
+
+        const result = validateWorkspace(workspace)
+
+        expect(result.valid).to.be.false
+        const variantIssues = result.issues.filter((i) => i.message.includes('does not match any defined variant'))
+        expect(variantIssues).to.have.length(1)
+      } finally {
+        fs.rmSync(workspace, {recursive: true, force: true})
+      }
+    })
   })
 
   it('accepts schema files from git-hook file maps', () => {

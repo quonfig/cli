@@ -194,6 +194,7 @@ export interface ValidationStats {
   rules: number;
   segmentRefsChecked: number;
   schemaRefsChecked: number;
+  envRefsChecked: number;
   uniqueKeysVerified: number;
 }
 
@@ -260,6 +261,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     rules: 0,
     segmentRefsChecked: 0,
     schemaRefsChecked: 0,
+    envRefsChecked: 0,
     uniqueKeysVerified: 0,
   };
 
@@ -268,6 +270,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
   const allSchemaFiles: Array<{ key: string; file: string }> = [];
   const segmentKeys = new Set<string>();
   const schemaKeys = new Set<string>();
+  const declaredEnvIds = new Set<string>();
 
   // Check for unexpected top-level entries
   let entries: fs.Dirent[];
@@ -295,6 +298,49 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         severity: "warning",
         suggestion: `Expected directories: ${[...KNOWN_DIRS].join(", ")}`,
       });
+    }
+  }
+
+  // Validate quonfig.json at workspace root
+  const quonfigPath = path.join(workspaceDir, "quonfig.json");
+  if (!fs.existsSync(quonfigPath)) {
+    issues.push({
+      file: "quonfig.json",
+      message: `quonfig.json is missing from workspace root`,
+      severity: "error",
+      suggestion: `Create quonfig.json with format: {"environments": ["production", "staging"]}`,
+    });
+  } else {
+    let quonfigRaw: string;
+    try {
+      quonfigRaw = fs.readFileSync(quonfigPath, "utf-8");
+    } catch (err: unknown) {
+      quonfigRaw = "";
+      issues.push({ file: "quonfig.json", message: `Cannot read quonfig.json: ${(err as Error).message}`, severity: "error" });
+    }
+
+    if (quonfigRaw) {
+      let quonfigParsed: unknown;
+      try {
+        quonfigParsed = JSON.parse(quonfigRaw);
+      } catch (err: unknown) {
+        quonfigParsed = null;
+        issues.push({ file: "quonfig.json", message: `Invalid JSON: ${(err as Error).message}`, severity: "error" });
+      }
+
+      const quonfigResult = z.object({ environments: z.array(z.string()) }).safeParse(quonfigParsed);
+      if (!quonfigResult.success) {
+        issues.push({
+          file: "quonfig.json",
+          message: `quonfig.json must have an "environments" array of strings`,
+          severity: "error",
+          suggestion: `Format: {"environments": ["production", "staging"]}`,
+        });
+      } else {
+        for (const envId of quonfigResult.data.environments) {
+          declaredEnvIds.add(envId);
+        }
+      }
     }
   }
 
@@ -422,9 +468,9 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
       validateEnvironmentIds(config.environments, relPath, issues);
 
       // Validate rules
-      validateRules(config.default.rules, relPath, "default", config.valueType, issues);
+      validateRules(config.default.rules, relPath, "default", config.valueType, issues, config.variants);
       for (const env of config.environments) {
-        validateRules(env.rules, relPath, `environments[${env.id}]`, config.valueType, issues);
+        validateRules(env.rules, relPath, `environments[${env.id}]`, config.valueType, issues, config.variants);
       }
 
       // Count by type
@@ -506,6 +552,21 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
           });
         }
       }
+
+      // Check environment IDs referenced in config exist in quonfig.json
+      if (declaredEnvIds.size > 0) {
+        for (const env of config.environments) {
+          stats.envRefsChecked++;
+          if (!declaredEnvIds.has(env.id)) {
+            issues.push({
+              file: relPath,
+              message: `References environment "${env.id}" which is not declared in quonfig.json`,
+              severity: "error",
+              suggestion: `Add "${env.id}" to the environments array in quonfig.json, or remove this environment override`,
+            });
+          }
+        }
+      }
     }
   }
 
@@ -555,7 +616,7 @@ function emptyStats(): ValidationStats {
   return {
     configs: 0, featureFlags: 0, segments: 0, logLevels: 0, schemas: 0,
     environmentOverrides: 0, rules: 0, segmentRefsChecked: 0,
-    schemaRefsChecked: 0, uniqueKeysVerified: 0,
+    schemaRefsChecked: 0, envRefsChecked: 0, uniqueKeysVerified: 0,
   };
 }
 
@@ -574,6 +635,35 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
   const allSchemaFiles: Array<{ key: string; file: string }> = [];
   const allConfigs: Array<{ key: string; file: string }> = [];
   const parsedConfigs: Array<{ relPath: string; config: z.infer<typeof StoredConfigSchema>; dir: string }> = [];
+  const declaredEnvIds = new Set<string>();
+
+  // Validate quonfig.json if it's included in the file map (it may not be in every commit)
+  const quonfigContent = files.get("quonfig.json");
+  if (quonfigContent !== undefined) {
+    let quonfigParsed: unknown;
+    try {
+      quonfigParsed = JSON.parse(quonfigContent);
+    } catch (err: unknown) {
+      quonfigParsed = null;
+      issues.push({ file: "quonfig.json", message: `Invalid JSON: ${(err as Error).message}`, severity: "error" });
+    }
+
+    if (quonfigParsed !== null) {
+      const quonfigResult = z.object({ environments: z.array(z.string()) }).safeParse(quonfigParsed);
+      if (!quonfigResult.success) {
+        issues.push({
+          file: "quonfig.json",
+          message: `quonfig.json must have an "environments" array of strings`,
+          severity: "error",
+          suggestion: `Format: {"environments": ["production", "staging"]}`,
+        });
+      } else {
+        for (const envId of quonfigResult.data.environments) {
+          declaredEnvIds.add(envId);
+        }
+      }
+    }
+  }
 
   for (const [relPath, content] of files) {
     const parts = relPath.split("/");
@@ -666,9 +756,9 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
 
     validateEnvironmentIds(config.environments, relPath, issues);
 
-    validateRules(config.default.rules, relPath, "default", config.valueType, issues);
+    validateRules(config.default.rules, relPath, "default", config.valueType, issues, config.variants);
     for (const env of config.environments) {
-      validateRules(env.rules, relPath, `environments[${env.id}]`, config.valueType, issues);
+      validateRules(env.rules, relPath, `environments[${env.id}]`, config.valueType, issues, config.variants);
     }
 
     allConfigs.push({ key: config.key, file: relPath });
@@ -696,6 +786,20 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
         severity: "error",
         suggestion: `Create schemas/${config.schemaKey}.json or schemas-protected/${config.schemaKey}.json, or remove schemaKey`,
       });
+    }
+
+    // Check environment IDs referenced in config exist in quonfig.json
+    if (declaredEnvIds.size > 0) {
+      for (const env of config.environments) {
+        if (!declaredEnvIds.has(env.id)) {
+          issues.push({
+            file: relPath,
+            message: `References environment "${env.id}" which is not declared in quonfig.json`,
+            severity: "error",
+            suggestion: `Add "${env.id}" to the environments array in quonfig.json, or remove this environment override`,
+          });
+        }
+      }
     }
   }
 
@@ -783,10 +887,14 @@ function validateRules(
   context: string,
   expectedValueType: string,
   issues: ValidationIssue[],
+  variants: z.infer<typeof VariantSchema>[] = [],
 ): void {
   if (rules.length === 0) {
     issues.push({ file, message: `${context}: no rules defined`, severity: "warning" });
   }
+
+  // Pre-compute serialized variant values for matching
+  const variantValues = variants.map(v => JSON.stringify(v.value));
 
   for (let i = 0; i < rules.length; i++) {
     const rule = rules[i];
@@ -803,6 +911,19 @@ function validateRules(
           severity: "error",
         });
       }
+
+      // Check that value matches one of the defined variants
+      if (variants.length > 0) {
+        const serialized = JSON.stringify(rule.value);
+        if (!variantValues.includes(serialized)) {
+          issues.push({
+            file,
+            message: `${ruleCtx}: value does not match any defined variant`,
+            severity: "error",
+            suggestion: `Rule value must be one of the defined variants`,
+          });
+        }
+      }
     } else if (rule.value.type === "weighted_values") {
       // Validate weighted values
       const wv = (rule.value as z.infer<typeof WeightedValuesSchema>).value;
@@ -816,6 +937,19 @@ function validateRules(
             message: `${ruleCtx}.weightedValues[${j}]: value type "${wv.weightedValues[j].value.type}" does not match config valueType "${expectedValueType}"`,
             severity: "error",
           });
+        }
+
+        // Check that each weighted value matches one of the defined variants
+        if (variants.length > 0) {
+          const serialized = JSON.stringify(wv.weightedValues[j].value);
+          if (!variantValues.includes(serialized)) {
+            issues.push({
+              file,
+              message: `${ruleCtx}.weightedValues[${j}]: value does not match any defined variant`,
+              severity: "error",
+              suggestion: `Weighted value must be one of the defined variants`,
+            });
+          }
         }
       }
     }
@@ -912,6 +1046,7 @@ export function formatResult(result: ValidationResult): string {
   if (s.environmentOverrides > 0) checks.push(`${s.environmentOverrides} env overrides`);
   if (s.segmentRefsChecked > 0) checks.push(`${s.segmentRefsChecked} segment refs`);
   if (s.schemaRefsChecked > 0) checks.push(`${s.schemaRefsChecked} schema refs`);
+  if (s.envRefsChecked > 0) checks.push(`${s.envRefsChecked} env refs`);
   lines.push(`  Checks:      ${checks.join(", ")}`);
 
   // Group issues by file

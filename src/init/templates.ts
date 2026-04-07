@@ -126,7 +126,7 @@ See \`quonfig.schema.json\` for the full operator enum and value type definition
 
 ## Environments
 
-Environment overrides go in the \`environments\` array. Each has an \`id\` (lowercase slug like \`production\`, never a UUID) and its own \`rules\` array. Environment IDs are defined in \`environments.json\` at the repo root.
+Environment overrides go in the \`environments\` array. Each has an \`id\` (lowercase slug like \`production\`, never a UUID) and its own \`rules\` array. Environment IDs are defined in \`quonfig.json\` at the repo root.
 
 ## Cross-File Validation Rules
 

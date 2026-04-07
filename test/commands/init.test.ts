@@ -48,7 +48,7 @@ describe('qfg init', () => {
   // ── First-time init ────────────────────────────────────────────────
 
   describe('first-time init', () => {
-    it('creates directories, docs, environments.json, and samples', () => {
+    it('creates directories, docs, quonfig.json, and samples', () => {
       const dir = tmpDir()
       try {
         initFresh(dir)
@@ -65,8 +65,8 @@ describe('qfg init', () => {
         expect(fs.existsSync(path.join(dir, 'CLAUDE.md'))).to.be.true
         expect(fs.existsSync(path.join(dir, 'AGENTS.md'))).to.be.true
 
-        // environments.json
-        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'environments.json'), 'utf-8'))
+        // quonfig.json
+        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf-8'))
         expect(envs).to.deep.equal({environments: []})
 
         // Samples
@@ -156,20 +156,20 @@ describe('qfg init', () => {
       }
     })
 
-    it('does not overwrite environments.json if it already exists', () => {
+    it('does not overwrite quonfig.json if it already exists', () => {
       const dir = tmpDir()
       try {
-        // Create environments.json with custom content
+        // Create quonfig.json with custom content
         fs.mkdirSync(path.join(dir, 'configs'))
         fs.writeFileSync(
-          path.join(dir, 'environments.json'),
+          path.join(dir, 'quonfig.json'),
           JSON.stringify({environments: ['production', 'staging']}, null, 2),
         )
 
         initFresh(dir)
 
         // Should not have been overwritten
-        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'environments.json'), 'utf-8'))
+        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf-8'))
         expect(envs.environments).to.deep.equal(['production', 'staging'])
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})

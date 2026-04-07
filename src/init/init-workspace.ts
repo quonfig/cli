@@ -102,12 +102,12 @@ export function planInit(options: InitOptions): InitPlan {
     actions.push({kind: 'write-file', path: file, description: `${verb} ${file}`})
   }
 
-  // 3. environments.json — create if missing
-  const envsPath = path.join(dir, 'environments.json')
+  // 3. quonfig.json — create if missing
+  const envsPath = path.join(dir, 'quonfig.json')
   if (fs.existsSync(envsPath)) {
     // leave it alone
   } else {
-    actions.push({kind: 'write-file', path: 'environments.json', description: 'Create environments.json'})
+    actions.push({kind: 'write-file', path: 'quonfig.json', description: 'Create quonfig.json'})
   }
 
   // 4. Sample data
@@ -155,7 +155,7 @@ export function executeInit(plan: InitPlan, dir: string): void {
     'README.md': readmeTemplate(),
     'CLAUDE.md': claudeMdTemplate(),
     'AGENTS.md': agentsMdTemplate(),
-    'environments.json': JSON.stringify({environments: []}, null, 2) + '\n',
+    'quonfig.json': JSON.stringify({environments: []}, null, 2) + '\n',
   }
 
   // Build a lookup for sample content
