@@ -78,15 +78,16 @@ jobs:
       - run: yarn install --immutable
       - run: yarn build
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ''
         run: |
-          echo "=== npm config ===" && npm config list
-          echo "=== env check ===" && echo "ACTIONS_ID_TOKEN_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL"
+          OIDC_TOKEN=$(curl -s \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:publish" \
+            | jq -r '.value')
+          npm config set "//registry.npmjs.org/:_authToken" "$OIDC_TOKEN"
           if [ "${{ needs.check-version.outputs.is-prerelease }}" == "true" ]; then
-            npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }} || (cat ~/.npm/_logs/*.log 2>/dev/null | tail -200 && exit 1)
+            npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }}
           else
-            npm publish --provenance --access public || (cat ~/.npm/_logs/*.log 2>/dev/null | tail -200 && exit 1)
+            npm publish --provenance --access public
           fi
 
   create-release:
