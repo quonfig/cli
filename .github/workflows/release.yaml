@@ -95,9 +95,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ steps.npm-token.outputs.token }}
         run: |
           if [ "${{ needs.check-version.outputs.is-prerelease }}" == "true" ]; then
-            npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }}
+            npm publish --access public --tag ${{ needs.check-version.outputs.npm-tag }}
           else
-            npm publish --provenance --access public
+            npm publish --access public
           fi
 
   create-release:
