@@ -15,7 +15,7 @@ export default class Mcp extends BaseCommand {
   static examples = [
     '<%= config.bin %> <%= command.id %>',
     '<%= config.bin %> <%= command.id %> --editor cursor',
-    '<%= config.bin %> <%= command.id %> --url http://local-app.goatsofquonfig.com:3003/api/v1/mcp',
+    '<%= config.bin %> <%= command.id %> --url http://local-app.quonfig-staging.com:3003/api/v1/mcp',
   ]
 
   static flags = {

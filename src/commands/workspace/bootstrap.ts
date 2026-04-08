@@ -13,6 +13,7 @@ import {
   hasAtLeastOneCommit,
   gitSetRemote,
   gitPushForceLease,
+  gitPushForce,
   getRemoteUrl,
   displayUrl,
 } from '../../util/git-ops.js'
@@ -61,7 +62,7 @@ export default class WorkspaceBootstrap extends BaseCommand {
     }
 
     const workspaceId = profile.workspace
-    const workspaceName = profile.workspaceName || workspaceId
+    const workspaceName = profile.workspaceSlug || profile.workspaceName || workspaceId
 
     this.verboseLog('WorkspaceBootstrap', {workspaceId, dir: resolvedDir})
 
@@ -154,7 +155,11 @@ export default class WorkspaceBootstrap extends BaseCommand {
     // Push
     this.log('Pushing to Gitea...')
     try {
-      await gitPushForceLease(resolvedDir)
+      if (flags.force) {
+        await gitPushForce(resolvedDir)
+      } else {
+        await gitPushForceLease(resolvedDir)
+      }
     } catch (err: unknown) {
       return this.err(`Push failed: ${String(err)}`)
     }
@@ -175,11 +180,7 @@ export default class WorkspaceBootstrap extends BaseCommand {
     const {execFile: execFileCb} = await import('node:child_process')
     const util = await import('node:util')
     const execFile = util.promisify(execFileCb)
-    try {
-      const {stdout} = await execFile('git', ['ls-remote', '--heads', repoUrl])
-      return stdout.trim().length > 0
-    } catch {
-      return false
-    }
+    const {stdout} = await execFile('git', ['ls-remote', '--heads', repoUrl])
+    return stdout.trim().length > 0
   }
 }

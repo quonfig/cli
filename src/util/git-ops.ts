@@ -155,6 +155,10 @@ export const gitPushForceLease = async (dir: string): Promise<void> => {
   await safeExec('git', ['-C', dir, 'push', 'origin', 'main', '--force-with-lease'])
 }
 
+export const gitPushForce = async (dir: string): Promise<void> => {
+  await safeExec('git', ['-C', dir, 'push', 'origin', 'main', '--force'])
+}
+
 export const hasAtLeastOneCommit = async (dir: string): Promise<boolean> => {
   try {
     await execFile('git', ['-C', dir, 'rev-parse', 'HEAD'])

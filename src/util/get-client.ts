@@ -4,8 +4,8 @@ import {APICommand} from '../index.js'
 import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
-import {decodeJWT, refreshAccessToken} from '../util/oauth-client.js'
-import {getActiveProfile, loadAuthConfig, loadTokens, saveTokens} from '../util/token-storage.js'
+import {getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
+import {getValidAccessToken} from '../util/get-valid-token.js'
 import version from '../version.js'
 
 let clientInstance: Client | undefined
@@ -42,43 +42,12 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
       command.error('No authentication found. Please run `qfg login`.', {exit: 401})
     }
 
-    // Check if token is expired and refresh if needed.
-    // Prefer the JWT's actual exp claim over the stored expiresAt.
-    let tokenExpired = tokens.expiresAt ? tokens.expiresAt < Date.now() : false
+    command.verboseLog('Checking token validity...')
     try {
-      const payload = decodeJWT(tokens.accessToken)
-      if (typeof payload.exp === 'number') {
-        tokenExpired = payload.exp * 1000 < Date.now()
-      }
+      jwt = await getValidAccessToken()
+      command.verboseLog('Token valid (or refreshed)')
     } catch {
-      // If we can't decode, fall back to stored expiresAt
-    }
-
-    if (tokenExpired && tokens.refreshToken) {
-      command.verboseLog('Token expired, refreshing...')
-      try {
-        const refreshed = await refreshAccessToken(tokens.refreshToken)
-        // Use the JWT's actual exp claim for expiry, not a hardcoded duration
-        let expiresAt = Date.now() + 300 * 1000 // fallback: 5 minutes
-        try {
-          const payload = decodeJWT(refreshed.access_token)
-          if (typeof payload.exp === 'number') {
-            expiresAt = payload.exp * 1000 // convert seconds to ms
-          }
-        } catch {
-          // Use fallback
-        }
-        tokens = {
-          ...tokens,
-          accessToken: refreshed.access_token,
-          expiresAt,
-          refreshToken: refreshed.refresh_token,
-        }
-        await saveTokens(tokens)
-        command.verboseLog('Token refreshed successfully')
-      } catch (error) {
-        command.error('Session expired. Please run `qfg login` to re-authenticate.', {exit: 401})
-      }
+      command.error('Session expired. Please run `qfg login` to re-authenticate.', {exit: 401})
     }
 
     // Get the active profile to find the workspace
@@ -94,14 +63,6 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
 
     if (profileData) {
       workspaceId = profileData.workspace
-    }
-
-    // Use the WorkOS access token directly as the JWT
-    jwt = tokens.accessToken
-
-    // If still no JWT, user needs to login
-    if (!jwt) {
-      command.error('No authentication found. Please run `qfg login`.', {exit: 401})
     }
   }
 

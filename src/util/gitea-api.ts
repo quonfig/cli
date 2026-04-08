@@ -1,5 +1,5 @@
 import {getApiUrl} from './domain-urls.js'
-import {loadTokens} from './token-storage.js'
+import {getValidAccessToken} from './get-valid-token.js'
 import {GiteaTokenEntry, saveGiteaToken} from './gitea-token-storage.js'
 
 export interface GiteaTokenResponse {
@@ -13,19 +13,16 @@ export const mintGiteaToken = async (
   scope: 'read' | 'write',
   purpose: 'pull' | 'bootstrap',
 ): Promise<GiteaTokenResponse> => {
-  const tokens = await loadTokens()
-  if (!tokens?.accessToken) {
-    throw new Error('Not authenticated. Please run `qfg login` first.')
-  }
+  const accessToken = await getValidAccessToken()
 
   const apiUrl = getApiUrl()
   const res = await fetch(`${apiUrl}/api/v1/gitea/token`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${tokens.accessToken}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({scope, workspaceId, purpose}),
+    body: JSON.stringify({json: {scope, workspaceId, purpose}}),
   })
 
   if (!res.ok) {

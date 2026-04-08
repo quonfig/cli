@@ -50,7 +50,10 @@ export const saveGiteaToken = async (workspaceId: string, entry: GiteaTokenEntry
   await ensureQuonfigDir()
   const store = await loadStore()
   store[workspaceId] = entry
-  await fs.promises.writeFile(getGiteaTokenFile(), JSON.stringify(store, null, 2), 'utf8')
+  const targetFile = getGiteaTokenFile()
+  const tmpFile = `${targetFile}.tmp`
+  await fs.promises.writeFile(tmpFile, JSON.stringify(store, null, 2), {encoding: 'utf8', mode: 0o600})
+  await fs.promises.rename(tmpFile, targetFile)
 }
 
 export const isGiteaTokenExpired = (entry: GiteaTokenEntry): boolean => {

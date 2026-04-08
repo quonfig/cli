@@ -30,6 +30,7 @@ export interface AuthConfig {
     [profileName: string]: {
       workspace: string
       workspaceName?: string
+      workspaceSlug?: string
     }
   }
 }
@@ -45,7 +46,10 @@ const ensureQuonfigDir = async (options?: TokenStorageOptions) => {
 
 export const saveTokens = async (tokens: TokenData, options?: TokenStorageOptions): Promise<void> => {
   await ensureQuonfigDir(options)
-  await fs.promises.writeFile(getTokenFile(options), JSON.stringify(tokens, null, 2), 'utf8')
+  const targetFile = getTokenFile(options)
+  const tmpFile = `${targetFile}.tmp`
+  await fs.promises.writeFile(tmpFile, JSON.stringify(tokens, null, 2), {encoding: 'utf8', mode: 0o600})
+  await fs.promises.rename(tmpFile, targetFile)
 }
 
 export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenData | null> => {
@@ -75,10 +79,18 @@ export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageO
       configContent += ` # ${profileData.workspaceName}`
     }
 
-    configContent += '\n\n'
+    configContent += '\n'
+    if (profileData.workspaceSlug) {
+      configContent += `workspace_slug = ${profileData.workspaceSlug}\n`
+    }
+
+    configContent += '\n'
   }
 
-  await fs.promises.writeFile(getConfigFile(options), configContent, 'utf8')
+  const configTarget = getConfigFile(options)
+  const configTmp = `${configTarget}.tmp`
+  await fs.promises.writeFile(configTmp, configContent, {encoding: 'utf8', mode: 0o600})
+  await fs.promises.rename(configTmp, configTarget)
 }
 
 export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<AuthConfig | null> => {
@@ -95,18 +107,23 @@ export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<Aut
       config.defaultProfile = defaultMatch[1].trim()
     }
 
-    // Parse profiles
-    const profileRegex = /\[profile\s+(\w+)]\s*\n\s*workspace\s*=\s*([^\s#]+)(?:\s*#\s*(.+))?/g
+    // Parse profiles — each block starts with [profile name] and contains key=value lines
+    const profileBlockRegex = /\[profile\s+(\w+)]\s*\n((?:[^\[]*\n?)*)/g
     let match
 
-    while ((match = profileRegex.exec(data)) !== null) {
+    while ((match = profileBlockRegex.exec(data)) !== null) {
       const profileName = match[1]
-      const workspace = match[2]
-      const workspaceName = match[3]?.trim()
+      const block = match[2]
+
+      const workspaceMatch = block.match(/workspace\s*=\s*([^\s#]+)(?:\s*#\s*(.+))?/)
+      const slugMatch = block.match(/workspace_slug\s*=\s*(\S+)/)
+
+      if (!workspaceMatch) continue
 
       config.profiles[profileName] = {
-        workspace,
-        workspaceName,
+        workspace: workspaceMatch[1],
+        workspaceName: workspaceMatch[2]?.trim(),
+        workspaceSlug: slugMatch?.[1]?.trim(),
       }
     }
 

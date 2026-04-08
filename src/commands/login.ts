@@ -1,4 +1,5 @@
 import {Flags} from '@oclif/core'
+import {select} from '@inquirer/prompts'
 
 import type {JsonObj} from '../result.js'
 
@@ -74,6 +75,8 @@ export default class Login extends BaseCommand {
     // Resolve org_id → workspace UUID via the API
     let workspaceId: string | undefined
     let workspaceName: string | undefined
+    let workspaceSlug: string | undefined
+    let organizationName: string | undefined
     try {
       const apiUrl = getApiUrl()
       this.verboseLog('Resolving workspace...', {apiUrl, orgId})
@@ -87,16 +90,31 @@ export default class Login extends BaseCommand {
       })
 
       if (res.ok) {
-        const body = await res.json() as {json?: Array<{workspaceId: string; workosOrgId: string; organizationName: string}>}
-        const workspaces = body.json ?? body as unknown as Array<{workspaceId: string; workosOrgId: string; organizationName: string}>
-        const match = Array.isArray(workspaces)
-          ? workspaces.find((w) => w.workosOrgId === orgId) ?? workspaces[0]
-          : undefined
+        type WorkspaceEntry = {workspaceId: string; workspaceSlug: string; workosOrgId: string; organizationName: string}
+        const body = await res.json() as {json?: WorkspaceEntry[]}
+        const allWorkspaces = (body.json ?? body) as unknown as WorkspaceEntry[]
+        const orgWorkspaces = Array.isArray(allWorkspaces)
+          ? allWorkspaces.filter((w) => w.workosOrgId === orgId)
+          : []
+        const candidates = orgWorkspaces.length > 0 ? orgWorkspaces : (Array.isArray(allWorkspaces) ? allWorkspaces : [])
+
+        let match: WorkspaceEntry | undefined
+        if (candidates.length === 1) {
+          match = candidates[0]
+        } else if (candidates.length > 1) {
+          const chosen = await select({
+            choices: candidates.map((w) => ({name: w.workspaceSlug, value: w.workspaceId})),
+            message: 'Select workspace:',
+          })
+          match = candidates.find((w) => w.workspaceId === chosen)
+        }
 
         if (match) {
           workspaceId = match.workspaceId
-          workspaceName = match.organizationName
-          this.verboseLog('Resolved workspace', {workspaceId, workspaceName})
+          workspaceName = match.workspaceSlug
+          workspaceSlug = match.workspaceSlug
+          organizationName = match.organizationName
+          this.verboseLog('Resolved workspace', {workspaceId, workspaceName, workspaceSlug, organizationName})
         }
       } else {
         this.verboseLog('Failed to resolve workspace', {status: res.status})
@@ -119,6 +137,7 @@ export default class Login extends BaseCommand {
         [profileName]: {
           workspace: workspaceId || orgId || 'unknown',
           workspaceName: workspaceName || (orgId ? `org:${orgId}` : undefined),
+          workspaceSlug,
         },
       },
     })
@@ -135,6 +154,9 @@ export default class Login extends BaseCommand {
 
     if (workspaceName) {
       this.log(`Workspace: ${workspaceName} (${workspaceId})`)
+      if (organizationName) {
+        this.log(`Organization: ${organizationName}`)
+      }
     } else if (orgId) {
       this.log(`Organization: ${orgId}`)
     }

@@ -1,9 +1,5 @@
-#!/usr/bin/env -S node --loader ts-node/esm --no-warnings=ExperimentalWarning
-
-// eslint-disable-next-line node/shebang
-async function main() {
-  const {execute} = await import('@oclif/core')
-  await execute({development: true, dir: import.meta.url})
-}
-
-await main()
+#!/usr/bin/env bash
+# Run dev CLI from any directory — ensures ts-node resolves from cli's node_modules
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export TS_NODE_PROJECT="$DIR/tsconfig.json"
+exec node --loader "$DIR/node_modules/ts-node/esm.mjs" --no-warnings=ExperimentalWarning "$DIR/bin/dev.mjs" "$@"
