@@ -79,12 +79,13 @@ jobs:
       - run: yarn install --immutable
       - run: yarn build
       - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Yarn 4.11.0 with OIDC trusted publishing
           if [ "${{ needs.check-version.outputs.is-prerelease }}" == "true" ]; then
-            yarn npm publish --access public --tag ${{ needs.check-version.outputs.npm-tag }}
+            npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }}
           else
-            yarn npm publish --access public
+            npm publish --provenance --access public
           fi
 
   create-release:
