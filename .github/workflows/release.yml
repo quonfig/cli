@@ -79,8 +79,6 @@ jobs:
       - run: yarn install --immutable
       - run: yarn build
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ needs.check-version.outputs.is-prerelease }}" == "true" ]; then
             npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }}
