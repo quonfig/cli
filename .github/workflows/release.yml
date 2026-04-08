@@ -81,10 +81,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ''
         run: |
+          echo "=== npm config ===" && npm config list
+          echo "=== env check ===" && echo "ACTIONS_ID_TOKEN_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL"
           if [ "${{ needs.check-version.outputs.is-prerelease }}" == "true" ]; then
-            npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }}
+            npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }} || (cat ~/.npm/_logs/*.log 2>/dev/null | tail -200 && exit 1)
           else
-            npm publish --provenance --access public
+            npm publish --provenance --access public || (cat ~/.npm/_logs/*.log 2>/dev/null | tail -200 && exit 1)
           fi
 
   create-release:
