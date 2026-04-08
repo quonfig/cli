@@ -63,6 +63,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.tool-versions'
+          registry-url: 'https://registry.npmjs.org'
       - name: enable corepack
         run: |
           corepack enable
@@ -77,6 +78,8 @@ jobs:
       - run: yarn install --immutable
       - run: yarn build
       - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ''
         run: |
           if [ "${{ needs.check-version.outputs.is-prerelease }}" == "true" ]; then
             npm publish --provenance --access public --tag ${{ needs.check-version.outputs.npm-tag }}
