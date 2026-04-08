@@ -60,11 +60,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      # Setup .npmrc file to publish to npm
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.tool-versions'
-          registry-url: 'https://registry.npmjs.org'
       - name: enable corepack
         run: |
           corepack enable
