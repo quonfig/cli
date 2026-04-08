@@ -2,8 +2,8 @@ import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
 
-// GET /all-config-types/v1/download-all-envs - download all configs
-const downloadAllEnvsHandler = http.get('https://api.goatsofquonfig.com/all-config-types/v1/download-all-envs', () =>
+// GET /all-config-types/v1/download-all-envs - download all configs (not oRPC, no wrapper)
+const downloadAllEnvsHandler = http.get('https://app.quonfig.com/all-config-types/v1/download-all-envs', () =>
   HttpResponse.json({
     configs: [
       {

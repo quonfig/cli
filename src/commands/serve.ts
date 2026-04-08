@@ -62,7 +62,11 @@ export default class Serve extends BaseCommand {
     } catch (error_) {
       const error = error_ as Error
 
-      if (/No projectEnvId found in config/.test(error.message) || /Unexpected end of JSON input/.test(error.message)) {
+      if (
+        /No projectEnvId found in config/.test(error.message) ||
+        /is not iterable/.test(error.message) ||
+        /Unexpected end of JSON input/.test(error.message)
+      ) {
         return this.error(
           `${error.message}\nYour download file seems invalid or corrupt. Please redownload your datafile.`,
         )

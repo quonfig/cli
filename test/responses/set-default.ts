@@ -4,7 +4,7 @@ import {setupServer} from 'msw/node'
 
 /**
  * Mock responses for set-default command tests
- * Uses v1 API endpoints
+ * Uses oRPC API endpoints via https://app.quonfig.com
  */
 
 // Shared metadata response
@@ -67,22 +67,21 @@ const metadataResponse = {
   ],
 }
 
-// GET /all-config-types/v1/metadata - list all configs (both domains)
-const metadataHandler = http.get('https://api.*/all-config-types/v1/metadata', () =>
-  HttpResponse.json(metadataResponse),
+// POST /api/v1/metadata/list - list all configs (oRPC wrapped)
+const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
+  HttpResponse.json({json: metadataResponse}),
 )
 
-// Shared environments response
-const environmentsResponse = {
-  environments: [
-    {id: '5', name: 'Development', active: true, protected: false},
-    {id: '6', name: 'Staging', active: true, protected: false},
-    {id: '7', name: 'Production', active: true, protected: true},
-  ],
-}
-
-// GET /environments/v1 - list environments (both domains)
-const environmentsHandler = http.get('https://api.*/environments/v1', () => HttpResponse.json(environmentsResponse))
+// POST /api/v1/environments/list - list environments (oRPC wrapped)
+const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environments/list', () =>
+  HttpResponse.json({
+    json: [
+      {id: '5', name: 'Development', active: true, protected: false},
+      {id: '6', name: 'Staging', active: true, protected: false},
+      {id: '7', name: 'Production', active: true, protected: true},
+    ],
+  }),
+)
 
 // Shared encryption key config response
 const encryptionKeyResponse = {
@@ -120,117 +119,127 @@ const encryptionKeyResponse = {
   ],
 }
 
-// GET /all-config-types/v1/config/:key - get encryption key config (both domains)
-const encryptionKeyHandler = http.get('https://api.*/all-config-types/v1/config/quonfig.secrets.encryption.key', () =>
-  HttpResponse.json(encryptionKeyResponse),
-)
+// POST /api/v1/metadata/getByKey - get config by key (oRPC wrapped)
+const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getByKey', async ({request}) => {
+  const body = (await request.json()) as any
+  const key = body?.json?.key
 
-// GET /all-config-types/v1/config/feature-flag.simple - get feature flag details (not encrypted)
-const featureFlagDetailsHandler = http.get('https://api.*/all-config-types/v1/config/feature-flag.simple', () =>
-  HttpResponse.json({
-    key: 'feature-flag.simple',
-    type: 'feature_flag',
-    valueType: 'bool',
-    default: {
-      rules: [
-        {
-          criteria: [],
-          value: {
-            type: 'bool',
-            value: false,
-          },
-        },
-      ],
-    },
-  }),
-)
+  if (key === 'quonfig.secrets.encryption.key') {
+    return HttpResponse.json({json: encryptionKeyResponse})
+  }
 
-// GET /all-config-types/v1/config/jeffreys.test.key.reforge - get string config details (not encrypted)
-const jeffreysTestKeyDetailsHandler = http.get(
-  'https://api.*/all-config-types/v1/config/jeffreys.test.key.reforge',
-  () =>
-    HttpResponse.json({
-      key: 'jeffreys.test.key.reforge',
-      type: 'config',
-      valueType: 'string',
-      default: {
-        rules: [
-          {
-            criteria: [],
-            value: {
-              type: 'string',
-              value: 'default value',
+  if (key === 'feature-flag.simple') {
+    return HttpResponse.json({
+      json: {
+        key: 'feature-flag.simple',
+        type: 'feature_flag',
+        valueType: 'bool',
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: {
+                type: 'bool',
+                value: false,
+              },
             },
-          },
-        ],
+          ],
+        },
       },
-    }),
-)
+    })
+  }
 
-// GET /all-config-types/v1/config/jeffreys.test.int - get int config details (not encrypted)
-const jeffreysTestIntDetailsHandler = http.get('https://api.*/all-config-types/v1/config/jeffreys.test.int', () =>
-  HttpResponse.json({
-    key: 'jeffreys.test.int',
-    type: 'config',
-    valueType: 'int',
-    default: {
-      rules: [
-        {
-          criteria: [],
-          value: {
-            type: 'int',
-            value: 42,
-          },
+  if (key === 'jeffreys.test.key.reforge') {
+    return HttpResponse.json({
+      json: {
+        key: 'jeffreys.test.key.reforge',
+        type: 'config',
+        valueType: 'string',
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: {
+                type: 'string',
+                value: 'default value',
+              },
+            },
+          ],
         },
-      ],
-    },
-  }),
-)
+      },
+    })
+  }
 
-// GET /all-config-types/v1/config/test.json - get json config details (not encrypted)
-const testJsonDetailsHandler = http.get('https://api.*/all-config-types/v1/config/test.json', () =>
-  HttpResponse.json({
-    key: 'test.json',
-    type: 'config',
-    valueType: 'json',
-    default: {
-      rules: [
-        {
-          criteria: [],
-          value: {
-            type: 'json',
-            value: {test: 'data'},
-          },
+  if (key === 'jeffreys.test.int') {
+    return HttpResponse.json({
+      json: {
+        key: 'jeffreys.test.int',
+        type: 'config',
+        valueType: 'int',
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: {
+                type: 'int',
+                value: 42,
+              },
+            },
+          ],
         },
-      ],
-    },
-  }),
-)
+      },
+    })
+  }
 
-// GET /all-config-types/v1/config/robocop-secret - get robocop secret (has encrypted values)
-const robocopSecretHandler = http.get('https://api.*/all-config-types/v1/config/robocop-secret', () =>
-  HttpResponse.json({
-    key: 'robocop-secret',
-    type: 'config',
-    valueType: 'string',
-    default: {
-      rules: [
-        {
-          criteria: [],
-          value: {
-            type: 'string',
-            value: 'encrypted-value-here',
-            confidential: true,
-            decryptWith: 'quonfig.secrets.encryption.key',
-          },
+  if (key === 'test.json') {
+    return HttpResponse.json({
+      json: {
+        key: 'test.json',
+        type: 'config',
+        valueType: 'json',
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: {
+                type: 'json',
+                value: {test: 'data'},
+              },
+            },
+          ],
         },
-      ],
-    },
-  }),
-)
+      },
+    })
+  }
 
-// POST /internal/ops/v1/set-default - set default value
-const setDefaultHandler = http.post('https://api.*/internal/ops/v1/set-default', async ({request}) => {
+  if (key === 'robocop-secret') {
+    return HttpResponse.json({
+      json: {
+        key: 'robocop-secret',
+        type: 'config',
+        valueType: 'string',
+        default: {
+          rules: [
+            {
+              criteria: [],
+              value: {
+                type: 'string',
+                value: 'encrypted-value-here',
+                confidential: true,
+                decryptWith: 'quonfig.secrets.encryption.key',
+              },
+            },
+          ],
+        },
+      },
+    })
+  }
+
+  return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
+})
+
+// POST /internal/ops/v1/set-default - set default value (NOT oRPC, no json wrapper)
+const setDefaultHandler = http.post('https://app.quonfig.com/internal/ops/v1/set-default', async ({request}) => {
   const body = (await request.json()) as any
 
   // Validate the request (allow environmentId: 0 for default environment)
@@ -274,11 +283,6 @@ const setDefaultHandler = http.post('https://api.*/internal/ops/v1/set-default',
 export const server = setupServer(
   metadataHandler,
   environmentsHandler,
-  encryptionKeyHandler,
-  featureFlagDetailsHandler,
-  jeffreysTestKeyDetailsHandler,
-  jeffreysTestIntDetailsHandler,
-  testJsonDetailsHandler,
-  robocopSecretHandler,
+  getByKeyHandler,
   setDefaultHandler,
 )

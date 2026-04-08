@@ -41,41 +41,22 @@ describe('get', () => {
       expect(ctx.stdout).to.eql('hello.world\n')
     })
 
+  // In the new oRPC API, provided configs are resolved server-side.
+  // The evaluation response returns the resolved value directly.
   test
     .stdout()
-    .env({TEST_ENV_VAR: 'value-from-env'})
     .command(['get', 'provided.config', '--environment=[default]'])
-    .it('resolves a provided config from environment variable', (ctx) => {
-      expect(ctx.stdout).to.contain('value-from-env')
+    .it('returns a provided config value resolved by the server', (ctx) => {
+      expect(ctx.stdout).to.contain('server-resolved-value')
     })
 
-  test
-    .command(['get', 'provided.config', '--environment=[default]'])
-    .catch((error) => {
-      expect(error.message).to.contain('TEST_ENV_VAR')
-      expect(error.message).to.contain('not set')
-    })
-    .it('shows an error if provided config env var is missing', () => {
-      // Error assertion done in catch block
-    })
-
+  // In the new oRPC API, encrypted configs are decrypted server-side.
+  // The evaluation response returns the decrypted value directly.
   test
     .stdout()
-    .env({TEST_ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'})
     .command(['get', 'encrypted.config', '--environment=[default]'])
-    .it('decrypts an encrypted config when encryption key is available', (ctx) => {
-      // The encrypted value should be decrypted to 'test-secret'
+    .it('returns a decrypted config value resolved by the server', (ctx) => {
       expect(ctx.stdout).to.contain('test-secret')
-    })
-
-  test
-    .command(['get', 'encrypted.config', '--environment=[default]'])
-    .catch((error) => {
-      expect(error.message).to.contain('TEST_ENCRYPTION_KEY')
-      expect(error.message).to.contain('not set')
-    })
-    .it('shows an error if encrypted config encryption key env var is missing', () => {
-      // Error assertion done in catch block
     })
 
   test

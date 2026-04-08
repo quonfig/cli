@@ -1,52 +1,51 @@
 {
-  "configServicePointer": {"projectEnvId": "588"},
+  "meta": {"version": "1", "environment": "588"},
   "configs": [
     {
-      "changedBy": {"sdkKeyId": "", "email": "test@example.com", "userId": "0"},
-      "configType": "CONFIG",
       "id": "16777738077090689",
       "key": "intprop",
-      "projectId": "2",
-      "rows": [{"values": [{"value": {"int": "8"}}]}],
-      "valueType": "INT",
-      "sendToClientSdk": true
+      "type": "config",
+      "valueType": "int",
+      "sendToClientSdk": true,
+      "default": {
+        "rules": [
+          {"criteria": [], "value": {"type": "int", "value": 8}}
+        ]
+      }
     },
     {
-      "changedBy": {"sdkKeyId": "", "email": "test@example.com", "userId": "0"},
-      "configType": "CONFIG",
       "id": "16777738077090698",
       "key": "notSenttoClient",
-      "projectId": "2",
-      "rows": [{"values": [{"value": {"int": "2"}}]}],
-      "valueType": "INT",
-      "sendToClientSdk": false
+      "type": "config",
+      "valueType": "int",
+      "sendToClientSdk": false,
+      "default": {
+        "rules": [
+          {"criteria": [], "value": {"type": "int", "value": 2}}
+        ]
+      }
     },
     {
       "id": "17023190805036677",
-      "projectId": "202",
       "key": "flag.list.environments",
-      "changedBy": {"email": "test@example.com"},
-      "rows": [
-        {
-          "projectEnvId": "308",
-          "values": [
-            {
-              "criteria": [
-                {
-                  "propertyName": "user.key",
-                  "operator": "PROP_IS_ONE_OF",
-                  "valueToMatch": {"stringList": {"values": ["5905ecd1-9bbf-4711-a663-4f713628a78c"]}}
-                }
-              ],
-              "value": {"bool": true}
-            },
-            {"value": {"bool": false}}
-          ]
-        }
-      ],
-      "allowableValues": [{"bool": false}, {"bool": true}],
-      "configType": "FEATURE_FLAG",
-      "valueType": "BOOL"
+      "type": "feature_flag",
+      "valueType": "bool",
+      "sendToClientSdk": true,
+      "default": {
+        "rules": [
+          {
+            "criteria": [
+              {
+                "propertyName": "user.key",
+                "operator": "PROP_IS_ONE_OF",
+                "valueToMatch": {"type": "string_list", "value": ["5905ecd1-9bbf-4711-a663-4f713628a78c"]}
+              }
+            ],
+            "value": {"type": "bool", "value": true}
+          },
+          {"criteria": [], "value": {"type": "bool", "value": false}}
+        ]
+      }
     }
   ]
 }

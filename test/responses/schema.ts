@@ -72,88 +72,84 @@ function schemaResponseFor(key: string, stored: StoredSchema) {
   }
 }
 
-const getSchemaHandler = http.get('https://api.*/schemas/v1/schema/:key', ({params}) => {
-  const key = String(params.key)
+// POST /api/v1/schemas/getByKey - get schema by key (oRPC wrapped)
+const getSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/getByKey', async ({request}) => {
+  const body = (await request.json()) as any
+  const key = body?.json?.schemaKey
+
   const stored = schemaStore.get(key)
 
   if (!stored) {
-    return HttpResponse.json({message: `Schema ${key} not found`}, {status: 404})
+    return HttpResponse.json({json: {message: `Schema ${key} not found`}}, {status: 404})
   }
 
-  return HttpResponse.json(schemaResponseFor(key, stored))
+  return HttpResponse.json({json: schemaResponseFor(key, stored)})
 })
 
-const createSchemaHandler = http.post('https://api.*/schemas/v1', async ({request}) => {
-  const body = (await request.json()) as {
-    protected?: boolean
-    schema?: SchemaDocument
-    schemaKey?: string
-    workspaceId?: string
+// POST /api/v1/schemas/create - create schema (oRPC wrapped)
+const createSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/create', async ({request}) => {
+  const body = (await request.json()) as any
+  const input = body?.json
+
+  if (!input?.schemaKey || !input?.schema || typeof input.schema !== 'object' || Array.isArray(input.schema)) {
+    return HttpResponse.json({json: {message: 'Bad Request'}}, {status: 400})
   }
 
-  if (!body.schemaKey || !body.schema || typeof body.schema !== 'object' || Array.isArray(body.schema)) {
-    return HttpResponse.json({message: 'Bad Request'}, {status: 400})
-  }
-
-  if (schemaStore.has(body.schemaKey)) {
-    return HttpResponse.json({message: `Schema ${body.schemaKey} already exists`}, {status: 409})
+  if (schemaStore.has(input.schemaKey)) {
+    return HttpResponse.json({json: {message: `Schema ${input.schemaKey} already exists`}}, {status: 409})
   }
 
   const commitSha = nextCommitSha()
-  schemaStore.set(body.schemaKey, {
+  schemaStore.set(input.schemaKey, {
     commitSha,
-    protected: Boolean(body.protected),
-    schema: body.schema,
+    protected: Boolean(input.protected),
+    schema: input.schema,
   })
 
-  return HttpResponse.json(
-    schemaResponseFor(body.schemaKey, {
+  return HttpResponse.json({
+    json: schemaResponseFor(input.schemaKey, {
       commitSha,
-      protected: Boolean(body.protected),
-      schema: body.schema,
+      protected: Boolean(input.protected),
+      schema: input.schema,
     }),
-  )
+  })
 })
 
-const updateSchemaHandler = http.put('https://api.*/schemas/v1/schema/:key', async ({params, request}) => {
-  const key = String(params.key)
-  const body = (await request.json()) as {
-    expectedCommitSha?: string
-    protected?: boolean
-    schema?: SchemaDocument
-    schemaKey?: string
-    workspaceId?: string
-  }
+// POST /api/v1/schemas/update - update schema (oRPC wrapped)
+const updateSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/update', async ({request}) => {
+  const body = (await request.json()) as any
+  const input = body?.json
 
+  const key = input?.schemaKey
   const stored = schemaStore.get(key)
   if (!stored) {
-    return HttpResponse.json({message: `Schema ${key} not found`}, {status: 404})
+    return HttpResponse.json({json: {message: `Schema ${key} not found`}}, {status: 404})
   }
 
-  if (!body.schema || typeof body.schema !== 'object' || Array.isArray(body.schema)) {
-    return HttpResponse.json({message: 'Bad Request'}, {status: 400})
+  if (!input?.schema || typeof input.schema !== 'object' || Array.isArray(input.schema)) {
+    return HttpResponse.json({json: {message: 'Bad Request'}}, {status: 400})
   }
 
-  if (body.expectedCommitSha && body.expectedCommitSha !== stored.commitSha) {
-    return HttpResponse.json({message: 'Conflict'}, {status: 409})
+  if (input.expectedCommitSha && input.expectedCommitSha !== stored.commitSha) {
+    return HttpResponse.json({json: {message: 'Conflict'}}, {status: 409})
   }
 
   const commitSha = nextCommitSha()
-  const nextProtected = body.protected ?? stored.protected
+  const nextProtected = input.protected ?? stored.protected
 
   schemaStore.set(key, {
     commitSha,
     protected: nextProtected,
-    schema: body.schema,
+    schema: input.schema,
   })
 
-  return HttpResponse.json(
-    schemaResponseFor(key, {
+  return HttpResponse.json({
+    json: schemaResponseFor(key, {
       commitSha,
       protected: nextProtected,
-      schema: body.schema,
+      schema: input.schema,
     }),
-  )
+  })
 })
 
 export const server = setupServer(

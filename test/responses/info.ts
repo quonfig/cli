@@ -137,130 +137,115 @@ const confidentialConfig = {
   },
 }
 
-// GET /all-config-types/v1/metadata - list all configs
-const metadataHandler = http.get('https://api.goatsofquonfig.com/all-config-types/v1/metadata', () =>
+// POST /api/v1/metadata/list - list all configs (oRPC wrapped)
+const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
   HttpResponse.json({
-    configs: [
-      {
-        key: keyWithEvaluations,
-        type: 'config',
-        valueType: 'string_list',
-        version: 1,
-        id: 1,
-        name: 'My String List',
-        description: '',
-      },
-      {
-        key: keyWithNoEvaluations,
-        type: 'config',
-        valueType: 'string',
-        version: 1,
-        id: 2,
-        name: 'Jeffrey Test',
-        description: '',
-      },
-      {key: secretKey, type: 'config', valueType: 'string', version: 1, id: 3, name: 'Secret', description: ''},
-      {
-        key: confidentialKey,
-        type: 'config',
-        valueType: 'string',
-        version: 1,
-        id: 4,
-        name: 'Confidential',
-        description: '',
-      },
-    ],
+    json: {
+      configs: [
+        {
+          key: keyWithEvaluations,
+          type: 'config',
+          valueType: 'string_list',
+          version: 1,
+          id: 1,
+          name: 'My String List',
+          description: '',
+        },
+        {
+          key: keyWithNoEvaluations,
+          type: 'config',
+          valueType: 'string',
+          version: 1,
+          id: 2,
+          name: 'Jeffrey Test',
+          description: '',
+        },
+        {key: secretKey, type: 'config', valueType: 'string', version: 1, id: 3, name: 'Secret', description: ''},
+        {
+          key: confidentialKey,
+          type: 'config',
+          valueType: 'string',
+          version: 1,
+          id: 4,
+          name: 'Confidential',
+          description: '',
+        },
+      ],
+    },
   }),
 )
 
-// GET /all-config-types/v1/config/:key - get full config
-const configHandler = http.get('https://api.goatsofquonfig.com/all-config-types/v1/config/:key', ({params}) => {
-  const key = params.key as string
+// POST /api/v1/metadata/getByKey - get full config (oRPC wrapped)
+const configHandler = http.post('https://app.quonfig.com/api/v1/metadata/getByKey', async ({request}) => {
+  const body = (await request.json()) as any
+  const key = body?.json?.key
 
   if (key === keyWithEvaluations) {
-    return HttpResponse.json(configWithEvaluations)
+    return HttpResponse.json({json: configWithEvaluations})
   }
 
   if (key === keyWithNoEvaluations) {
-    return HttpResponse.json(configWithNoEvaluations)
+    return HttpResponse.json({json: configWithNoEvaluations})
   }
 
   if (key === secretKey) {
-    return HttpResponse.json(secretConfig)
+    return HttpResponse.json({json: secretConfig})
   }
 
   if (key === confidentialKey) {
-    return HttpResponse.json(confidentialConfig)
+    return HttpResponse.json({json: confidentialConfig})
   }
 
-  return HttpResponse.json({error: 'Not found'}, {status: 404})
+  return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
 })
 
-// GET /environments/v1 - list environments
-const environmentsHandler = http.get('https://api.goatsofquonfig.com/environments/v1', () =>
+// POST /api/v1/environments/list - list environments (oRPC wrapped)
+const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environments/list', () =>
   HttpResponse.json({
-    environments: [
+    json: [
       {id: '588', name: 'jeffrey', active: true, protected: false},
       {id: '143', name: 'Production', active: true, protected: false},
     ],
   }),
 )
 
-// GET /evaluation-statistics/v1 - evaluation stats
-const evaluationStatsHandler = http.get('https://api.goatsofquonfig.com/evaluation-statistics/v1', ({request}) => {
-  const url = new URL(request.url)
-  const key = url.searchParams.get('key')
-  const envId = url.searchParams.get('projectEnvId')
-  const startTime = url.searchParams.get('startTime')
-  const endTime = url.searchParams.get('endTime')
+// POST /api/v1/analytics/evaluationStats - evaluation stats (oRPC wrapped)
+const evaluationStatsHandler = http.post('https://app.quonfig.com/api/v1/analytics/evaluationStats', async ({request}) => {
+  const body = (await request.json()) as any
+  const configKey = body?.json?.configKey
+  const environment = body?.json?.environment
 
   // For keyWithEvaluations, return stats
-  if (key === keyWithEvaluations) {
-    if (envId === '143') {
+  if (configKey === keyWithEvaluations) {
+    if (environment === '143') {
       // Production environment - return actual stats
       return HttpResponse.json({
-        projectEnvId: '143',
-        key: keyWithEvaluations,
-        intervals: [
+        json: [
           {
-            startAt: startTime ? Number(startTime) : 1_699_975_592_151,
-            endAt: endTime ? Number(endTime) : 1_700_061_992_151,
-            data: [
-              {
-                configId: '1',
-                configType: 'config',
-                selectedValue: {bool: false},
-                count: 11_473,
-              },
-              {
-                configId: '1',
-                configType: 'config',
-                selectedValue: {bool: true},
-                count: 23_316,
-              },
-            ],
+            configId: '1',
+            configType: 'config',
+            selectedValue: {bool: false},
+            count: 11_473,
+          },
+          {
+            configId: '1',
+            configType: 'config',
+            selectedValue: {bool: true},
+            count: 23_316,
           },
         ],
       })
     }
 
-    if (envId === '588') {
+    if (environment === '588') {
       // jeffrey environment
       return HttpResponse.json({
-        projectEnvId: '588',
-        key: keyWithEvaluations,
-        intervals: [
+        json: [
           {
-            startAt: startTime ? Number(startTime) : 1_699_975_592_151,
-            endAt: endTime ? Number(endTime) : 1_700_061_992_151,
-            data: [
-              {
-                configId: '1',
-                configType: 'config',
-                selectedValue: {string: 'test'},
-                count: 42,
-              },
-            ],
+            configId: '1',
+            configType: 'config',
+            selectedValue: {string: 'test'},
+            count: 42,
           },
         ],
       })
@@ -268,11 +253,7 @@ const evaluationStatsHandler = http.get('https://api.goatsofquonfig.com/evaluati
   }
 
   // For other keys or envs, return empty stats
-  return HttpResponse.json({
-    projectEnvId: envId || 'unknown',
-    key: key || 'unknown',
-    intervals: [],
-  })
+  return HttpResponse.json({json: []})
 })
 
 export const server = setupServer(

@@ -24,7 +24,8 @@ export const coerceIntoType = (type: string, value: string): ConfigValueWithConf
 
     case 'int': {
       try {
-        const int = BigInt(value)
+        const bigInt = BigInt(value)
+        const int = Number(bigInt)
 
         return [{int}, TYPE_MAPPING[type]]
       } catch {

@@ -4,13 +4,6 @@ import {setupServer} from 'msw/node'
 import type {JsonObj} from '../../src/result.js'
 
 
-const environmentResponse = {
-  environments: [
-    {id: '588', name: 'test', active: true, protected: false},
-    {id: '143', name: 'Production', active: true, protected: false},
-  ],
-}
-
 export const downloadStub: JsonObj = {
   configs: [
     {
@@ -26,13 +19,18 @@ export const downloadStub: JsonObj = {
   ],
 }
 
-// GET /environments/v1 - list environments
-const environmentsHandler = http.get('https://api.goatsofquonfig.com/environments/v1', () =>
-  HttpResponse.json(environmentResponse),
+// POST /api/v1/environments/list - list environments (oRPC wrapped)
+const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environments/list', () =>
+  HttpResponse.json({
+    json: [
+      {id: '588', name: 'test', active: true, protected: false},
+      {id: '143', name: 'Production', active: true, protected: false},
+    ],
+  }),
 )
 
-// GET /all-config-types/v1/download - download config
-const downloadHandler = http.get('https://api.goatsofquonfig.com/all-config-types/v1/download', ({request}) => {
+// GET /all-config-types/v1/download - download config (OAuth path, not oRPC)
+const downloadHandler = http.get('https://app.quonfig.com/all-config-types/v1/download', ({request}) => {
   const url = new URL(request.url)
   const envId = url.searchParams.get('envId')
 

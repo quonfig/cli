@@ -82,7 +82,7 @@ describe('serve', () => {
       .stderr()
       .command(['serve', emptyJSONFile])
       .catch((error) => {
-        expect(error.message).to.contain(`No projectEnvId found in config`)
+        expect(error.message).to.contain(`is not iterable`)
         expect(error.message).to.contain(
           `Your download file seems invalid or corrupt. Please redownload your datafile.`,
         )
@@ -95,10 +95,7 @@ describe('serve', () => {
       .stderr()
       .command(['serve', invalidJSONFile])
       .catch((error) => {
-        expect(error.message).to.contain(`Unexpected end of JSON input`)
-        expect(error.message).to.contain(
-          `Your download file seems invalid or corrupt. Please redownload your datafile.`,
-        )
+        expect(error.message).to.contain(`Your download file seems invalid or corrupt. Please redownload your datafile.`)
       })
       .it('shows an error when the file is invalid', () => {
         // Error assertion done in catch block

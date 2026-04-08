@@ -225,6 +225,9 @@ describe('create', () => {
 
     describe('type=string', () => {
       test
+        .env({
+          QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
+        })
         .stdout()
         .command(['create', 'brand.new.secret', '--type=string', '--value=hello.world', '--secret'])
         .it('can create a string', (ctx) => {

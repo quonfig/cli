@@ -240,12 +240,21 @@ export function getMetaDescription(schema: $ZodType): string | undefined {
     return undefined
   }
 
-  // If meta only has a description key, return just the description
   const keys = Object.keys(meta)
-  if (keys.length === 1 && keys[0] === 'description' && typeof meta.description === 'string') {
-    return meta.description
+  const standardKeys = new Set(['title', 'description'])
+  const hasExtraKeys = keys.some((k) => !standardKeys.has(k))
+
+  // If meta has non-standard keys (e.g. id, required, deprecated),
+  // return JSON representation of the entire meta object so all metadata is preserved
+  if (hasExtraKeys) {
+    try {
+      return JSON.stringify(meta, null, 2)
+    } catch {
+      // If JSON serialization fails, fall through
+    }
   }
 
+  // For standard keys only (title, description), prefer description then title
   if (typeof meta.description === 'string') {
     return meta.description
   }
@@ -254,7 +263,7 @@ export function getMetaDescription(schema: $ZodType): string | undefined {
     return meta.title
   }
 
-  // Otherwise, return JSON representation of the entire meta object
+  // Fallback: return JSON representation of the entire meta object
   try {
     return JSON.stringify(meta, null, 2)
   } catch {

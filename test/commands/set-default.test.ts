@@ -91,6 +91,9 @@ describe('set-default', () => {
       })
 
     test
+      .env({
+        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
+      })
       .stdout()
       .command([
         'set-default',
@@ -105,6 +108,9 @@ describe('set-default', () => {
       })
 
     test
+      .env({
+        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
+      })
       .stdout()
       .command(['set-default', 'robocop-secret', '--environment=Staging', '--confirm', '--value=hello'])
       .it('uses encryption if any existing value for the key is encrypted', (ctx) => {
