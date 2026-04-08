@@ -30,10 +30,18 @@ export const mintGiteaToken = async (
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Failed to mint Gitea token (HTTP ${res.status}): ${text}`)
+    let message = `HTTP ${res.status}`
+    try {
+      const body = JSON.parse(text)
+      // oRPC error shape
+      if (body?.json?.message) message = body.json.message
+      else if (body?.message) message = body.message
+    } catch { /* use raw text */ }
+    throw new Error(message || text)
   }
 
-  const data = (await res.json()) as GiteaTokenResponse
+  const body = await res.json() as {json?: GiteaTokenResponse} | GiteaTokenResponse
+  const data = (body as {json?: GiteaTokenResponse}).json ?? (body as GiteaTokenResponse)
   return data
 }
 
