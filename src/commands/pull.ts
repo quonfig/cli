@@ -23,7 +23,22 @@ import {
 } from '../util/git-ops.js'
 
 export default class Pull extends BaseCommand {
-  static description = 'Clone or update a local directory from the workspace Gitea repo'
+  static description = `Clone or update a local copy of your workspace config files.
+
+Use this when you need to edit flag JSON directly — for complex targeting rules,
+multi-rule configs, or anything beyond a single scalar value.
+
+For the config file format, operator reference, and examples:
+  qfg config-schema              # human-readable reference
+  qfg config-schema --json-schema  # machine-readable JSON Schema
+
+After editing files:
+  qfg verify <dir>               # validate JSON before pushing
+  git -C <dir> add -A && git -C <dir> commit -m "feat: ..." && git -C <dir> push
+
+CLI shortcuts (no JSON editing needed for simple cases):
+  qfg set-rollout my.flag --environment production --true-percent 20
+  qfg set-default my.flag --environment production --value true`
 
   static examples = [
     '<%= config.bin %> pull --dir ./our-config',

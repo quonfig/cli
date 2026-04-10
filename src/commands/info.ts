@@ -11,9 +11,24 @@ import nameArg from '../util/name-arg.js'
 export default class Info extends APICommand {
   static args = {...nameArg}
 
-  static description = 'Show details about the provided config/feature-flag/etc.'
+  static description = `Show current values, rules, and evaluation stats for a flag or config.
 
-  static examples = ['<%= config.bin %> <%= command.id %> my.config.name']
+Output shows the value for each environment:
+  - A simple value (true / false / "hello") means a single unconditional rule.
+  - "[see rules]" means the environment has targeting rules or a percentage rollout.
+  - "[inherit]" means the environment falls back to the Default value.
+
+Percentage rollouts are displayed as "20.0% true, 80.0% false".
+Evaluation counts for the past 24 hours are included by default.
+
+Related commands:
+  qfg set-default my.flag --environment production --value true   # set a scalar fallback
+  qfg set-rollout my.flag --environment production --true-percent 20  # set a % rollout`
+
+  static examples = [
+    '<%= config.bin %> <%= command.id %> my.config.name',
+    '<%= config.bin %> <%= command.id %> my.config.name --exclude-evaluations   # skip 24h stats',
+  ]
 
   static flags = {
     'exclude-evaluations': Flags.boolean({default: false, description: 'Exclude evaluation data'}),

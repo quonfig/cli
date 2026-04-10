@@ -17,7 +17,26 @@ export default class Create extends APICommand {
     name: Args.string({description: 'name for your new item (e.g. my.new.flag)', required: true}),
   }
 
-  static description = 'Create a new item in Quonfig'
+  static description = `Create a new feature flag, config value, or other item.
+
+Use --type to specify the kind of item:
+  boolean-flag  On/off feature flag (sendToClientSdk defaults to true; best for gradual rollouts)
+  string        A string configuration value
+  int           An integer configuration value
+  double        A floating-point configuration value
+  string-list   A comma-separated list of strings
+  json          An arbitrary JSON blob
+  boolean       A plain boolean (not a feature flag)
+
+This sets the global default value. Override per-environment with:
+  qfg set-default my.flag --environment production --value true
+
+For a percentage rollout (gradual rollout / A/B test / canary deploy), use:
+  qfg set-rollout my.flag --environment production --true-percent 20
+
+Or edit the JSON config file directly for complex targeting rules:
+  qfg config-schema          # full operator reference + examples
+  qfg pull --dir ./config    # clone workspace, then edit JSON and git push`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.new.flag --type boolean-flag',
@@ -26,6 +45,8 @@ export default class Create extends APICommand {
     '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world" --secret',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --env-var=MY_ENV_VAR_NAME',
     '<%= config.bin %> <%= command.id %> my.new.string --type json --value="{\\"key\\": \\"value\\"}"',
+    '# After creating a flag, set a 20% rollout in production:',
+    '<%= config.bin %> set-rollout my.new.flag --environment production --true-percent 20',
   ]
 
   static flags = {

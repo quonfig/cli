@@ -20,13 +20,30 @@ type ValueOrEnvVar = {envVar: string; value?: never} | {envVar?: never; value: s
 export default class SetDefault extends APICommand {
   static args = {...nameArg}
 
-  static description = 'Set/update the default value for an environment (other rules still apply)'
+  static description = `Set the unconditional fallback value for a flag or config in a specific environment.
+
+This updates the catch-all rule — the value users receive when NO targeting rule matches.
+Any targeting rules or percentage rollouts you have configured are NOT affected; they
+continue to fire before this fallback is evaluated.
+
+"Other rules still apply" means: if you have rules targeting specific users, segments,
+or properties, those rules still take priority. This command only changes what everyone
+else sees.
+
+To set a percentage rollout (gradual rollout / A/B test / canary deploy) instead:
+  qfg set-rollout my.flag --environment production --true-percent 20
+
+To see all current values and rules for a flag:
+  qfg info my.flag`
 
   static examples = [
-    '<%= config.bin %> <%= command.id %> my.flag.name # will prompt for value and env',
+    '<%= config.bin %> <%= command.id %> my.flag.name                                          # prompts for value and env',
     '<%= config.bin %> <%= command.id %> my.flag.name --value=true --environment=staging',
+    '<%= config.bin %> <%= command.id %> my.flag.name --value=false --environment=production   # kill-switch: turn off for everyone',
     '<%= config.bin %> <%= command.id %> my.flag.name --value=true --secret',
     '<%= config.bin %> <%= command.id %> my.config.name --env-var=MY_ENV_VAR_NAME --environment=production',
+    '# For a percentage rollout, use set-rollout instead:',
+    '<%= config.bin %> set-rollout my.flag.name --environment production --true-percent 20',
   ]
 
   static flags = {
@@ -74,12 +91,12 @@ export default class SetDefault extends APICommand {
 
     interface ConfigMetadata {
       description: string
-      id: number
+      id: string
       key: string
       name: string
       type: string
       valueType: string
-      version: number
+      version: string
     }
 
     interface ConfigMetadataResponse {
@@ -171,7 +188,6 @@ export default class SetDefault extends APICommand {
         config,
         envVar: flags['env-var'],
         environment,
-        environmentId: environment.id,
         key,
         secret,
       })
@@ -201,7 +217,6 @@ export default class SetDefault extends APICommand {
       confidential,
       config,
       environment,
-      environmentId: environment.id,
       key,
       secret,
       value,
@@ -213,15 +228,13 @@ export default class SetDefault extends APICommand {
     config,
     envVar,
     environment,
-    environmentId,
     key,
     secret,
     value,
   }: {
     confidential: boolean
-    config: {valueType: string; version: number}
+    config: {type: string; valueType: string; version: string}
     environment: {id: string; name: string}
-    environmentId: string
     key: string
     secret: Secret
   } & ValueOrEnvVar) {
@@ -249,7 +262,7 @@ export default class SetDefault extends APICommand {
 
       if (secret.selected) {
         // Handle encrypted values using shared utility
-        const encryptedValueResult = await makeConfidentialValue(this, value, secret, environmentId)
+        const encryptedValueResult = await makeConfidentialValue(this, value, secret, environment.id)
         if (!encryptedValueResult.ok) {
           return this.err(encryptedValueResult.message || 'Failed to encrypt value')
         }
@@ -327,23 +340,78 @@ export default class SetDefault extends APICommand {
       successMessage += ' (confidential)'
     }
 
-    const payload = {
-      configKey: key,
-      currentVersionId: config.version,
-      environmentId: environmentId ? Number.parseInt(environmentId, 10) : 0,
-      value: configValue,
+    // Fetch the current full config to get the existing environments array and commitSha.
+    const detailRequest = await this.apiClient.post('/api/v1/metadata/getByKey', {
+      workspaceId: this.workspaceId,
+      key,
+    })
+
+    if (!detailRequest.ok) {
+      return this.err(`Failed to fetch config details: ${detailRequest.status}`)
     }
 
-    this.verboseLog('Payload:', payload)
+    const currentConfig = detailRequest.json as {
+      commitSha: string
+      environments: Array<{id: string; rules: unknown[]}>
+      default: {rules: unknown[]}
+    }
 
-    const request = await this.apiClient.post('/internal/ops/v1/set-default', payload)
+    // Build a single catch-all rule (empty criteria = matches everything).
+    const newRule = {criteria: [], value: configValue}
+
+    // For [Default] (environment.id === ''), update default.rules.
+    // For a specific environment, update the environments array.
+    let updateFields: Record<string, unknown>
+
+    if (environment.id === '') {
+      // [Default] — no environment-specific block, update the catch-all default rules.
+      updateFields = {default: {rules: [newRule]}}
+    } else {
+      // environment.name is the slug stored in git files (e.g. "production").
+      // environment.id is the DB UUID — never written to git files.
+      const envKey = environment.name
+      const existingEnvs = currentConfig.environments ?? []
+      const hasEnv = existingEnvs.some((e) => e.id === envKey)
+      const updatedEnvironments = hasEnv
+        ? existingEnvs.map((e) => (e.id === envKey ? {...e, rules: [newRule]} : e))
+        : [...existingEnvs, {id: envKey, rules: [newRule]}]
+      updateFields = {environments: updatedEnvironments}
+    }
+
+    this.verboseLog('Update fields:', JSON.stringify(updateFields, null, 2))
+
+    // Route to the correct update endpoint based on config type.
+    let request: Awaited<ReturnType<typeof this.apiClient.post>>
+
+    if (config.type === 'feature_flag') {
+      request = await this.apiClient.post('/api/v1/flags/update', {
+        workspaceId: this.workspaceId,
+        flagKey: key,
+        flag: updateFields,
+        expectedCommitSha: currentConfig.commitSha,
+      })
+    } else if (config.type === 'log_level') {
+      request = await this.apiClient.post('/api/v1/logLevels/update', {
+        workspaceId: this.workspaceId,
+        logLevelKey: key,
+        logLevel: updateFields,
+        expectedCommitSha: currentConfig.commitSha,
+      })
+    } else {
+      request = await this.apiClient.post('/api/v1/configs/update', {
+        workspaceId: this.workspaceId,
+        configKey: key,
+        config: updateFields,
+        expectedCommitSha: currentConfig.commitSha,
+      })
+    }
 
     if (request.ok) {
       this.log(`${checkmark} ${successMessage}`)
 
       return {
         environment: {
-          id: environmentId,
+          id: environment.id,
           name: environment.name,
         },
         key,

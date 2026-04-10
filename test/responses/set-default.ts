@@ -134,17 +134,9 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
         key: 'feature-flag.simple',
         type: 'feature_flag',
         valueType: 'bool',
-        default: {
-          rules: [
-            {
-              criteria: [],
-              value: {
-                type: 'bool',
-                value: false,
-              },
-            },
-          ],
-        },
+        commitSha: 'abc001',
+        environments: [],
+        default: {rules: [{criteria: [], value: {type: 'bool', value: false}}]},
       },
     })
   }
@@ -155,17 +147,9 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
         key: 'jeffreys.test.key.reforge',
         type: 'config',
         valueType: 'string',
-        default: {
-          rules: [
-            {
-              criteria: [],
-              value: {
-                type: 'string',
-                value: 'default value',
-              },
-            },
-          ],
-        },
+        commitSha: 'abc002',
+        environments: [],
+        default: {rules: [{criteria: [], value: {type: 'string', value: 'default value'}}]},
       },
     })
   }
@@ -176,17 +160,9 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
         key: 'jeffreys.test.int',
         type: 'config',
         valueType: 'int',
-        default: {
-          rules: [
-            {
-              criteria: [],
-              value: {
-                type: 'int',
-                value: 42,
-              },
-            },
-          ],
-        },
+        commitSha: 'abc003',
+        environments: [],
+        default: {rules: [{criteria: [], value: {type: 'int', value: 42}}]},
       },
     })
   }
@@ -197,17 +173,9 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
         key: 'test.json',
         type: 'config',
         valueType: 'json',
-        default: {
-          rules: [
-            {
-              criteria: [],
-              value: {
-                type: 'json',
-                value: {test: 'data'},
-              },
-            },
-          ],
-        },
+        commitSha: 'abc004',
+        environments: [],
+        default: {rules: [{criteria: [], value: {type: 'json', value: {test: 'data'}}}]},
       },
     })
   }
@@ -218,16 +186,13 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
         key: 'robocop-secret',
         type: 'config',
         valueType: 'string',
+        commitSha: 'abc005',
+        environments: [],
         default: {
           rules: [
             {
               criteria: [],
-              value: {
-                type: 'string',
-                value: 'encrypted-value-here',
-                confidential: true,
-                decryptWith: 'quonfig.secrets.encryption.key',
-              },
+              value: {type: 'string', value: 'encrypted-value-here', confidential: true, decryptWith: 'quonfig.secrets.encryption.key'},
             },
           ],
         },
@@ -238,51 +203,38 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
   return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
 })
 
-// POST /internal/ops/v1/set-default - set default value (NOT oRPC, no json wrapper)
-const setDefaultHandler = http.post('https://app.quonfig.com/internal/ops/v1/set-default', async ({request}) => {
+// POST /api/v1/configs/update — update a config via oRPC
+const configsUpdateHandler = http.post('https://app.quonfig.com/api/v1/configs/update', async ({request}) => {
   const body = (await request.json()) as any
-
-  // Validate the request (allow environmentId: 0 for default environment)
-  if (!body.configKey || body.currentVersionId === undefined) {
-    return HttpResponse.json({error: 'Missing required fields'}, {status: 400})
+  if (!body?.json?.configKey) {
+    return HttpResponse.json({json: {error: 'Missing configKey'}}, {status: 400})
   }
+  return HttpResponse.json({json: {success: true, key: body.json.configKey}})
+})
 
-  // Check for invalid boolean values
-  if (body.configKey === 'feature-flag.simple' && body.value?.type === 'string') {
-    // String value for boolean flag is invalid
-    return HttpResponse.json(
-      {error: `'${body.value.value}' is not a valid value for feature-flag.simple`},
-      {status: 400},
-    )
+// POST /api/v1/flags/update — update a flag via oRPC
+const flagsUpdateHandler = http.post('https://app.quonfig.com/api/v1/flags/update', async ({request}) => {
+  const body = (await request.json()) as any
+  if (!body?.json?.flagKey) {
+    return HttpResponse.json({json: {error: 'Missing flagKey'}}, {status: 400})
   }
+  return HttpResponse.json({json: {success: true, key: body.json.flagKey}})
+})
 
-  // Check for invalid int values
-  if (body.configKey === 'jeffreys.test.int' && body.value?.type === 'string') {
-    // Non-integer value for int config
-    return HttpResponse.json({error: `Invalid default value for int: ${body.value.value}`}, {status: 400})
+// POST /api/v1/logLevels/update — update a log-level via oRPC
+const logLevelsUpdateHandler = http.post('https://app.quonfig.com/api/v1/logLevels/update', async ({request}) => {
+  const body = (await request.json()) as any
+  if (!body?.json?.logLevelKey) {
+    return HttpResponse.json({json: {error: 'Missing logLevelKey'}}, {status: 400})
   }
-
-  // Validate encrypted values have correct structure
-  if (body.value?.confidential && body.value?.decryptWith) {
-    // Encrypted values must have type and value fields
-    if (!body.value.type) {
-      return HttpResponse.json({error: 'Encrypted values must have a type field'}, {status: 400})
-    }
-    if (body.value.value === undefined) {
-      return HttpResponse.json({error: 'Encrypted values must have a value field'}, {status: 400})
-    }
-  }
-
-  // Success response
-  return HttpResponse.json({
-    success: true,
-    newVersionId: body.currentVersionId + 1,
-  })
+  return HttpResponse.json({json: {success: true, key: body.json.logLevelKey}})
 })
 
 export const server = setupServer(
   metadataHandler,
   environmentsHandler,
   getByKeyHandler,
-  setDefaultHandler,
+  configsUpdateHandler,
+  flagsUpdateHandler,
+  logLevelsUpdateHandler,
 )
