@@ -112,6 +112,15 @@ describe('create', () => {
       .it('shows an error when provided a default and an env-var', () => {
         // Error assertion done in catch block
       })
+
+    test
+      .command(['create', 'brand.new.string', '--type=string', '--no-interactive'])
+      .catch((error) => {
+        expect(error.message).to.contain(`No value provided for`)
+      })
+      .it('errors when no value is provided in non-interactive mode', () => {
+        // Error assertion done in catch block
+      })
   })
 
   describe('type=int', () => {

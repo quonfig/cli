@@ -127,6 +127,8 @@ Or edit the JSON config file directly for complex targeting rules:
 
           configValue = confidentialValueResult.value
         }
+      } else if (valueInput.error) {
+        return this.err(valueInput.message, valueInput.json)
       } else {
         return
       }

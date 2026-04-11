@@ -35,7 +35,11 @@ const getValue = async ({
   }
 
   if (!key) {
-    const value = desiredValue ?? (await promptForValue({allowBlank, message}))
+    if (desiredValue !== undefined) {
+      return success(desiredValue)
+    }
+
+    const value = await promptForValue({allowBlank, message})
 
     if (value === undefined || value === null) {
       return noop()
