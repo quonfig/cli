@@ -1,14 +1,12 @@
 import {Config} from '@oclif/core/lib/interfaces/index.js'
 
 import Create from './commands/create.js'
-import Download from './commands/download.js'
 import GenerateNewHexKey from './commands/generate-new-hex-key.js'
 import Get from './commands/get.js'
 import Info from './commands/info.js'
 import List from './commands/list.js'
 import Mcp from './commands/mcp.js'
 import Override from './commands/override.js'
-import Serve from './commands/serve.js'
 import SetDefault from './commands/set-default.js'
 import {APICommand} from './index.js'
 import getString from './ui/get-string.js'
@@ -25,14 +23,12 @@ const convertToKebabCase = (text: string) =>
 type SuggestedCommand = {
   command:
     | typeof Create
-    | typeof Download
     | typeof GenerateNewHexKey
     | typeof Get
     | typeof Info
     | typeof List
     | typeof Mcp
     | typeof Override
-    | typeof Serve
     | typeof SetDefault
   description: string
   displayCommandName: string
@@ -46,11 +42,9 @@ const commands: SuggestedCommand[] = [
   Create,
   Get,
   Info,
-  Download,
   Mcp,
   Override,
   List,
-  Serve,
 ].map((command): SuggestedCommand => {
   const id = convertToKebabCase(command.name)
   return {

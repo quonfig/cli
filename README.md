@@ -27,7 +27,6 @@ USAGE
 <!-- commands -->
 * [`qfg config-schema`](#qfg-config-schema)
 * [`qfg create NAME`](#qfg-create-name)
-* [`qfg download`](#qfg-download)
 * [`qfg generate`](#qfg-generate)
 * [`qfg generate-new-hex-key`](#qfg-generate-new-hex-key)
 * [`qfg get [NAME]`](#qfg-get-name)
@@ -41,7 +40,10 @@ USAGE
 * [`qfg override [NAME]`](#qfg-override-name)
 * [`qfg pull`](#qfg-pull)
 * [`qfg schema NAME`](#qfg-schema-name)
-* [`qfg serve DATA-FILE`](#qfg-serve-data-file)
+* [`qfg sdk-key`](#qfg-sdk-key)
+* [`qfg sdk-key create`](#qfg-sdk-key-create)
+* [`qfg sdk-key list`](#qfg-sdk-key-list)
+* [`qfg sdk-key revoke KEYID`](#qfg-sdk-key-revoke-keyid)
 * [`qfg set-default [NAME]`](#qfg-set-default-name)
 * [`qfg set-rollout [NAME]`](#qfg-set-rollout-name)
 * [`qfg sync`](#qfg-sync)
@@ -152,59 +154,26 @@ EXAMPLES
 
 _See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/create.ts)_
 
-## `qfg download`
-
-Download a Datafile for a given environment
-
-```
-USAGE
-  $ qfg download [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--environment <value>]
-    [--sdk-key <value>]
-
-FLAGS
-  --environment=<value>  environment to download
-  --sdk-key=<value>      SDK key for authentication (uses legacy download endpoint)
-
-GLOBAL FLAGS
-  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
-      --[no-]interactive   Force interactive mode
-      --json               Format output as json.
-      --no-color           Do not colorize output
-      --verbose            Verbose output
-
-DESCRIPTION
-  Download a Datafile for a given environment
-
-  You can serve a datafile using the `serve` command.
-
-EXAMPLES
-  $ qfg download --environment=test
-
-  $ qfg download --environment=test --sdk-key=YOUR_SDK_KEY
-```
-
-_See code: [src/commands/download.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/download.ts)_
-
 ## `qfg generate`
 
 Generate type definitions for your Quonfig configuration
 
 ```
 USAGE
-  $ qfg generate [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [-o <value>] [--targets
+  $ qfg generate [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [-o <value>] [--targets
     <value>]
 
 FLAGS
   -o, --output-directory=<value>  Override the output directory for generated files
+      --dir=<value>               Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var)
       --targets=<value>           [default: react-ts] Determines for language/framework to generate code for (node-ts,
                                   react-ts)
 
 GLOBAL FLAGS
-  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
-      --[no-]interactive   Force interactive mode
-      --json               Format output as json.
-      --no-color           Do not colorize output
-      --verbose            Verbose output
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
 
 DESCRIPTION
   Generate type definitions for your Quonfig configuration
@@ -649,19 +618,13 @@ EXAMPLES
 
 _See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/schema.ts)_
 
-## `qfg serve DATA-FILE`
+## `qfg sdk-key`
 
-Serve a datafile on a local port
+Manage SDK keys for your workspace
 
 ```
 USAGE
-  $ qfg serve DATA-FILE [--json] [--interactive] [--no-color] [--verbose] [--port <value>]
-
-ARGUMENTS
-  DATA-FILE  file to read
-
-FLAGS
-  --port=<value>  [default: 3099] port to serve on
+  $ qfg sdk-key [--json] [--interactive] [--no-color] [--verbose]
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -670,20 +633,105 @@ GLOBAL FLAGS
   --verbose           Verbose output
 
 DESCRIPTION
-  Serve a datafile on a local port
-
-  You can download a datafile using the `download` command.
-
-  You'll need to update your JavaScript (or React) client to point to this server.
-
-  e.g. `endpoints: ["http://localhost:3099"],`
-
+  Manage SDK keys for your workspace
 
 EXAMPLES
-  $ qfg serve ./quonfig.test.588.config.json --port=3099
+  $ qfg sdk-key list
+
+  $ qfg sdk-key create --environment production --type server
+
+  $ qfg sdk-key revoke <key-id>
 ```
 
-_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/serve.ts)_
+_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key.ts)_
+
+## `qfg sdk-key create`
+
+Create a new SDK key
+
+```
+USAGE
+  $ qfg sdk-key create [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [-e <value>] [-t
+    server|browser]
+
+FLAGS
+  -e, --environment=<value>  Environment name (e.g. production, staging)
+  -t, --type=<option>        Key type: server (backend) or browser (frontend)
+                             <options: server|browser>
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Create a new SDK key
+
+EXAMPLES
+  $ qfg sdk-key create --environment production --type server
+
+  $ qfg sdk-key create --environment staging --type browser
+```
+
+_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key/create.ts)_
+
+## `qfg sdk-key list`
+
+List SDK keys for your workspace
+
+```
+USAGE
+  $ qfg sdk-key list [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [-e <value>]
+
+FLAGS
+  -e, --environment=<value>  Filter by environment name
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  List SDK keys for your workspace
+
+EXAMPLES
+  $ qfg sdk-key list
+
+  $ qfg sdk-key list --environment production
+```
+
+_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key/list.ts)_
+
+## `qfg sdk-key revoke KEYID`
+
+Revoke an SDK key by its ID
+
+```
+USAGE
+  $ qfg sdk-key revoke KEYID [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+
+ARGUMENTS
+  KEYID  ID of the SDK key to revoke
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Revoke an SDK key by its ID
+
+EXAMPLES
+  $ qfg sdk-key revoke a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key/revoke.ts)_
 
 ## `qfg set-default [NAME]`
 
