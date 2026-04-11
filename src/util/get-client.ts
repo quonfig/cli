@@ -4,7 +4,7 @@ import {APICommand} from '../index.js'
 import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
-import {getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
+import {getActiveProfile, loadAuthConfig, loadTokens, resolveWorkspaceId} from '../util/token-storage.js'
 import {getValidAccessToken} from '../util/get-valid-token.js'
 import version from '../version.js'
 
@@ -50,19 +50,43 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
       command.error('Session expired. Please run `qfg login` to re-authenticate.', {exit: 401})
     }
 
-    // Get the active profile to find the workspace
-    const activeProfile = getActiveProfile(profile)
-    const profileData =
-      authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
+    // Resolve workspace: --workspace/QUONFIG_WORKSPACE (slug) → QUONFIG_PROFILE (profile name) → default
+    const workspaceSlugOverride = profile ?? process.env.QUONFIG_WORKSPACE
+    const profileNameOverride = process.env.QUONFIG_PROFILE
 
-    command.verboseLog('Profile lookup', {
-      activeProfile,
-      hasProfileData: Boolean(profileData),
-      workspaceId: profileData?.workspace,
-    })
+    if (workspaceSlugOverride) {
+      // Try slug resolution first, then fall back to treating it as a profile name
+      const resolved = resolveWorkspaceId(authConfig, workspaceSlugOverride)
+      if (resolved) {
+        workspaceId = resolved
+        command.verboseLog('Workspace lookup', {source: 'slug', slug: workspaceSlugOverride, workspaceId})
+      } else {
+        const profileData = authConfig.profiles[workspaceSlugOverride]
+        if (profileData) {
+          workspaceId = profileData.workspace
+          command.verboseLog('Workspace lookup', {source: 'profile-name', profile: workspaceSlugOverride, workspaceId})
+        } else {
+          command.error(
+            `Workspace '${workspaceSlugOverride}' not found. Run \`qfg workspace switch\` to select and save a workspace.`,
+            {exit: 1},
+          )
+        }
+      }
+    } else {
+      const activeProfile = getActiveProfile(profileNameOverride)
+      const profileData =
+        authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
 
-    if (profileData) {
-      workspaceId = profileData.workspace
+      command.verboseLog('Workspace lookup', {
+        source: 'default-profile',
+        activeProfile,
+        hasProfileData: Boolean(profileData),
+        workspaceId: profileData?.workspace,
+      })
+
+      if (profileData) {
+        workspaceId = profileData.workspace
+      }
     }
   }
 

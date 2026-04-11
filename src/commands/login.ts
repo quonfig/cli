@@ -16,7 +16,8 @@ export default class Login extends BaseCommand {
   static flags = {
     profile: Flags.string({
       char: 'p',
-      description: 'Profile name to create or update (defaults to "default")',
+      description: 'Profile name to save credentials under (advanced; defaults to "default")',
+      hidden: true,
     }),
   }
 
@@ -77,6 +78,8 @@ export default class Login extends BaseCommand {
     let workspaceName: string | undefined
     let workspaceSlug: string | undefined
     let organizationName: string | undefined
+    let organizationId: string | undefined
+    let multipleWorkspacesAvailable = false
     try {
       const apiUrl = getApiUrl()
       this.verboseLog('Resolving workspace...', {apiUrl, orgId})
@@ -93,17 +96,15 @@ export default class Login extends BaseCommand {
         type WorkspaceEntry = {workspaceId: string; workspaceSlug: string; workosOrgId: string; organizationName: string}
         const body = await res.json() as {json?: WorkspaceEntry[]}
         const allWorkspaces = (body.json ?? body) as unknown as WorkspaceEntry[]
-        const orgWorkspaces = Array.isArray(allWorkspaces)
-          ? allWorkspaces.filter((w) => w.workosOrgId === orgId)
-          : []
-        const candidates = orgWorkspaces.length > 0 ? orgWorkspaces : (Array.isArray(allWorkspaces) ? allWorkspaces : [])
+        const candidates = Array.isArray(allWorkspaces) ? allWorkspaces : []
+        multipleWorkspacesAvailable = candidates.length > 1
 
         let match: WorkspaceEntry | undefined
         if (candidates.length === 1) {
           match = candidates[0]
         } else if (candidates.length > 1) {
           const chosen = await select({
-            choices: candidates.map((w) => ({name: w.workspaceSlug, value: w.workspaceId})),
+            choices: candidates.map((w) => ({name: `${w.organizationName} / ${w.workspaceSlug}`, value: w.workspaceId})),
             message: 'Select workspace:',
           })
           match = candidates.find((w) => w.workspaceId === chosen)
@@ -114,6 +115,7 @@ export default class Login extends BaseCommand {
           workspaceName = match.workspaceSlug
           workspaceSlug = match.workspaceSlug
           organizationName = match.organizationName
+          organizationId = match.workosOrgId
           this.verboseLog('Resolved workspace', {workspaceId, workspaceName, workspaceSlug, organizationName})
         }
       } else {
@@ -138,14 +140,10 @@ export default class Login extends BaseCommand {
           workspace: workspaceId || orgId || 'unknown',
           workspaceName: workspaceName || (orgId ? `org:${orgId}` : undefined),
           workspaceSlug,
+          organizationName,
         },
       },
     })
-
-    this.log(`\nProfile '${profileName}' configured.`)
-    if (shouldSetDefault) {
-      this.log('Set as default profile.')
-    }
 
     this.log('\nSuccessfully logged in!')
     if (userEmail) {
@@ -153,21 +151,27 @@ export default class Login extends BaseCommand {
     }
 
     if (workspaceName) {
-      this.log(`Workspace: ${workspaceName} (${workspaceId})`)
-      if (organizationName) {
-        this.log(`Organization: ${organizationName}`)
+      const orgPrefix = organizationName ? `${organizationName} / ` : ''
+      this.log(`Workspace:    ${orgPrefix}${workspaceName}`)
+      if (workspaceId) {
+        this.log(`              (${workspaceId})`)
       }
     } else if (orgId) {
       this.log(`Organization: ${orgId}`)
     }
 
+    if (multipleWorkspacesAvailable) {
+      this.log(`\nTo switch workspaces: qfg workspace switch`)
+    }
+
     return {
       email: userEmail,
-      organizationId: orgId,
-      profile: profileName,
+      organizationId: organizationId || orgId,
+      organizationName,
       success: true,
       userId: user.id,
       workspaceId,
+      workspaceSlug,
     }
   }
 }

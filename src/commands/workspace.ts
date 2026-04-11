@@ -4,7 +4,7 @@ import {BaseCommand} from '../index.js'
 import {getActiveProfile, loadAuthConfig} from '../util/token-storage.js'
 
 export default class Workspace extends BaseCommand {
-  static description = 'Display current workspace. To switch workspaces, run `qfg login --profile <name>`.'
+  static description = 'Show the current workspace'
 
   static examples = ['<%= config.bin %> <%= command.id %>']
 
@@ -12,41 +12,30 @@ export default class Workspace extends BaseCommand {
     const authConfig = await loadAuthConfig()
 
     if (!authConfig || Object.keys(authConfig.profiles).length === 0) {
-      return this.err('Not logged in. Please run `qfg login` first.')
+      return this.err('Not logged in. Run `qfg login` first.')
     }
 
-    // Get the active profile
-    const activeProfile = getActiveProfile()
-    const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
+    const activeProfileName = getActiveProfile()
+    const profile =
+      authConfig.profiles[activeProfileName] || authConfig.profiles[authConfig.defaultProfile || 'default']
 
     if (!profile) {
-      return this.err('No active profile found. Please run `qfg login` first.')
+      return this.err('No workspace configured. Run `qfg login` first.')
     }
 
-    this.log(`Active profile: ${activeProfile}`)
-    this.log(`Workspace: ${profile.workspaceName || profile.workspace}`)
+    const workspaceSlug = profile.workspaceSlug || profile.workspaceName || profile.workspace
+    const orgLine = profile.organizationName ? `${profile.organizationName} / ` : ''
 
-    // Show all profiles if more than one
-    const profileNames = Object.keys(authConfig.profiles)
-    if (profileNames.length > 1) {
-      this.log('\nAll profiles:')
-      for (const name of profileNames) {
-        const p = authConfig.profiles[name]
-        const marker = name === activeProfile ? ' (active)' : ''
-        this.log(`  ${name}: ${p.workspaceName || p.workspace}${marker}`)
-      }
-
-      this.log('\nTo switch, use: qfg login --profile <name>')
-      this.log('To change default: qfg profile')
-    }
+    this.log(`Workspace:    ${orgLine}${workspaceSlug}`)
+    this.log(`ID:           ${profile.workspace}`)
+    this.log(`\nTo switch:    qfg workspace switch`)
+    this.log(`To pin in a project, add to .env:`)
+    this.log(`  QUONFIG_WORKSPACE=${workspaceSlug}`)
 
     return {
-      activeProfile,
-      profiles: Object.fromEntries(
-        profileNames.map((name) => [name, authConfig.profiles[name]]),
-      ),
+      organizationName: profile.organizationName,
       workspace: profile.workspace,
-      workspaceName: profile.workspaceName,
+      workspaceSlug,
     }
   }
 }

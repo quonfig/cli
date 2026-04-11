@@ -106,10 +106,17 @@ export abstract class BaseCommand extends Command {
 export abstract class APICommand extends BaseCommand {
   static baseFlags = {
     ...globalFlags,
+    workspace: Flags.string({
+      char: 'w',
+      description: 'Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)',
+      helpGroup: 'GLOBAL',
+      required: false,
+    }),
     profile: Flags.string({
       char: 'p',
-      description: 'Profile to use (defaults to ENV var QUONFIG_PROFILE or "default")',
+      description: 'Deprecated: use --workspace instead',
       helpGroup: 'GLOBAL',
+      hidden: true,
       required: false,
     }),
   }
@@ -136,7 +143,7 @@ export abstract class APICommand extends BaseCommand {
 
     const {flags} = await this.parse()
 
-    this.rawApiClient = await rawGetClient(this, undefined, flags.profile)
+    this.rawApiClient = await rawGetClient(this, undefined, flags.workspace ?? flags.profile)
 
     // For JWT-based auth, we'll need to get environment info from the token
     // For now, set a placeholder - this should be enhanced later

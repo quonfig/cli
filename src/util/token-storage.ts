@@ -31,8 +31,23 @@ export interface AuthConfig {
       workspace: string
       workspaceName?: string
       workspaceSlug?: string
+      organizationName?: string
     }
   }
+}
+
+/**
+ * Find a workspace ID by slug across all saved profiles.
+ * Used to resolve QUONFIG_WORKSPACE and --workspace flag values.
+ */
+export const resolveWorkspaceId = (config: AuthConfig, slug: string): string | undefined => {
+  for (const profile of Object.values(config.profiles)) {
+    if (profile.workspaceSlug === slug || profile.workspaceName === slug) {
+      return profile.workspace
+    }
+  }
+
+  return undefined
 }
 
 const ensureQuonfigDir = async (options?: TokenStorageOptions) => {
@@ -84,6 +99,10 @@ export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageO
       configContent += `workspace_slug = ${profileData.workspaceSlug}\n`
     }
 
+    if (profileData.organizationName) {
+      configContent += `organization_name = ${profileData.organizationName}\n`
+    }
+
     configContent += '\n'
   }
 
@@ -117,6 +136,7 @@ export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<Aut
 
       const workspaceMatch = block.match(/workspace\s*=\s*([^\s#]+)(?:\s*#\s*(.+))?/)
       const slugMatch = block.match(/workspace_slug\s*=\s*(\S+)/)
+      const orgMatch = block.match(/organization_name\s*=\s*(.+)/)
 
       if (!workspaceMatch) continue
 
@@ -124,6 +144,7 @@ export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<Aut
         workspace: workspaceMatch[1],
         workspaceName: workspaceMatch[2]?.trim(),
         workspaceSlug: slugMatch?.[1]?.trim(),
+        organizationName: orgMatch?.[1]?.trim(),
       }
     }
 

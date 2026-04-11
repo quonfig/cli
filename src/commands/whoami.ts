@@ -46,21 +46,22 @@ export default class Whoami extends BaseCommand {
     }
 
     // Display user information
-    this.log(`Logged in as: ${userEmail || 'Unknown'}`)
-    this.log(`Active profile: ${activeProfile}`)
-    const workspaceDisplay = profile.workspaceName
-      ? `${profile.workspaceName} (${profile.workspace})`
+    const workspaceSlug = profile.workspaceSlug || profile.workspaceName
+    const orgPrefix = profile.organizationName ? `${profile.organizationName} / ` : ''
+    const workspaceDisplay = workspaceSlug
+      ? `${orgPrefix}${workspaceSlug} (${profile.workspace})`
       : profile.workspace
-    this.log(`Active workspace: ${workspaceDisplay}`)
+
+    this.log(`Logged in as: ${userEmail || 'Unknown'}`)
+    this.log(`Workspace:    ${workspaceDisplay}`)
 
     return {
       email: userEmail,
       loggedIn: true,
-      organizationId: orgId || profile.workspace,
-      profile: activeProfile,
+      organizationName: profile.organizationName,
       userId: tokens.userId,
       workspace: profile.workspace,
-      workspaceName: profile.workspaceName,
+      workspaceSlug,
     }
   }
 }
