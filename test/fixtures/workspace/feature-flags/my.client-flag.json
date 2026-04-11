@@ -1,0 +1,15 @@
+{
+  "key": "my.client-flag",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "sendToClientSdk": true,
+  "default": {
+    "rules": [
+      {
+        "criteria": [],
+        "value": { "type": "bool", "value": true }
+      }
+    ]
+  },
+  "environments": []
+}

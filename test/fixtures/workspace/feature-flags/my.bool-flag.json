@@ -1,0 +1,25 @@
+{
+  "key": "my.bool-flag",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "sendToClientSdk": true,
+  "default": {
+    "rules": [
+      {
+        "criteria": [],
+        "value": { "type": "bool", "value": false }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [],
+          "value": { "type": "bool", "value": true }
+        }
+      ]
+    }
+  ]
+}

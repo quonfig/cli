@@ -9,9 +9,9 @@ import {BaseGenerator} from '../codegen/code-generators/base-generator.js'
 import {BaseTypescriptGenerator} from '../codegen/code-generators/base-typescript-generator.js'
 import {NodeTypeScriptGenerator} from '../codegen/code-generators/node-typescript-generator.js'
 import {ReactTypeScriptGenerator} from '../codegen/code-generators/react-typescript-generator.js'
-import {ConfigDownloader} from '../codegen/config-downloader.js'
+import {LocalConfigReader} from '../codegen/local-config-reader.js'
 import {type ConfigFile, SupportedLanguage} from '../codegen/types.js'
-import {APICommand} from '../index.js'
+import {BaseCommand} from '../index.js'
 import {createFileManager} from '../util/file-manager.js'
 
 // base types
@@ -80,7 +80,7 @@ const DEFAULT_CONFIG: {
   },
 }
 
-export default class Generate extends APICommand {
+export default class Generate extends BaseCommand {
   /* eslint-disable no-irregular-whitespace */
   static description = `You can use the default type-generation configuration, or by provide your own via a quonfig.config.json file:
 
@@ -124,6 +124,10 @@ Example quonfig.config.json:
   ]
 
   static flags = {
+    dir: Flags.string({
+      description: 'Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var)',
+      env: 'QUONFIG_DIR',
+    }),
     'output-directory': Flags.string({
       char: 'o',
       description: 'Override the output directory for generated files',
@@ -140,23 +144,28 @@ Example quonfig.config.json:
     const {flags} = await this.parse(Generate)
 
     this.verboseLog('=== GENERATE COMMAND START ===')
-    this.verboseLog(`Base API URL: ${process.env.QUONFIG_API_URL || 'Default'}`)
 
     try {
+      // Resolve workspace directory
+      const dir = flags.dir
+      if (!dir) {
+        this.error('No directory specified. Run `qfg pull` first or pass --dir <path>.')
+      }
+
       // Look for and read local quonfig.config.json file
       const localConfig = await this.readLocalConfig(flags['output-directory'])
 
-      // Use tarets flag override, otherwise fall back to local config
+      // Use targets flag override, otherwise fall back to local config
       const targets = flags.targets.split(',') || Object.keys(localConfig)
 
       this.verboseLog(`Language(s): ${targets.join(', ')}`)
 
-      // Download the configuration using the APICommand's client
-      const downloader = new ConfigDownloader(this)
+      // Read configuration from local directory
+      const reader = new LocalConfigReader(dir)
 
-      this.verboseLog('Downloading config...')
-      const configFile = await downloader.downloadConfig()
-      this.verboseLog('Config download complete.')
+      this.verboseLog(`Reading config from ${dir}...`)
+      const configFile = await reader.read()
+      this.verboseLog(`Config read complete. Found ${configFile.configs.length} configs.`)
 
       const fileCreationPromises = []
 

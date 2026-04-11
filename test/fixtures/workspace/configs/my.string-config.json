@@ -1,0 +1,25 @@
+{
+  "key": "my.string-config",
+  "type": "config",
+  "valueType": "string",
+  "sendToClientSdk": false,
+  "default": {
+    "rules": [
+      {
+        "criteria": [],
+        "value": { "type": "string", "value": "hello world" }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [],
+          "value": { "type": "string", "value": "prod value" }
+        }
+      ]
+    }
+  ]
+}

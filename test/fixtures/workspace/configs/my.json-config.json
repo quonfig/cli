@@ -1,0 +1,16 @@
+{
+  "key": "my.json-config",
+  "type": "config",
+  "valueType": "json",
+  "sendToClientSdk": false,
+  "schemaKey": "my-schema",
+  "default": {
+    "rules": [
+      {
+        "criteria": [],
+        "value": { "type": "json", "value": "{\"name\":\"example\",\"count\":42}" }
+      }
+    ]
+  },
+  "environments": []
+}
