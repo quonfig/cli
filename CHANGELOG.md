@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.0.2 - 2026-03-31
+## 0.0.6 - 2026-04-11
+
+- feat: workspace-first login UX — picker shows all workspaces across orgs with `Organization / workspace` format
+- feat: `qfg workspace switch` — switch workspace without re-authenticating
+- feat: `QUONFIG_WORKSPACE=slug` env var and `--workspace` flag to pin workspace per project or per command
+- feat: `qfg workspace` — shows current workspace with org name and hints for switching
+- chore: `qfg profile` hidden and redirected to `qfg workspace switch` (deprecated)
+- chore: `--profile` flag hidden on all commands; use `--workspace` instead
+
+## 0.0.5 - 2026-03-31
 
 - feat: `qfg init` — initialize or update a Quonfig workspace. Creates directory structure, managed docs (README.md, CLAUDE.md, AGENTS.md), `quonfig.schema.json`, git repo, and pre-commit hook. Idempotent — safe to re-run for updates.
   - `--samples` / `--no-samples` to control example config generation
