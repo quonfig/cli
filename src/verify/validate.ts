@@ -456,12 +456,22 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         segmentKeys.add(config.key);
       }
 
-      if (config.type === "log_level" && config.valueType !== "log_level") {
-        issues.push({
-          file: relPath,
-          message: `Log level must have valueType "log_level", got "${config.valueType}"`,
-          severity: "error",
-        });
+      if (config.type === "log_level") {
+        if (config.valueType !== "log_level") {
+          issues.push({
+            file: relPath,
+            message: `Log level must have valueType "log_level", got "${config.valueType}"`,
+            severity: "error",
+          });
+        }
+        if (!config.key.startsWith("log-level.")) {
+          issues.push({
+            file: relPath,
+            message: `Log level key "${config.key}" must start with "log-level."`,
+            severity: "error",
+            suggestion: `Rename to "log-level.${config.key}" (and rename the file to "log-level.${config.key}.json")`,
+          });
+        }
       }
 
       // Validate environment IDs are slugs, not UUIDs
@@ -750,8 +760,18 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
       segmentKeys.add(config.key);
     }
 
-    if (config.type === "log_level" && config.valueType !== "log_level") {
-      issues.push({ file: relPath, message: `Log level must have valueType "log_level", got "${config.valueType}"`, severity: "error" });
+    if (config.type === "log_level") {
+      if (config.valueType !== "log_level") {
+        issues.push({ file: relPath, message: `Log level must have valueType "log_level", got "${config.valueType}"`, severity: "error" });
+      }
+      if (!config.key.startsWith("log-level.")) {
+        issues.push({
+          file: relPath,
+          message: `Log level key "${config.key}" must start with "log-level."`,
+          severity: "error",
+          suggestion: `Rename to "log-level.${config.key}" (and rename the file to "log-level.${config.key}.json")`,
+        });
+      }
     }
 
     validateEnvironmentIds(config.environments, relPath, issues);

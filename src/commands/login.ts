@@ -160,8 +160,11 @@ export default class Login extends BaseCommand {
       this.log(`Organization: ${orgId}`)
     }
 
-    if (multipleWorkspacesAvailable) {
-      this.log(`\nTo switch workspaces: qfg workspace switch`)
+    if (multipleWorkspacesAvailable && workspaceSlug) {
+      this.log(`\nYou have multiple workspaces. To pin this project to ${workspaceSlug},`)
+      this.log(`add this to your project's .env file:`)
+      this.log(`  QUONFIG_WORKSPACE=${workspaceSlug}`)
+      this.log(`\nTo switch your default workspace: qfg workspace switch`)
     }
 
     return {
