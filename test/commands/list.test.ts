@@ -82,4 +82,11 @@ describe('list', () => {
       expect(ctx.stdout).to.not.contain(exampleSegment)
       expect(ctx.stdout).to.contain(exampleConfig)
     })
+
+  test
+    .stdout()
+    .command(['flag:list'])
+    .it('supports `flag list` alias', (ctx) => {
+      expect(ctx.stdout).to.contain(exampleFF)
+    })
 })

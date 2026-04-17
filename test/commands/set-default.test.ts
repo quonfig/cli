@@ -28,6 +28,13 @@ describe('set-default', () => {
 
     test
       .stdout()
+      .command(['toggle', 'feature-flag.simple', '--environment=Development', '--value=true', '--confirm'])
+      .it('supports `toggle` alias', (ctx) => {
+        expect(ctx.stdout).to.contain('Successfully changed default to `true`')
+      })
+
+    test
+      .stdout()
       .command([
         'set-default',
         'feature-flag.simple',

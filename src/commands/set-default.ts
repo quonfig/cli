@@ -18,6 +18,8 @@ import secretFlags, {Secret, parsedSecretFlags} from '../util/secret-flags.js'
 type ValueOrEnvVar = {envVar: string; value?: never} | {envVar?: never; value: string}
 
 export default class SetDefault extends APICommand {
+  static aliases = ['toggle']
+
   static args = {...nameArg}
 
   static description = `Set the unconditional fallback value for a flag or config in a specific environment.

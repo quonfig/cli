@@ -161,6 +161,22 @@ No evaluations found for the past 24 hours
       })
   })
 
+  describe('aliases', () => {
+    test
+      .stdout()
+      .command(['flag:show', keyWithEvaluations])
+      .it('supports `flag show` alias', (ctx) => {
+        expect(ctx.stdout).to.contain(keyWithEvaluations)
+      })
+
+    test
+      .stdout()
+      .command(['flag:info', keyWithEvaluations])
+      .it('supports `flag info` alias', (ctx) => {
+        expect(ctx.stdout).to.contain(keyWithEvaluations)
+      })
+  })
+
   describe('when the key does not exist', () => {
     test
       .command(['info', keyDoesNotExist])

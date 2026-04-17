@@ -9,6 +9,8 @@ import isInteractive from '../util/is-interactive.js'
 import nameArg from '../util/name-arg.js'
 
 export default class Info extends APICommand {
+  static aliases = ['flag:show', 'flag:info']
+
   static args = {...nameArg}
 
   static description = `Show current values, rules, and evaluation stats for a flag or config.

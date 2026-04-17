@@ -16,6 +16,8 @@ interface ConfigMetadataResponse {
 }
 
 export default class List extends APICommand {
+  static aliases = ['flag:list']
+
   static description = `Show keys for your config/feature flags/etc.
 
   All types are returned by default. If you pass one or more type flags (e.g. --configs), only those types will be returned`
