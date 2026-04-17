@@ -81,7 +81,10 @@
     "plugins": [],
     "topicSeparator": " ",
     "helpClass": "./dist/help",
-    "stacktrace": false
+    "stacktrace": false,
+    "hooks": {
+      "init": "./dist/hooks/init/friction-log"
+    }
   },
   "scripts": {
     "build": "shx rm -rf dist && tsc -b",
