@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.8 - 2026-04-17
+
+- fix: `qfg get` sends the environment slug instead of the DB UUID to `/api/v1/evaluations/evaluate` (rename `environmentId` → `environmentName` on that endpoint). Fixes 500s on value evaluation.
+
 ## 0.0.6 - 2026-04-11
 
 - feat: workspace-first login UX — picker shows all workspaces across orgs with `Organization / workspace` format

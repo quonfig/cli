@@ -115,7 +115,7 @@ export default class Get extends APICommand {
 
     const request = await this.apiClient.post('/api/v1/evaluations/evaluate', {
       workspaceId: this.workspaceId,
-      environmentId: environment.id,
+      environmentName: environment.name,
       context: {},
     })
 
