@@ -47,7 +47,6 @@ export const SAMPLE_FILES: SampleFile[] = [
       key: 'example.dark-mode',
       type: 'feature_flag',
       valueType: 'bool',
-      sendToClientSdk: true,
       description: 'Enable dark mode UI.',
       default: {
         rules: [

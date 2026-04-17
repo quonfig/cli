@@ -160,7 +160,7 @@ const StoredConfigSchema = z.object({
   valueType: ValueTypeSchema,
   name: z.string().optional(),
   description: z.string().optional(),
-  sendToClientSdk: z.boolean().default(false),
+  sendToClientSdk: z.boolean().optional(),
   schemaKey: z.string().optional(),
   accessLevel: z.string().optional(),
   protection: z.string().optional(),
@@ -239,6 +239,31 @@ const VALUE_REQUIRED_OPERATORS = new Set([
   "IN_INT_RANGE",
   "LOOKUP_KEY_IN", "LOOKUP_KEY_NOT_IN",
 ]);
+
+/**
+ * Reject `sendToClientSdk` on feature_flag rows — the field is config-only.
+ * Checks the raw parsed JSON so the key is forbidden regardless of value
+ * (true or false). Segments are handled separately on the parsed config.
+ */
+function checkFeatureFlagForbiddenFields(
+  parsed: unknown,
+  file: string,
+  issues: ValidationIssue[],
+): void {
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    (parsed as { type?: unknown }).type === "feature_flag" &&
+    Object.prototype.hasOwnProperty.call(parsed, "sendToClientSdk")
+  ) {
+    issues.push({
+      file,
+      message: `feature_flag must not set "sendToClientSdk" — this field is only valid on config rows`,
+      severity: "error",
+      suggestion: `Remove the "sendToClientSdk" field from this feature_flag JSON`,
+    });
+  }
+}
 
 // ── Validation from filesystem ──────────────────────────────────────────
 
@@ -396,6 +421,8 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         stats.schemas++;
         continue;
       }
+
+      checkFeatureFlagForbiddenFields(parsed, relPath, issues);
 
       // Validate against StoredConfigSchema
       const result = StoredConfigSchema.safeParse(parsed);
@@ -713,6 +740,8 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
       allSchemaFiles.push({key: schemaKey, file: relPath});
       continue;
     }
+
+    checkFeatureFlagForbiddenFields(parsed, relPath, issues);
 
     const result = StoredConfigSchema.safeParse(parsed);
     if (!result.success) {

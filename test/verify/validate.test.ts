@@ -442,4 +442,167 @@ describe('validate', () => {
     expect(result.valid).to.be.true
     expect(result.issues).to.be.empty
   })
+
+  describe('feature_flag sendToClientSdk rejection', () => {
+    it('errors when a feature_flag has sendToClientSdk=true', () => {
+      const files = new Map<string, string>([
+        [
+          'feature-flags/client-flag.json',
+          JSON.stringify({
+            key: 'client-flag',
+            type: 'feature_flag',
+            valueType: 'bool',
+            sendToClientSdk: true,
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'bool', value: true},
+                },
+              ],
+            },
+            environments: [],
+            variants: [{name: 'On', value: {type: 'bool', value: true}}],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.false
+      const stcIssues = result.issues.filter(
+        (i) => i.file === 'feature-flags/client-flag.json' && i.message.includes('sendToClientSdk'),
+      )
+      expect(stcIssues).to.have.length(1)
+      expect(stcIssues[0].severity).to.equal('error')
+      expect(stcIssues[0].message).to.include('feature_flag')
+    })
+
+    it('errors when a feature_flag has sendToClientSdk=false (key is forbidden regardless of value)', () => {
+      const files = new Map<string, string>([
+        [
+          'feature-flags/also-bad.json',
+          JSON.stringify({
+            key: 'also-bad',
+            type: 'feature_flag',
+            valueType: 'bool',
+            sendToClientSdk: false,
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'bool', value: true},
+                },
+              ],
+            },
+            environments: [],
+            variants: [{name: 'On', value: {type: 'bool', value: true}}],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.false
+      const stcIssues = result.issues.filter((i) => i.message.includes('sendToClientSdk'))
+      expect(stcIssues).to.have.length(1)
+      expect(stcIssues[0].severity).to.equal('error')
+    })
+
+    it('accepts a feature_flag without the sendToClientSdk key', () => {
+      const files = new Map<string, string>([
+        [
+          'feature-flags/ok-flag.json',
+          JSON.stringify({
+            key: 'ok-flag',
+            type: 'feature_flag',
+            valueType: 'bool',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'bool', value: true},
+                },
+              ],
+            },
+            environments: [],
+            variants: [{name: 'On', value: {type: 'bool', value: true}}],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('still allows sendToClientSdk on config rows', () => {
+      const files = new Map<string, string>([
+        [
+          'configs/my-config.json',
+          JSON.stringify({
+            key: 'my-config',
+            type: 'config',
+            valueType: 'string',
+            sendToClientSdk: true,
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'string', value: 'alpha'},
+                },
+              ],
+            },
+            environments: [],
+            variants: [{name: 'A', value: {type: 'string', value: 'alpha'}}],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('rejects a feature_flag fixture file via validateWorkspace', () => {
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-stc-'))
+      try {
+        fs.mkdirSync(path.join(workspace, 'feature-flags'), {recursive: true})
+        fs.writeFileSync(
+          path.join(workspace, 'quonfig.json'),
+          JSON.stringify({environments: []}, null, 2),
+        )
+        fs.writeFileSync(
+          path.join(workspace, 'feature-flags', 'bad-client-flag.json'),
+          JSON.stringify({
+            key: 'bad-client-flag',
+            type: 'feature_flag',
+            valueType: 'bool',
+            sendToClientSdk: true,
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'bool', value: true},
+                },
+              ],
+            },
+            environments: [],
+            variants: [{name: 'On', value: {type: 'bool', value: true}}],
+          }),
+        )
+
+        const result = validateWorkspace(workspace)
+
+        expect(result.valid).to.be.false
+        const stcIssues = result.issues.filter((i) => i.message.includes('sendToClientSdk'))
+        expect(stcIssues).to.have.length(1)
+        expect(stcIssues[0].file).to.equal('feature-flags/bad-client-flag.json')
+      } finally {
+        fs.rmSync(workspace, {recursive: true, force: true})
+      }
+    })
+  })
 })
