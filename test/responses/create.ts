@@ -26,10 +26,19 @@ const flagsCreateHandler = http.post('https://app.quonfig.com/api/v1/flags/creat
   return HttpResponse.json({json: successResponse})
 })
 
+// Capture last create-config payload so tests can assert on the exact request body
+// the CLI sends (not just stdout). Cleared between tests via resetCapturedCreatePayload.
+export let capturedCreateConfigInput: any = null
+
+export function resetCapturedCreateConfigInput(): void {
+  capturedCreateConfigInput = null
+}
+
 // POST /api/v1/configs/create - create configs (oRPC wrapped)
 const configsCreateHandler = http.post('https://app.quonfig.com/api/v1/configs/create', async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
+  capturedCreateConfigInput = input
   const key = input?.config?.key
 
   if (key === 'already.in.use') {

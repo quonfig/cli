@@ -37,7 +37,21 @@ export function mapConfigValueToDto(configValue: ConfigValue, valueType: ConfigV
   } else if (configValue.stringList !== undefined) {
     value = configValue.stringList.values
   } else if (configValue.json !== undefined) {
-    value = configValue.json
+    // ConfigValue.json is wrapped as {json: "<raw JSON string>"} (see coerceIntoType).
+    // The API expects the parsed JSON value, not the wrapper or the raw string —
+    // otherwise the server stores the default as {} (see qfg-c0q).
+    const rawJson = (configValue.json as {json?: unknown}).json
+    if (typeof rawJson === 'string') {
+      try {
+        value = JSON.parse(rawJson)
+      } catch {
+        // Fall back to raw string if somehow it isn't valid JSON — coerceIntoType
+        // should have already rejected this case, so this is defensive only.
+        value = rawJson
+      }
+    } else {
+      value = rawJson ?? configValue.json
+    }
   } else if (configValue.duration !== undefined) {
     value = configValue.duration
   } else if (configValue.intRange !== undefined) {

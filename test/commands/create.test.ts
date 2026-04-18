@@ -1,6 +1,7 @@
 import {expect, test} from '@oclif/test'
 
 import {resetClientCache} from '../../src/util/get-client.js'
+import * as createResponses from '../responses/create.js'
 import {server} from '../responses/create.js'
 import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 
@@ -12,6 +13,7 @@ describe('create', () => {
   afterEach(() => {
     server.resetHandlers()
     resetClientCache()
+    createResponses.resetCapturedCreateConfigInput()
   })
   after(() => {
     server.close()
@@ -230,6 +232,19 @@ describe('create', () => {
       .command(['create', 'brand.new.json', '--type=json', '--value={"key": "value"}'])
       .it('can create a JSON object', (ctx) => {
         expect(ctx.stdout).to.contain(`Created config: brand.new.json`)
+      })
+
+    test
+      .stdout()
+      .command(['create', 'brand.new.json', '--type=json', '--value={"active":false,"cap":0}'])
+      .it('sends the parsed JSON object as the default value (qfg-c0q repro)', () => {
+        const input = createResponses.capturedCreateConfigInput
+        expect(input, 'request body was captured').to.not.equal(null)
+        const defaultValue = input?.config?.default?.rules?.[0]?.value
+        expect(defaultValue).to.deep.equal({
+          type: 'json',
+          value: {active: false, cap: 0},
+        })
       })
 
     test
