@@ -1,7 +1,12 @@
 import {expect} from 'chai'
+import fs from 'node:fs'
+import path from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 import {getSource, listSources, UnknownSourceError} from '../../src/migrate/registry.js'
 import {NotYetImplementedError} from '../../src/migrate/source.js'
+
+const CLI_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 describe('migrate/registry', () => {
   describe('getSource', () => {
@@ -72,6 +77,17 @@ describe('migrate/registry', () => {
 
     it('throws NotYetImplementedError on translate', () => {
       expect(() => source.translate({source: 'launchdarkly', raw: {}})).to.throw(NotYetImplementedError)
+    })
+
+    it('ships a README.md documenting the schema gaps that block implementation', () => {
+      const readmePath = path.join(CLI_ROOT, 'src', 'migrate', 'sources', 'launchdarkly.README.md')
+      expect(fs.existsSync(readmePath), `expected ${readmePath} to exist`).to.equal(true)
+      const contents = fs.readFileSync(readmePath, 'utf8').toLowerCase()
+      expect(contents).to.contain('prerequisite')
+      expect(contents).to.contain('individual')
+      expect(contents).to.contain('privateattributes')
+      expect(contents).to.contain('semver')
+      expect(contents).to.contain('audit')
     })
   })
 
