@@ -45,6 +45,8 @@ To see all current values and rules for a flag:
     '<%= config.bin %> <%= command.id %> my.config.name --env-var=MY_ENV_VAR_NAME --environment=production',
     '# For a percentage rollout, use set-rollout instead:',
     '<%= config.bin %> set-rollout my.flag.name --environment production --true-percent 20',
+    '# For per-user / per-property targeting (e.g. user.email == X), edit JSON directly:',
+    '<%= config.bin %> pull && <%= config.bin %> config-schema',
   ]
 
   static flags = {

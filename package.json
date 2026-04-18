@@ -34,7 +34,7 @@
     "node-forge": "^1.3.1",
     "zod": "^4.1.12"
   },
-  "description": "Quonfig CLI",
+  "description": "Quonfig CLI. For arbitrary targeting rules (email, plan, segment, custom property), run `qfg config-schema` then `qfg pull`.",
   "devDependencies": {
     "@oclif/prettier-config": "^0.2.1",
     "@oclif/test": "^3",
