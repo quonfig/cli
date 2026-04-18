@@ -15,12 +15,7 @@ const LAUNCH_PROD_URL = 'https://api.reforge.com'
 
 const USER = {email: 'a@b', id: '1', type: 'user'}
 
-const CLI_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-)
+const CLI_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, {cwd, encoding: 'utf8'}).trim()
@@ -30,11 +25,7 @@ function logSubjects(dir: string): string[] {
   return git(dir, 'log', '--pretty=format:%s').split('\n').filter(Boolean)
 }
 
-function makeChange(
-  key: string,
-  changedAt: number,
-  value: {type: string; value: unknown},
-) {
+function makeChange(key: string, changedAt: number, value: {type: string; value: unknown}) {
   return {
     changedAt,
     changedBy: USER,
@@ -110,9 +101,7 @@ describe('qfg migrate --from launch --dir ./out (Flow A)', () => {
           projectId: 1,
         }),
       ),
-      http.get(`${LAUNCH_PROD_URL}/api/v1/change-history`, () =>
-        HttpResponse.json({changes, cursor: null}),
-      ),
+      http.get(`${LAUNCH_PROD_URL}/api/v1/change-history`, () => HttpResponse.json({changes, cursor: null})),
     )
   }
 
@@ -145,9 +134,7 @@ describe('qfg migrate --from launch --dir ./out (Flow A)', () => {
     expect(quonfig.environments).to.include.members(['production', 'staging'])
 
     // .qf/import-state.json with source + cursor.
-    const state = JSON.parse(
-      fs.readFileSync(path.join(outDir, '.qf', 'import-state.json'), 'utf8'),
-    )
+    const state = JSON.parse(fs.readFileSync(path.join(outDir, '.qf', 'import-state.json'), 'utf8'))
     expect(state.source).to.equal('launch')
     expect(state.lastProcessedAt).to.equal(1_700_000_000_000)
   })
@@ -160,9 +147,7 @@ describe('qfg migrate --from launch --dir ./out (Flow A)', () => {
     await runMigrate(outDir)
 
     expect(logSubjects(outDir)).to.have.length(1)
-    const flagV1 = JSON.parse(
-      fs.readFileSync(path.join(outDir, 'feature-flags', 'my-feature.json'), 'utf8'),
-    )
+    const flagV1 = JSON.parse(fs.readFileSync(path.join(outDir, 'feature-flags', 'my-feature.json'), 'utf8'))
     expect(flagV1.default.rules[0].value).to.deep.equal({type: 'bool', value: false})
 
     // Second run: Launch reports the same flag flipped to true with a newer changedAt.
@@ -180,15 +165,11 @@ describe('qfg migrate --from launch --dir ./out (Flow A)', () => {
     expect(logSubjects(outDir)).to.have.length(2)
 
     // File content reflects the new value.
-    const flagV2 = JSON.parse(
-      fs.readFileSync(path.join(outDir, 'feature-flags', 'my-feature.json'), 'utf8'),
-    )
+    const flagV2 = JSON.parse(fs.readFileSync(path.join(outDir, 'feature-flags', 'my-feature.json'), 'utf8'))
     expect(flagV2.default.rules[0].value).to.deep.equal({type: 'bool', value: true})
 
     // Cursor advanced.
-    const state = JSON.parse(
-      fs.readFileSync(path.join(outDir, '.qf', 'import-state.json'), 'utf8'),
-    )
+    const state = JSON.parse(fs.readFileSync(path.join(outDir, '.qf', 'import-state.json'), 'utf8'))
     expect(state.lastProcessedAt).to.equal(1_800_000_000_000)
   })
 })

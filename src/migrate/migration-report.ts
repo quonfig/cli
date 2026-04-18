@@ -72,9 +72,7 @@ const renderLossyMappings = (entries: LossyMapping[]): string => {
   const header = '## Lossy mapping list'
   if (entries.length === 0) return `${header}\n\n${NONE}`
   const sorted = [...entries].sort((a, b) => a.legacyKey.localeCompare(b.legacyKey))
-  const lines = sorted.map(
-    (e) => `- \`${e.legacyKey}\` → \`${e.quonfigKey}\` — ${e.reason}`,
-  )
+  const lines = sorted.map((e) => `- \`${e.legacyKey}\` → \`${e.quonfigKey}\` — ${e.reason}`)
   return [header, '', ...lines].join('\n')
 }
 
@@ -131,23 +129,22 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
     sections.push('> **DRY RUN** — no files were written to the workspace during this run.')
   }
 
-  sections.push(`# Migration Report (from ${data.source})`)
   sections.push(
+    `# Migration Report (from ${data.source})`,
     `_Reflects only the changes produced by this run. Re-running overwrites this file._`,
+    renderCounts(data.counts),
+    renderCleanMappings(data.cleanMappings),
+    renderLossyMappings(data.lossyMappings),
+    renderUnsupported(data.unsupportedFeatures),
+    renderEnvironmentMap(data.environmentMap),
+    renderIdentifierMap(data.identifierMap),
+    renderFollowUp(data.followUp),
   )
-  sections.push(renderCounts(data.counts))
-  sections.push(renderCleanMappings(data.cleanMappings))
-  sections.push(renderLossyMappings(data.lossyMappings))
-  sections.push(renderUnsupported(data.unsupportedFeatures))
-  sections.push(renderEnvironmentMap(data.environmentMap))
-  sections.push(renderIdentifierMap(data.identifierMap))
-  sections.push(renderFollowUp(data.followUp))
 
   return sections.join('\n\n') + '\n'
 }
 
-export const migrationReportPath = (outputDir: string): string =>
-  path.join(outputDir, 'MIGRATION_REPORT.md')
+export const migrationReportPath = (outputDir: string): string => path.join(outputDir, 'MIGRATION_REPORT.md')
 
 export const writeMigrationReport = (outputDir: string, data: MigrationReportData): string => {
   fs.mkdirSync(outputDir, {recursive: true})

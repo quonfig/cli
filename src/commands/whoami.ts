@@ -22,13 +22,11 @@ export default class Whoami extends BaseCommand {
 
     // Get email from stored user info or decode JWT
     let userEmail = tokens.userEmail
-    let orgId: string | undefined
 
     if (!userEmail) {
       try {
         const payload = decodeJWT(tokens.accessToken)
         userEmail = payload.email as string
-        orgId = payload.org_id as string
       } catch {
         // If we can't decode the token, continue without email
       }
@@ -48,9 +46,7 @@ export default class Whoami extends BaseCommand {
     // Display user information
     const workspaceSlug = profile.workspaceSlug || profile.workspaceName
     const orgPrefix = profile.organizationName ? `${profile.organizationName} / ` : ''
-    const workspaceDisplay = workspaceSlug
-      ? `${orgPrefix}${workspaceSlug} (${profile.workspace})`
-      : profile.workspace
+    const workspaceDisplay = workspaceSlug ? `${orgPrefix}${workspaceSlug} (${profile.workspace})` : profile.workspace
 
     this.log(`Logged in as: ${userEmail || 'Unknown'}`)
     this.log(`Workspace:    ${workspaceDisplay}`)

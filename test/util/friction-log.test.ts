@@ -13,7 +13,7 @@ import {
 describe('friction-log utils', () => {
   describe('getFrictionLogPath', () => {
     it('returns null when env var is undefined', () => {
-      expect(getFrictionLogPath(undefined)).to.equal(null)
+      expect(getFrictionLogPath()).to.equal(null)
     })
 
     it('returns null for empty string', () => {

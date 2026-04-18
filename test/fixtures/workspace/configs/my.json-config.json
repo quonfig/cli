@@ -8,7 +8,7 @@
     "rules": [
       {
         "criteria": [],
-        "value": { "type": "json", "value": "{\"name\":\"example\",\"count\":42}" }
+        "value": {"type": "json", "value": "{\"name\":\"example\",\"count\":42}"}
       }
     ]
   },

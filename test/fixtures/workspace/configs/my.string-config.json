@@ -7,7 +7,7 @@
     "rules": [
       {
         "criteria": [],
-        "value": { "type": "string", "value": "hello world" }
+        "value": {"type": "string", "value": "hello world"}
       }
     ]
   },
@@ -17,7 +17,7 @@
       "rules": [
         {
           "criteria": [],
-          "value": { "type": "string", "value": "prod value" }
+          "value": {"type": "string", "value": "prod value"}
         }
       ]
     }

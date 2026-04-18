@@ -23,7 +23,7 @@ describe('jsonSchemaToZod', () => {
     const rendered = new ZodToStringMapper().resolveType(schema)
 
     expect(rendered.split(' ').join('')).to.equal(
-      'z.object({mode:z.enum([\'warn\',\'error\']);scope:z.literal("workspace")})',
+      "z.object({mode:z.enum(['warn','error']);scope:z.literal(\"workspace\")})",
     )
   })
 

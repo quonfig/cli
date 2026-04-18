@@ -59,7 +59,13 @@ describe('schema', () => {
 
   test
     .stdout()
-    .command(['schema', 'created.schema', `--set-json-schema=${JSON.stringify(createdSchema)}`, '--protected', '--json'])
+    .command([
+      'schema',
+      'created.schema',
+      `--set-json-schema=${JSON.stringify(createdSchema)}`,
+      '--protected',
+      '--json',
+    ])
     .it('creates a protected schema document', (ctx) => {
       expect(JSON.parse(ctx.stdout)).to.deep.equal({
         commitSha: '0000000000000000000000000000000000000011',
@@ -71,7 +77,13 @@ describe('schema', () => {
 
   test
     .stdout()
-    .command(['schema', 'existing.schema', `--set-json-schema=${JSON.stringify(updatedSchema)}`, '--protected', '--json'])
+    .command([
+      'schema',
+      'existing.schema',
+      `--set-json-schema=${JSON.stringify(updatedSchema)}`,
+      '--protected',
+      '--json',
+    ])
     .it('updates an existing schema document and can move it to protected storage', (ctx) => {
       expect(JSON.parse(ctx.stdout)).to.deep.equal({
         commitSha: '0000000000000000000000000000000000000011',

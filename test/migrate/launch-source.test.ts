@@ -33,9 +33,7 @@ describe('migrate/sources/launch — MigrationSource wiring', () => {
 
     it('rejects when /api/v1/project-environments returns 401', async () => {
       server = setupServer(
-        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () =>
-          new HttpResponse('unauthorized', {status: 401}),
-        ),
+        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () => new HttpResponse('unauthorized', {status: 401})),
       )
       server.listen({onUnhandledRequest: 'error'})
 

@@ -63,4 +63,4 @@ const deleteNotFoundHandler = http.post('https://app.quonfig.com/api/v1/sdkKeys/
 )
 
 export const server = setupServer(listHandler, environmentsHandler, createHandler, deleteHandler)
-export {deleteNotFoundHandler, sdkKeysListResponse, createdKeyResponse}
+export {createdKeyResponse, deleteNotFoundHandler, sdkKeysListResponse}

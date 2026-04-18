@@ -21,10 +21,7 @@ describe('migrate status', () => {
   const writeState = (dir: string, payload: Record<string, unknown>) => {
     const qfDir = path.join(dir, '.qf')
     fs.mkdirSync(qfDir, {recursive: true})
-    fs.writeFileSync(
-      path.join(qfDir, 'import-state.json'),
-      JSON.stringify(payload, null, 2) + '\n',
-    )
+    fs.writeFileSync(path.join(qfDir, 'import-state.json'), JSON.stringify(payload, null, 2) + '\n')
   }
 
   const writeFlag = (dir: string, key: string) => {
@@ -40,10 +37,7 @@ describe('migrate status', () => {
   }
 
   const writeWorkspaceJson = (dir: string, environments: string[]) => {
-    fs.writeFileSync(
-      path.join(dir, 'quonfig.json'),
-      JSON.stringify({environments}, null, 2) + '\n',
-    )
+    fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({environments}, null, 2) + '\n')
   }
 
   describe('when no state file exists', () => {

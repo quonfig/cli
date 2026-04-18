@@ -44,12 +44,16 @@ export class ZodToStringMapper extends ZodBaseMapper {
     return mapper.resolveType(value)
   }
 
-  null() {
-    return 'z.null()'
-  }
-
   literal(value: string | number | boolean | null) {
     return `z.literal(${JSON.stringify(value)})`
+  }
+
+  never() {
+    return 'z.never()'
+  }
+
+  null() {
+    return 'z.null()'
   }
 
   number(isInteger: boolean = false) {
@@ -75,10 +79,6 @@ export class ZodToStringMapper extends ZodBaseMapper {
 
   optional(wrappedType: string) {
     return `${wrappedType}.optional()`
-  }
-
-  never() {
-    return 'z.never()'
   }
 
   record(keyType: string, valueType: string) {

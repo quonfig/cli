@@ -6,8 +6,8 @@
  */
 
 export interface SampleFile {
-  path: string
   content: object
+  path: string
 }
 
 export const SAMPLE_FILES: SampleFile[] = [

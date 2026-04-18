@@ -40,10 +40,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
   qfg set-rollout my.flag --environment production --true-percent 20
   qfg set-default my.flag --environment production --value true`
 
-  static examples = [
-    '<%= config.bin %> pull --dir ./our-config',
-    '<%= config.bin %> pull  # uses QUONFIG_DIR env var',
-  ]
+  static examples = ['<%= config.bin %> pull --dir ./our-config', '<%= config.bin %> pull  # uses QUONFIG_DIR env var']
 
   static flags = {
     dir: Flags.string({
@@ -90,24 +87,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
     // Perform git operation
     const isRepo = await isGitRepo(resolvedDir)
 
-    if (!isRepo) {
-      // Clone fresh
-      this.log(`Cloning workspace into ${resolvedDir}...`)
-      try {
-        await gitClone(repoUrl, resolvedDir)
-      } catch (err: unknown) {
-        // On 401, refresh token and retry once
-        if (this.looksLike401(err)) {
-          this.verboseLog('Pull', 'Got 401, refreshing Gitea token...')
-          const freshUrl = await this.refreshAndGetUrl(workspaceId)
-          await gitClone(freshUrl, resolvedDir)
-        } else {
-          throw err
-        }
-      }
-
-      this.log(`Cloned successfully into ${resolvedDir}`)
-    } else {
+    if (isRepo) {
       // Existing repo — check remote
       const existingRemote = await getRemoteUrl(resolvedDir)
       const expectedUrlBase = stripAuth(repoUrl)
@@ -124,23 +104,21 @@ CLI shortcuts (no JSON editing needed for simple cases):
       // Check working tree
       const clean = await isWorkingTreeClean(resolvedDir)
       if (!clean) {
-        return this.err(
-          'Local changes present — commit, stash, or run `git reset --hard origin/main` to discard.',
-        )
+        return this.err('Local changes present — commit, stash, or run `git reset --hard origin/main` to discard.')
       }
 
       // Fetch
       this.log('Fetching from remote...')
       try {
         await gitFetch(resolvedDir)
-      } catch (err: unknown) {
-        if (this.looksLike401(err)) {
+      } catch (error: unknown) {
+        if (this.looksLike401(error)) {
           this.verboseLog('Pull', 'Got 401 on fetch, refreshing Gitea token...')
           const freshUrl = await this.refreshAndGetUrl(workspaceId)
           await gitSetRemote(resolvedDir, freshUrl)
           await gitFetch(resolvedDir)
         } else {
-          throw err
+          throw error
         }
       }
 
@@ -166,30 +144,29 @@ CLI shortcuts (no JSON editing needed for simple cases):
       } else {
         this.log('Updated successfully.')
       }
+    } else {
+      // Clone fresh
+      this.log(`Cloning workspace into ${resolvedDir}...`)
+      try {
+        await gitClone(repoUrl, resolvedDir)
+      } catch (error: unknown) {
+        // On 401, refresh token and retry once
+        if (this.looksLike401(error)) {
+          this.verboseLog('Pull', 'Got 401, refreshing Gitea token...')
+          const freshUrl = await this.refreshAndGetUrl(workspaceId)
+          await gitClone(freshUrl, resolvedDir)
+        } else {
+          throw error
+        }
+      }
+
+      this.log(`Cloned successfully into ${resolvedDir}`)
     }
 
     // Write QUONFIG_DIR to ~/.quonfig/config if not set
     await this.maybeWriteQuonfigDir(resolvedDir)
 
     return {dir: resolvedDir, workspaceId}
-  }
-
-  private async resolveRepoUrl(workspaceId: string): Promise<string> {
-    let entry = await loadGiteaToken(workspaceId)
-
-    if (!entry || isGiteaTokenExpired(entry)) {
-      this.verboseLog('Pull', 'Minting new Gitea read token...')
-      entry = await mintAndStoreGiteaReadToken(workspaceId)
-    }
-
-    return entry.repoUrl
-  }
-
-  private async refreshAndGetUrl(workspaceId: string): Promise<string> {
-    const data = await mintGiteaToken(workspaceId, 'read', 'pull')
-    const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
-    await saveGiteaToken(workspaceId, entry)
-    return entry.repoUrl
   }
 
   private looksLike401(err: unknown): boolean {
@@ -214,6 +191,24 @@ CLI shortcuts (no JSON editing needed for simple cases):
     } catch {
       // Non-fatal
     }
+  }
+
+  private async refreshAndGetUrl(workspaceId: string): Promise<string> {
+    const data = await mintGiteaToken(workspaceId, 'read', 'pull')
+    const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
+    await saveGiteaToken(workspaceId, entry)
+    return entry.repoUrl
+  }
+
+  private async resolveRepoUrl(workspaceId: string): Promise<string> {
+    let entry = await loadGiteaToken(workspaceId)
+
+    if (!entry || isGiteaTokenExpired(entry)) {
+      this.verboseLog('Pull', 'Minting new Gitea read token...')
+      entry = await mintAndStoreGiteaReadToken(workspaceId)
+    }
+
+    return entry.repoUrl
   }
 }
 

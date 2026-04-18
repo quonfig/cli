@@ -50,11 +50,15 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
     return `Mustache.render(raw${this.printPropertyPath()} ?? "", ${this.FUNCTION_ARGUMENTS_NAME})`
   }
 
-  null() {
+  literal() {
     return `raw${this.printPropertyPath()}`
   }
 
-  literal() {
+  never() {
+    return `raw${this.printPropertyPath()}`
+  }
+
+  null() {
     return `raw${this.printPropertyPath()}`
   }
 
@@ -84,10 +88,6 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
 
     // Fallback to a union type w/undefined for inline optional definitions
     return this.union([wrappedType, 'undefined'])
-  }
-
-  never() {
-    return `raw${this.printPropertyPath()}`
   }
 
   record() {

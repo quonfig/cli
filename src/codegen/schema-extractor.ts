@@ -280,8 +280,11 @@ export class SchemaExtractor {
     }
 
     const schemaFile = configFile.schemas?.find((schema) => {
-      const schemaPath = schema.path.replace(/\\/g, '/')
-      const derivedKey = schemaPath.split('/').at(-1)?.replace(/\.json$/, '')
+      const schemaPath = schema.path.replaceAll('\\', '/')
+      const derivedKey = schemaPath
+        .split('/')
+        .at(-1)
+        ?.replace(/\.json$/, '')
       return derivedKey === schemaKey
     })
 

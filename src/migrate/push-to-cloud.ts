@@ -3,11 +3,7 @@ import * as path from 'node:path'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
-import {
-  type CloneAndStackPushOptions,
-  type CloneAndStackPushResult,
-  cloneAndStackPush,
-} from './push-strategy.js'
+import {type CloneAndStackPushOptions, type CloneAndStackPushResult, cloneAndStackPush} from './push-strategy.js'
 import type {LegacyChange, MigrationSource} from './source.js'
 
 export interface PushMigrationToCloudOptions {
@@ -21,11 +17,7 @@ export interface PushMigrationToCloudOptions {
   source: MigrationSource
 }
 
-const writeQuonfigFiles = (
-  dir: string,
-  changes: LegacyChange[],
-  source: MigrationSource,
-): void => {
+const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): void => {
   for (const change of changes) {
     const files = source.translate(change)
     for (const file of files) {
@@ -36,9 +28,7 @@ const writeQuonfigFiles = (
   }
 }
 
-export const pushMigrationToCloud = async (
-  opts: PushMigrationToCloudOptions,
-): Promise<CloneAndStackPushResult> => {
+export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): Promise<CloneAndStackPushResult> => {
   const cloneOpts: CloneAndStackPushOptions = {
     applyDelta(dir) {
       writeQuonfigFiles(dir, opts.changes, opts.source)

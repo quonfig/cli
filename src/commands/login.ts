@@ -86,15 +86,20 @@ export default class Login extends BaseCommand {
       const res = await fetch(`${apiUrl}/api/v1/userWorkspaces/list`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${tokenResponse.access_token}`,
+          Authorization: `Bearer ${tokenResponse.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({json: {}}),
       })
 
       if (res.ok) {
-        type WorkspaceEntry = {workspaceId: string; workspaceSlug: string; workosOrgId: string; organizationName: string}
-        const body = await res.json() as {json?: WorkspaceEntry[]}
+        type WorkspaceEntry = {
+          workspaceId: string
+          workspaceSlug: string
+          workosOrgId: string
+          organizationName: string
+        }
+        const body = (await res.json()) as {json?: WorkspaceEntry[]}
         const allWorkspaces = (body.json ?? body) as unknown as WorkspaceEntry[]
         const candidates = Array.isArray(allWorkspaces) ? allWorkspaces : []
         multipleWorkspacesAvailable = candidates.length > 1
@@ -104,7 +109,10 @@ export default class Login extends BaseCommand {
           match = candidates[0]
         } else if (candidates.length > 1) {
           const chosen = await select({
-            choices: candidates.map((w) => ({name: `${w.organizationName} / ${w.workspaceSlug}`, value: w.workspaceId})),
+            choices: candidates.map((w) => ({
+              name: `${w.organizationName} / ${w.workspaceSlug}`,
+              value: w.workspaceId,
+            })),
             message: 'Select workspace:',
           })
           match = candidates.find((w) => w.workspaceId === chosen)

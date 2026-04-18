@@ -54,13 +54,17 @@ function schemaFromTypeArray(schema: JsonSchemaObject, types: unknown[]): z.ZodT
     return includesNull ? resolved.nullable() : resolved
   }
 
-  const resolved = z.union(nonNullTypes.map((type) => schemaToZod({...schema, type})) as [z.ZodTypeAny, ...z.ZodTypeAny[]])
+  const resolved = z.union(
+    nonNullTypes.map((type) => schemaToZod({...schema, type})) as [z.ZodTypeAny, ...z.ZodTypeAny[]],
+  )
   return includesNull ? resolved.nullable() : resolved
 }
 
 function schemaFromObject(schema: JsonSchemaObject): z.ZodTypeAny {
   const properties = isObject(schema.properties) ? schema.properties : {}
-  const required = new Set<string>(Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === 'string') : [])
+  const required = new Set<string>(
+    Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === 'string') : [],
+  )
   const shape: Record<string, z.ZodTypeAny> = {}
 
   for (const [key, value] of Object.entries(properties)) {
@@ -92,8 +96,7 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
 
   if (Array.isArray(schema.enum)) {
     result = literalFromEnum(schema.enum)
-  }
-  else if (schema.const !== undefined) {
+  } else if (schema.const !== undefined) {
     result = z.literal(schema.const as string | number | boolean | null)
   } else if (Array.isArray(schema.type)) {
     result = schemaFromTypeArray(schema, schema.type)
@@ -128,10 +131,10 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
         if (Array.isArray(schema.prefixItems)) {
           const items = schema.prefixItems.map((item) => schemaToZod(item))
           result = z.tuple(items as [z.ZodTypeAny, ...z.ZodTypeAny[]])
-        } else if (schema.items !== undefined) {
-          result = z.array(schemaToZod(schema.items))
-        } else {
+        } else if (schema.items === undefined) {
           result = z.array(z.any())
+        } else {
+          result = z.array(schemaToZod(schema.items))
         }
         break
       }
@@ -149,13 +152,15 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
       default: {
         if (Array.isArray(schema.oneOf)) {
           const options = schema.oneOf.map((item) => schemaToZod(item))
-          result = options.length === 1 ? options[0] : z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+          result =
+            options.length === 1 ? options[0] : z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
           break
         }
 
         if (Array.isArray(schema.anyOf)) {
           const options = schema.anyOf.map((item) => schemaToZod(item))
-          result = options.length === 1 ? options[0] : z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+          result =
+            options.length === 1 ? options[0] : z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
           break
         }
 

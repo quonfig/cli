@@ -51,19 +51,15 @@ export const getQuonfig = () => quonfig
  * Get the raw ConfigResponse for a key (new quonfig JSON format).
  * The new format uses `default.rules` and `environment.rules` instead of `rows`.
  */
-const getRawConfig = (key: string): ConfigResponse | undefined => {
-  return quonfig.rawConfig?.(key)
-}
+const getRawConfig = (key: string): ConfigResponse | undefined => quonfig.rawConfig?.(key)
 
 /**
  * Find rules in an environment that target a specific user via criteria.
  */
-const getEnvironmentRules = (config: ConfigResponse): Rule[] | undefined => {
-  return config.environment?.rules
-}
+const getEnvironmentRules = (config: ConfigResponse): Rule[] | undefined => config.environment?.rules
 
 export const overrideFor = ({
-  currentEnvironmentId,
+  currentEnvironmentId: _currentEnvironmentId,
   key,
 }: {
   currentEnvironmentId: string
@@ -96,12 +92,12 @@ export const defaultValueFor = (_envId: string, key: string): Value | undefined 
   // In the new format, the default value is the last rule in environment rules, or default rules
   const envRules = config.environment?.rules
   if (envRules && envRules.length > 0) {
-    return envRules[envRules.length - 1]?.value
+    return envRules.at(-1)?.value
   }
 
   const defaultRules = config.default?.rules
   if (defaultRules && defaultRules.length > 0) {
-    return defaultRules[defaultRules.length - 1]?.value
+    return defaultRules.at(-1)?.value
   }
 
   return undefined

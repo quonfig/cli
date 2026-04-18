@@ -4,12 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import {
-  type DoctorContext,
-  type DoctorReport,
-  formatHumanReport,
-  runDoctor,
-} from '../../src/migrate/doctor.js'
+import {type DoctorContext, type DoctorReport, formatHumanReport, runDoctor} from '../../src/migrate/doctor.js'
 
 const allStubs = (overrides: Partial<DoctorContext> = {}): DoctorContext => ({
   apiKey: 'valid-key',
@@ -19,7 +14,7 @@ const allStubs = (overrides: Partial<DoctorContext> = {}): DoctorContext => ({
   getWorkspaceGitRepo: async () => 'my-org/my-workspace',
   isWorkingTreeClean: async () => true,
   loadSession: async () => ({expiresAt: Date.now() + 3_600_000}),
-  readExistingMap: () => ({} as Record<string, string>),
+  readExistingMap: () => ({}) as Record<string, string>,
   validateSourceAuth: async () => true,
   ...overrides,
 })
@@ -47,9 +42,7 @@ describe('migrate/doctor', () => {
     })
 
     it('fails the legacy-api-key check when validateSourceAuth returns false', async () => {
-      const report = await runDoctor(
-        allStubs({validateSourceAuth: async () => false}),
-      )
+      const report = await runDoctor(allStubs({validateSourceAuth: async () => false}))
       const check = report.checks.find((c) => c.name === 'legacy-api-key')!
       expect(check.passed).to.equal(false)
       expect(check.message.toLowerCase()).to.match(/api key|launch/)
@@ -71,9 +64,7 @@ describe('migrate/doctor', () => {
     })
 
     it('fails qfg-login when the session is expired', async () => {
-      const report = await runDoctor(
-        allStubs({loadSession: async () => ({expiresAt: Date.now() - 1000})}),
-      )
+      const report = await runDoctor(allStubs({loadSession: async () => ({expiresAt: Date.now() - 1000})}))
       const check = report.checks.find((c) => c.name === 'qfg-login')!
       expect(check.passed).to.equal(false)
       expect(check.message.toLowerCase()).to.contain('expired')
@@ -109,9 +100,7 @@ describe('migrate/doctor', () => {
     })
 
     it('fails identifier-collisions when the map has a case-only collision', async () => {
-      const report = await runDoctor(
-        allStubs({readExistingMap: () => ({legacyA: 'foo', legacyB: 'FOO'})}),
-      )
+      const report = await runDoctor(allStubs({readExistingMap: () => ({legacyA: 'foo', legacyB: 'FOO'})}))
       const check = report.checks.find((c) => c.name === 'identifier-collisions')!
       expect(check.passed).to.equal(false)
       expect(check.message).to.match(/collision|case/i)
@@ -148,7 +137,7 @@ describe('migrate/doctor', () => {
       // Checks that there are no non-ASCII symbol/emoji chars in the output.
       const out = formatHumanReport(mkReport())
       // eslint-disable-next-line no-control-regex
-      expect(out).to.match(/^[\x00-\x7F]+$/)
+      expect(out).to.match(/^[\u0000-\u007F]+$/)
     })
 
     it('prints actionable fix hints for failing checks', () => {

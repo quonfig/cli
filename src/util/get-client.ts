@@ -31,7 +31,7 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
   // If no SDK key provided, use WorkOS OAuth tokens
   if (!sdkKey) {
     const authConfig = await loadAuthConfig()
-    let tokens = await loadTokens()
+    const tokens = await loadTokens()
 
     command.verboseLog('OAuth auth', {
       hasAuthConfig: Boolean(authConfig),

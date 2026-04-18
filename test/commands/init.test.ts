@@ -66,7 +66,7 @@ describe('qfg init', () => {
         expect(fs.existsSync(path.join(dir, 'AGENTS.md'))).to.be.true
 
         // quonfig.json
-        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf-8'))
+        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf8'))
         expect(envs).to.deep.equal({environments: []})
 
         // Samples
@@ -102,7 +102,7 @@ describe('qfg init', () => {
         initFresh(dir)
 
         for (const file of ['README.md', 'CLAUDE.md', 'AGENTS.md']) {
-          const content = fs.readFileSync(path.join(dir, file), 'utf-8')
+          const content = fs.readFileSync(path.join(dir, file), 'utf8')
           expect(content).to.include('Managed by `qfg init`')
         }
       } finally {
@@ -169,7 +169,7 @@ describe('qfg init', () => {
         initFresh(dir)
 
         // Should not have been overwritten
-        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf-8'))
+        const envs = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf8'))
         expect(envs.environments).to.deep.equal(['production', 'staging'])
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
@@ -189,7 +189,7 @@ describe('qfg init', () => {
         initFresh(dir, true)
 
         // Should NOT have been overwritten
-        const content = fs.readFileSync(samplePath, 'utf-8')
+        const content = fs.readFileSync(samplePath, 'utf8')
         expect(content).to.equal('{"custom": true}')
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
@@ -228,7 +228,7 @@ describe('qfg init', () => {
         const hookPath = path.join(dir, '.git', 'hooks', 'pre-commit')
         expect(fs.existsSync(hookPath)).to.be.true
 
-        const content = fs.readFileSync(hookPath, 'utf-8')
+        const content = fs.readFileSync(hookPath, 'utf8')
         expect(content).to.include('qfg verify')
         expect(content).to.include(PRE_COMMIT_MARKER)
 
@@ -248,7 +248,7 @@ describe('qfg init', () => {
         expect(fs.existsSync(path.join(dir, '.git'))).to.be.true
         const hookPath = path.join(dir, '.git', 'hooks', 'pre-commit')
         expect(fs.existsSync(hookPath)).to.be.true
-        expect(fs.readFileSync(hookPath, 'utf-8')).to.include('qfg verify')
+        expect(fs.readFileSync(hookPath, 'utf8')).to.include('qfg verify')
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -262,11 +262,11 @@ describe('qfg init', () => {
         // First init installs the hook
         initFresh(dir)
         const hookPath = path.join(dir, '.git', 'hooks', 'pre-commit')
-        const original = fs.readFileSync(hookPath, 'utf-8')
+        const original = fs.readFileSync(hookPath, 'utf8')
 
         // Second init should skip
         initFresh(dir)
-        const after = fs.readFileSync(hookPath, 'utf-8')
+        const after = fs.readFileSync(hookPath, 'utf8')
         expect(after).to.equal(original)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
@@ -282,7 +282,7 @@ describe('qfg init', () => {
 
         initFresh(dir)
 
-        const content = fs.readFileSync(hookPath, 'utf-8')
+        const content = fs.readFileSync(hookPath, 'utf8')
         expect(content).to.include('existing hook')
         expect(content).to.include('qfg verify')
       } finally {

@@ -90,6 +90,64 @@ export default class Schema extends APICommand {
     return this.upsertSchema(schemaKey, schemaInput!, flags.protected)
   }
 
+  private async createSchema(
+    schemaKey: string,
+    schema: SchemaDocument,
+    protectedSchema: boolean,
+  ): Promise<JsonObj | void> {
+    const request = await this.apiClient.post('/api/v1/schemas/create', {
+      workspaceId: this.workspaceId,
+      schemaKey,
+      protected: protectedSchema,
+      schema,
+    })
+
+    if (!request.ok) {
+      if (request.status === 409) {
+        const current = await this.fetchSchema(schemaKey)
+        if (current) {
+          return this.updateSchema(schemaKey, schema, current, protectedSchema)
+        }
+      }
+
+      return this.err(`Failed to create schema: ${schemaKey} | ${request.status} | ${JSON.stringify(request.error)}`, {
+        key: schemaKey,
+        phase: 'creation',
+        serverError: request.error,
+      })
+    }
+
+    const response = request.json as unknown as SchemaWriteResponse
+
+    return this.ok(`${checkmark} Created schema: ${schemaKey}`, {
+      commitSha: response.commitSha,
+      key: response.key,
+      protected: response.protected,
+      schema: response.schema,
+    })
+  }
+
+  private async fetchSchema(schemaKey: string): Promise<SchemaDetailResponse | undefined> {
+    const request = await this.apiClient.post('/api/v1/schemas/getByKey', {
+      workspaceId: this.workspaceId,
+      schemaKey,
+    })
+
+    if (request.ok) {
+      const response = request.json as unknown as SchemaDetailResponse
+      if (isSchemaDocument(response.schema)) {
+        return response
+      }
+      return undefined
+    }
+
+    if (request.status === 404) {
+      return undefined
+    }
+
+    throw new Error(`Failed to fetch schema ${schemaKey}: ${request.status} | ${JSON.stringify(request.error)}`)
+  }
+
   private async getSchema(schemaKey: string): Promise<JsonObj | void> {
     const request = await this.apiClient.post('/api/v1/schemas/getByKey', {
       workspaceId: this.workspaceId,
@@ -129,76 +187,6 @@ export default class Schema extends APICommand {
     })
   }
 
-  private async upsertSchema(schemaKey: string, schemaInput: string, protectedSchema: boolean): Promise<JsonObj | void> {
-    const schema = loadSchemaDocument(schemaInput)
-
-    const existing = await this.fetchSchema(schemaKey)
-
-    if (!existing) {
-      return this.createSchema(schemaKey, schema, protectedSchema)
-    }
-
-    return this.updateSchema(schemaKey, schema, existing, protectedSchema)
-  }
-
-  private async fetchSchema(schemaKey: string): Promise<SchemaDetailResponse | undefined> {
-    const request = await this.apiClient.post('/api/v1/schemas/getByKey', {
-      workspaceId: this.workspaceId,
-      schemaKey,
-    })
-
-    if (request.ok) {
-      const response = request.json as unknown as SchemaDetailResponse
-      if (isSchemaDocument(response.schema)) {
-        return response
-      }
-      return undefined
-    }
-
-    if (request.status === 404) {
-      return undefined
-    }
-
-    throw new Error(`Failed to fetch schema ${schemaKey}: ${request.status} | ${JSON.stringify(request.error)}`)
-  }
-
-  private async createSchema(
-    schemaKey: string,
-    schema: SchemaDocument,
-    protectedSchema: boolean,
-  ): Promise<JsonObj | void> {
-    const request = await this.apiClient.post('/api/v1/schemas/create', {
-      workspaceId: this.workspaceId,
-      schemaKey,
-      protected: protectedSchema,
-      schema,
-    })
-
-    if (!request.ok) {
-      if (request.status === 409) {
-        const current = await this.fetchSchema(schemaKey)
-        if (current) {
-          return this.updateSchema(schemaKey, schema, current, protectedSchema)
-        }
-      }
-
-      return this.err(`Failed to create schema: ${schemaKey} | ${request.status} | ${JSON.stringify(request.error)}`, {
-        key: schemaKey,
-        phase: 'creation',
-        serverError: request.error,
-      })
-    }
-
-    const response = request.json as unknown as SchemaWriteResponse
-
-    return this.ok(`${checkmark} Created schema: ${schemaKey}`, {
-      commitSha: response.commitSha,
-      key: response.key,
-      protected: response.protected,
-      schema: response.schema,
-    })
-  }
-
   private async updateSchema(
     schemaKey: string,
     schema: SchemaDocument,
@@ -229,5 +217,21 @@ export default class Schema extends APICommand {
       protected: response.protected,
       schema: response.schema,
     })
+  }
+
+  private async upsertSchema(
+    schemaKey: string,
+    schemaInput: string,
+    protectedSchema: boolean,
+  ): Promise<JsonObj | void> {
+    const schema = loadSchemaDocument(schemaInput)
+
+    const existing = await this.fetchSchema(schemaKey)
+
+    if (!existing) {
+      return this.createSchema(schemaKey, schema, protectedSchema)
+    }
+
+    return this.updateSchema(schemaKey, schema, existing, protectedSchema)
   }
 }

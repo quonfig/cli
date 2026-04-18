@@ -17,15 +17,11 @@ const FLAGS_DIR = 'feature-flags'
 const SEGMENTS_DIR = 'segments'
 const WORKSPACE_FILE = 'quonfig.json'
 
-const NO_STATE_MESSAGE =
-  'No migration state found. Run qfg migrate --from <source> first.'
+const NO_STATE_MESSAGE = 'No migration state found. Run qfg migrate --from <source> first.'
 
 function countJsonFiles(dir: string): number {
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return 0
-  return fs
-    .readdirSync(dir)
-    .filter((name) => name.endsWith('.json') && !name.startsWith('.'))
-    .length
+  return fs.readdirSync(dir).filter((name) => name.endsWith('.json') && !name.startsWith('.')).length
 }
 
 function countEnvironments(dir: string): number {
@@ -50,7 +46,7 @@ function workspaceCounts(dir: string): WorkspaceCounts {
 }
 
 function toIsoTimestamp(value: number | string | undefined): string | null {
-  if (value == null) return null
+  if (value === null || value === undefined) return null
   const date = typeof value === 'number' ? new Date(value) : new Date(value)
   if (Number.isNaN(date.getTime())) return null
   return date.toISOString()
@@ -74,21 +70,19 @@ function formatHuman(payload: {
   sourceWorkspaceId: string | null
 }): string {
   const lines: string[] = []
-  lines.push(`Source:            ${payload.source}`)
   lines.push(
+    `Source:            ${payload.source}`,
     `Source workspace:  ${payload.sourceWorkspaceId ?? '(not recorded)'}`,
-  )
-  lines.push(
     `Last processed at: ${payload.lastProcessedAtIso ?? '(not recorded)'}`,
+    `Workspace dir:     ${payload.dir}`,
+    '',
+    'Counts:',
+    `  Flags:         ${payload.counts.flags}`,
+    `  Segments:      ${payload.counts.segments}`,
+    `  Environments:  ${payload.counts.environments}`,
+    '',
+    `Next: ${payload.next}`,
   )
-  lines.push(`Workspace dir:     ${payload.dir}`)
-  lines.push('')
-  lines.push('Counts:')
-  lines.push(`  Flags:         ${payload.counts.flags}`)
-  lines.push(`  Segments:      ${payload.counts.segments}`)
-  lines.push(`  Environments:  ${payload.counts.environments}`)
-  lines.push('')
-  lines.push(`Next: ${payload.next}`)
   return lines.join('\n')
 }
 

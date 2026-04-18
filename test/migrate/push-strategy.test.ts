@@ -116,16 +116,9 @@ describe('cloneAndStackPush', () => {
     expect(result.action).to.equal('reused')
 
     const reader = cloneForRead(remote, root)
-    expect(logSubjects(reader)).to.deep.equal([
-      'migrator: run 2',
-      'ui edit',
-      'migrator: run 1',
-      'initial',
-    ])
+    expect(logSubjects(reader)).to.deep.equal(['migrator: run 2', 'ui edit', 'migrator: run 1', 'initial'])
     // UI-edited flag survives untouched
-    expect(fs.readFileSync(path.join(reader, 'flag-b.json'), 'utf8')).to.equal(
-      '{"key":"b","editedBy":"ui"}\n',
-    )
+    expect(fs.readFileSync(path.join(reader, 'flag-b.json'), 'utf8')).to.equal('{"key":"b","editedBy":"ui"}\n')
     // Migrator flag is the newer version
     expect(fs.readFileSync(path.join(reader, 'flag-a.json'), 'utf8')).to.equal('{"key":"a","v":2}\n')
   })
@@ -205,9 +198,7 @@ describe('cloneAndStackPush', () => {
       conflict = error as PushConflictError
     }
 
-    expect(conflict, 'expected push to fail with PushConflictError').to.be.instanceOf(
-      PushConflictError,
-    )
+    expect(conflict, 'expected push to fail with PushConflictError').to.be.instanceOf(PushConflictError)
 
     // Remote history must still have the UI commit on top (no force-push clobbered it)
     const reader = cloneForRead(remote, root)

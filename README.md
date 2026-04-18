@@ -14,7 +14,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.9 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.0.11 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -40,6 +40,9 @@ USAGE
 * [`qfg login`](#qfg-login)
 * [`qfg logout`](#qfg-logout)
 * [`qfg mcp`](#qfg-mcp)
+* [`qfg migrate`](#qfg-migrate)
+* [`qfg migrate doctor`](#qfg-migrate-doctor)
+* [`qfg migrate status`](#qfg-migrate-status)
 * [`qfg override [NAME]`](#qfg-override-name)
 * [`qfg pull`](#qfg-pull)
 * [`qfg schema NAME`](#qfg-schema-name)
@@ -84,7 +87,7 @@ EXAMPLES
   $ qfg config-schema --json-schema    # full JSON Schema document (copy into your editor)
 ```
 
-_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/config-schema.ts)_
+_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/config-schema.ts)_
 
 ## `qfg create NAME`
 
@@ -156,7 +159,7 @@ EXAMPLES
   $ qfg set-rollout my.new.flag --environment production --true-percent 20
 ```
 
-_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/create.ts)_
+_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/create.ts)_
 
 ## `qfg flag info [NAME]`
 
@@ -356,7 +359,7 @@ EXAMPLES
   $ qfg generate --targets node-ts -o ./dist # combine with targets
 ```
 
-_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/generate.ts)_
+_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/generate.ts)_
 
 ## `qfg generate-new-hex-key`
 
@@ -379,7 +382,7 @@ EXAMPLES
   $ qfg generate-new-hex-key
 ```
 
-_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/generate-new-hex-key.ts)_
+_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/generate-new-hex-key.ts)_
 
 ## `qfg get [NAME]`
 
@@ -411,7 +414,7 @@ EXAMPLES
   $ qfg get my.config.name --environment=production
 ```
 
-_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/get.ts)_
+_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/get.ts)_
 
 ## `qfg info [NAME]`
 
@@ -459,7 +462,7 @@ EXAMPLES
   $ qfg info my.config.name --exclude-evaluations   # skip 24h stats
 ```
 
-_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/info.ts)_
+_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/info.ts)_
 
 ## `qfg init [DIRECTORY]`
 
@@ -497,7 +500,7 @@ EXAMPLES
   $ qfg init --dry-run
 ```
 
-_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/init.ts)_
+_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/init.ts)_
 
 ## `qfg interactive`
 
@@ -515,7 +518,7 @@ EXAMPLES
   $ qfg
 ```
 
-_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/interactive.ts)_
+_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/interactive.ts)_
 
 ## `qfg list`
 
@@ -555,7 +558,7 @@ EXAMPLES
   $ qfg list --feature-flags
 ```
 
-_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/list.ts)_
+_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/list.ts)_
 
 ## `qfg login`
 
@@ -580,7 +583,7 @@ EXAMPLES
   $ qfg login --profile myprofile
 ```
 
-_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/login.ts)_
+_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/login.ts)_
 
 ## `qfg logout`
 
@@ -603,7 +606,7 @@ EXAMPLES
   $ qfg logout
 ```
 
-_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/logout.ts)_
+_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/logout.ts)_
 
 ## `qfg mcp`
 
@@ -636,7 +639,130 @@ EXAMPLES
   $ qfg mcp --url http://local-app.quonfig-staging.com:3003/api/v1/mcp
 ```
 
-_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/mcp.ts)_
+_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/mcp.ts)_
+
+## `qfg migrate`
+
+Migrate flags and configs from a legacy feature-flag system into a Quonfig workspace.
+
+```
+USAGE
+  $ qfg migrate --from launch|launchdarkly|flagsmith [--json] [--interactive] [--no-color] [--verbose]
+    [--api-key <value>] [--dir <value>] [--dry-run] [--push] [--recent <value>] [--reset] [--since <value>] [--staging]
+    [--workspace <value>]
+
+FLAGS
+  --api-key=<value>    API key for the legacy source (or set LAUNCH_API_KEY)
+  --dir=<value>        Target local workspace directory. Defaults to cwd if it looks like a Quonfig workspace, otherwise
+                       ./quonfig-config.
+  --dry-run            Fetch and summarize changes without writing anything
+  --from=<option>      (required) Legacy source to migrate from
+                       <options: launch|launchdarkly|flagsmith>
+  --push               After migrating to a local dir, also push to the given --workspace on Quonfig cloud
+  --recent=<value>     Import only the last N changes (useful for tire-kicking)
+  --reset              Ignore the delta cursor and re-import everything from scratch
+  --since=<value>      Override the delta cursor (epoch milliseconds or ISO-8601 timestamp)
+  --staging            Hit the staging API for the source (dev-only)
+  --workspace=<value>  Quonfig cloud workspace slug to push to. Requires `qfg login` and is typically combined with
+                       --push.
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Migrate flags and configs from a legacy feature-flag system into a Quonfig workspace.
+
+  Currently supported sources:
+  launch — Reforge Launch (ported from launch-migrator)
+
+  See https://docs.quonfig.com/docs/migrating/from-launch for the step-by-step guide,
+  and https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.
+
+EXAMPLES
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config
+
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --workspace acme-prod --push
+
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --reset
+
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --dry-run
+
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --staging
+```
+
+_See code: [src/commands/migrate.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/migrate.ts)_
+
+## `qfg migrate doctor`
+
+Preflight health checks for `qfg migrate`. Verifies auth, workspace provisioning, working tree, and identifier collisions.
+
+```
+USAGE
+  $ qfg migrate doctor [--json] [--interactive] [--no-color] [--verbose] [--api-key <value>] [--dir <value>] [--from
+    launch] [--language <value>]
+
+FLAGS
+  --api-key=<value>   Legacy SDK API key to validate against the source
+  --dir=<value>       [default: .] Workspace directory to check (git clean / identifier map)
+  --from=<option>     [default: launch] Legacy SDK to migrate from
+                      <options: launch>
+  --language=<value>  Customer SDK language — used to warn when datadir mode is unavailable (e.g. javascript-browser)
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Preflight health checks for `qfg migrate`. Verifies auth, workspace provisioning, working tree, and identifier
+  collisions.
+
+EXAMPLES
+  $ qfg migrate doctor
+
+  $ qfg migrate doctor --from launch --api-key $LAUNCH_API_KEY
+
+  $ qfg migrate doctor --dir ./my-workspace --language node
+
+  $ qfg migrate doctor --json
+```
+
+_See code: [src/commands/migrate/doctor.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/migrate/doctor.ts)_
+
+## `qfg migrate status`
+
+Show the status of a workspace migrated with `qfg migrate`. Reads .qf/import-state.json and summarizes source, counts, and next steps.
+
+```
+USAGE
+  $ qfg migrate status [--json] [--interactive] [--no-color] [--verbose] [--dir <value>]
+
+FLAGS
+  --dir=<value>  [default: .] Workspace directory to inspect
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Show the status of a workspace migrated with `qfg migrate`. Reads .qf/import-state.json and summarizes source, counts,
+  and next steps.
+
+EXAMPLES
+  $ qfg migrate status
+
+  $ qfg migrate status --dir ./my-workspace
+
+  $ qfg migrate status --json
+```
+
+_See code: [src/commands/migrate/status.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/migrate/status.ts)_
 
 ## `qfg override [NAME]`
 
@@ -675,7 +801,7 @@ EXAMPLES
   $ qfg override my.double.config --value=3.14159
 ```
 
-_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/override.ts)_
+_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/override.ts)_
 
 ## `qfg pull`
 
@@ -719,7 +845,7 @@ EXAMPLES
   $ qfg pull  # uses QUONFIG_DIR env var
 ```
 
-_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/pull.ts)_
+_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/pull.ts)_
 
 ## `qfg schema NAME`
 
@@ -757,7 +883,7 @@ EXAMPLES
   $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
 ```
 
-_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/schema.ts)_
+_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/schema.ts)_
 
 ## `qfg sdk-key`
 
@@ -784,7 +910,7 @@ EXAMPLES
   $ qfg sdk-key revoke <key-id>
 ```
 
-_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key.ts)_
+_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key.ts)_
 
 ## `qfg sdk-key create`
 
@@ -816,7 +942,7 @@ EXAMPLES
   $ qfg sdk-key create --environment staging --type browser
 ```
 
-_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key/create.ts)_
+_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key/create.ts)_
 
 ## `qfg sdk-key list`
 
@@ -845,7 +971,7 @@ EXAMPLES
   $ qfg sdk-key list --environment production
 ```
 
-_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key/list.ts)_
+_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key/list.ts)_
 
 ## `qfg sdk-key revoke KEYID`
 
@@ -872,7 +998,7 @@ EXAMPLES
   $ qfg sdk-key revoke a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
-_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key/revoke.ts)_
+_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key/revoke.ts)_
 
 ## `qfg set-default [NAME]`
 
@@ -939,7 +1065,7 @@ EXAMPLES
   $ qfg set-rollout my.flag.name --environment production --true-percent 20
 ```
 
-_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/set-default.ts)_
+_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/set-default.ts)_
 
 ## `qfg set-rollout [NAME]`
 
@@ -1016,7 +1142,7 @@ EXAMPLES
   $ qfg set-rollout my.variant.flag --environment production --weights "a:33,b:33,c:34" --hash-by user.id
 ```
 
-_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/set-rollout.ts)_
+_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/set-rollout.ts)_
 
 ## `qfg sync`
 
@@ -1048,7 +1174,7 @@ EXAMPLES
   $ qfg sync --watch --dir ./our-config --interval 30
 ```
 
-_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sync.ts)_
+_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sync.ts)_
 
 ## `qfg toggle [NAME]`
 
@@ -1146,7 +1272,7 @@ EXAMPLES
   $ qfg verify --json
 ```
 
-_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/verify.ts)_
+_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/verify.ts)_
 
 ## `qfg whoami`
 
@@ -1169,7 +1295,7 @@ EXAMPLES
   $ qfg whoami
 ```
 
-_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/whoami.ts)_
+_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/whoami.ts)_
 
 ## `qfg workspace`
 
@@ -1192,7 +1318,7 @@ EXAMPLES
   $ qfg workspace
 ```
 
-_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/workspace.ts)_
+_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/workspace.ts)_
 
 ## `qfg workspace bootstrap`
 
@@ -1225,7 +1351,7 @@ EXAMPLES
   $ qfg workspace bootstrap --dir ./our-config --skip-validate
 ```
 
-_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/workspace/bootstrap.ts)_
+_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/workspace/bootstrap.ts)_
 
 ## `qfg workspace switch`
 
@@ -1248,7 +1374,7 @@ EXAMPLES
   $ qfg workspace switch
 ```
 
-_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/workspace/switch.ts)_
+_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/workspace/switch.ts)_
 <!-- commandsstop -->
 
 ## Local Development

@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-
 export const keyWithEvaluations = 'my-string-list-key'
 export const keyWithNoEvaluations = 'jeffreys.test.key.reforge'
 export const secretKey = 'a.secret.config'
@@ -210,55 +209,53 @@ const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environmen
 )
 
 // POST /api/v1/analytics/evaluationStats - evaluation stats (oRPC wrapped)
-const evaluationStatsHandler = http.post('https://app.quonfig.com/api/v1/analytics/evaluationStats', async ({request}) => {
-  const body = (await request.json()) as any
-  const configKey = body?.json?.configKey
-  const environment = body?.json?.environment
+const evaluationStatsHandler = http.post(
+  'https://app.quonfig.com/api/v1/analytics/evaluationStats',
+  async ({request}) => {
+    const body = (await request.json()) as any
+    const configKey = body?.json?.configKey
+    const environment = body?.json?.environment
 
-  // For keyWithEvaluations, return stats
-  if (configKey === keyWithEvaluations) {
-    if (environment === '143') {
-      // Production environment - return actual stats
-      return HttpResponse.json({
-        json: [
-          {
-            configId: '1',
-            configType: 'config',
-            selectedValue: {bool: false},
-            count: 11_473,
-          },
-          {
-            configId: '1',
-            configType: 'config',
-            selectedValue: {bool: true},
-            count: 23_316,
-          },
-        ],
-      })
+    // For keyWithEvaluations, return stats
+    if (configKey === keyWithEvaluations) {
+      if (environment === '143') {
+        // Production environment - return actual stats
+        return HttpResponse.json({
+          json: [
+            {
+              configId: '1',
+              configType: 'config',
+              selectedValue: {bool: false},
+              count: 11_473,
+            },
+            {
+              configId: '1',
+              configType: 'config',
+              selectedValue: {bool: true},
+              count: 23_316,
+            },
+          ],
+        })
+      }
+
+      if (environment === '588') {
+        // jeffrey environment
+        return HttpResponse.json({
+          json: [
+            {
+              configId: '1',
+              configType: 'config',
+              selectedValue: {string: 'test'},
+              count: 42,
+            },
+          ],
+        })
+      }
     }
 
-    if (environment === '588') {
-      // jeffrey environment
-      return HttpResponse.json({
-        json: [
-          {
-            configId: '1',
-            configType: 'config',
-            selectedValue: {string: 'test'},
-            count: 42,
-          },
-        ],
-      })
-    }
-  }
-
-  // For other keys or envs, return empty stats
-  return HttpResponse.json({json: []})
-})
-
-export const server = setupServer(
-  metadataHandler,
-  configHandler,
-  environmentsHandler,
-  evaluationStatsHandler,
+    // For other keys or envs, return empty stats
+    return HttpResponse.json({json: []})
+  },
 )
+
+export const server = setupServer(metadataHandler, configHandler, environmentsHandler, evaluationStatsHandler)

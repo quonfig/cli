@@ -23,13 +23,13 @@ interface GitEnvironment {
 
 // Shape of a raw git-native config/feature-flag JSON file
 interface GitConfigJson {
-  key: string
-  type: string
-  valueType: string
-  sendToClientSdk?: boolean
-  schemaKey?: string
   default?: {rules: GitRule[]}
   environments?: GitEnvironment[]
+  key: string
+  schemaKey?: string
+  sendToClientSdk?: boolean
+  type: string
+  valueType: string
   variants?: unknown[]
 }
 
@@ -57,7 +57,6 @@ function mapGitValue(gitValue: GitValue): ConfigValue {
       return {value: {string: JSON.stringify(value)}}
     }
 
-    case 'string':
     default: {
       return {value: {string: value as string}}
     }
@@ -111,9 +110,7 @@ export class LocalConfigReader {
     try {
       await fs.promises.access(this.dir, fs.constants.F_OK)
     } catch {
-      throw new Error(
-        `Directory not found: ${this.dir}. Run \`qfg pull --dir ${this.dir}\` to clone it.`,
-      )
+      throw new Error(`Directory not found: ${this.dir}. Run \`qfg pull --dir ${this.dir}\` to clone it.`)
     }
 
     // Validate it's a quonfig workspace
@@ -121,9 +118,7 @@ export class LocalConfigReader {
     try {
       await fs.promises.access(quonfigJsonPath, fs.constants.F_OK)
     } catch {
-      throw new Error(
-        `${this.dir} does not look like a Quonfig workspace. Is this the right directory?`,
-      )
+      throw new Error(`${this.dir} does not look like a Quonfig workspace. Is this the right directory?`)
     }
 
     // Read configs and feature-flags

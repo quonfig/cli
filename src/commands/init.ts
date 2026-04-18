@@ -68,7 +68,12 @@ export default class Init extends BaseCommand {
       }
 
       if (this.jsonEnabled()) {
-        return {actions: plan.actions, dryRun: true, isFirstTime: plan.isFirstTime, samplesIncluded: plan.samplesIncluded}
+        return {
+          actions: plan.actions,
+          dryRun: true,
+          isFirstTime: plan.isFirstTime,
+          samplesIncluded: plan.samplesIncluded,
+        }
       }
 
       return plan
@@ -96,7 +101,12 @@ export default class Init extends BaseCommand {
     this.log('\nRun `qfg verify` to validate the workspace.')
 
     if (this.jsonEnabled()) {
-      return {actions: plan.actions, dryRun: false, isFirstTime: plan.isFirstTime, samplesIncluded: plan.samplesIncluded}
+      return {
+        actions: plan.actions,
+        dryRun: false,
+        isFirstTime: plan.isFirstTime,
+        samplesIncluded: plan.samplesIncluded,
+      }
     }
 
     return plan

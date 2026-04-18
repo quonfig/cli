@@ -1,12 +1,7 @@
 import {Flags} from '@oclif/core'
 
 import {BaseCommand} from '../../index.js'
-import {
-  type DoctorContext,
-  type DoctorSession,
-  formatHumanReport,
-  runDoctor,
-} from '../../migrate/doctor.js'
+import {type DoctorContext, type DoctorSession, formatHumanReport, runDoctor} from '../../migrate/doctor.js'
 import {loadTokens} from '../../util/token-storage.js'
 
 const SUPPORTED_SOURCES = new Set(['launch'])
@@ -43,8 +38,7 @@ export default class MigrateDoctor extends BaseCommand {
       options: ['launch'],
     }),
     language: Flags.string({
-      description:
-        'Customer SDK language — used to warn when datadir mode is unavailable (e.g. javascript-browser)',
+      description: 'Customer SDK language — used to warn when datadir mode is unavailable (e.g. javascript-browser)',
       required: false,
     }),
   }

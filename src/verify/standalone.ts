@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Standalone workspace validator.
  *
@@ -12,20 +11,20 @@
  *   1  Validation errors found
  */
 
-import { execSync } from "node:child_process";
-import * as readline from "node:readline";
-import { formatResult, validateFileMap, validateWorkspace } from "./validate.js";
+import {execSync} from 'node:child_process'
+import * as readline from 'node:readline'
+import {formatResult, validateFileMap, validateWorkspace} from './validate.js'
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2)
 
-  if (args.includes("--git-hook")) {
-    await runGitHook();
-  } else if (args.includes("--help") || args.includes("-h")) {
-    printUsage();
+  if (args.includes('--git-hook')) {
+    await runGitHook()
+  } else if (args.includes('--help') || args.includes('-h')) {
+    printUsage()
   } else {
-    const dir = args[0] || ".";
-    runDiskValidation(dir);
+    const dir = args[0] || '.'
+    runDiskValidation(dir)
   }
 }
 
@@ -39,13 +38,13 @@ Usage:
 
 Exit codes:
   0  All checks pass
-  1  Validation errors found`);
+  1  Validation errors found`)
 }
 
 function runDiskValidation(dir: string) {
-  const result = validateWorkspace(dir);
-  console.log(formatResult(result));
-  process.exit(result.valid ? 0 : 1);
+  const result = validateWorkspace(dir)
+  console.log(formatResult(result))
+  process.exit(result.valid ? 0 : 1)
 }
 
 /**
@@ -55,49 +54,49 @@ function runDiskValidation(dir: string) {
  * For each new commit, lists all config files and validates them.
  */
 async function runGitHook() {
-  const refs: Array<{ oldOid: string; newOid: string; refName: string }> = [];
+  const refs: Array<{oldOid: string; newOid: string; refName: string}> = []
 
   // Read all of stdin (ref lines). Use callback API for bun compatibility.
   await new Promise<void>((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin });
-    rl.on("line", (line: string) => {
-      const parts = line.trim().split(" ");
+    const rl = readline.createInterface({input: process.stdin})
+    rl.on('line', (line: string) => {
+      const parts = line.trim().split(' ')
       if (parts.length >= 3) {
-        refs.push({ oldOid: parts[0], newOid: parts[1], refName: parts[2] });
+        refs.push({oldOid: parts[0], newOid: parts[1], refName: parts[2]})
       }
-    });
-    rl.on("close", resolve);
-  });
+    })
+    rl.on('close', resolve)
+  })
 
   if (refs.length === 0) {
-    console.log("qfg-verify: no refs received");
-    process.exit(0);
+    console.log('qfg-verify: no refs received')
+    process.exit(0)
   }
 
   // Validate the latest pushed commit for each ref
-  let hasErrors = false;
+  let hasErrors = false
 
   for (const ref of refs) {
     // Skip deletions
-    if (ref.newOid === "0000000000000000000000000000000000000000") continue;
+    if (ref.newOid === '0000000000000000000000000000000000000000') continue
 
-    console.log(`qfg-verify: validating ${ref.refName} (${ref.newOid.slice(0, 8)})`);
+    console.log(`qfg-verify: validating ${ref.refName} (${ref.newOid.slice(0, 8)})`)
 
     try {
-      const files = readFilesFromCommit(ref.newOid);
-      const result = validateFileMap(files);
-      console.log(formatResult(result));
+      const files = readFilesFromCommit(ref.newOid)
+      const result = validateFileMap(files)
+      console.log(formatResult(result))
 
       if (!result.valid) {
-        hasErrors = true;
+        hasErrors = true
       }
-    } catch (err: unknown) {
-      console.error(`qfg-verify: error reading commit ${ref.newOid}: ${(err as Error).message}`);
-      hasErrors = true;
+    } catch (error: unknown) {
+      console.error(`qfg-verify: error reading commit ${ref.newOid}: ${(error as Error).message}`)
+      hasErrors = true
     }
   }
 
-  process.exit(hasErrors ? 1 : 0);
+  process.exit(hasErrors ? 1 : 0)
 }
 
 /**
@@ -105,42 +104,42 @@ async function runGitHook() {
  * Works in bare repos (no working tree needed).
  */
 function readFilesFromCommit(commitOid: string): Map<string, string> {
-  const files = new Map<string, string>();
-  const dirs = ["configs", "feature-flags", "segments", "log-levels", "schemas", "schemas-protected"];
+  const files = new Map<string, string>()
+  const dirs = ['configs', 'feature-flags', 'segments', 'log-levels', 'schemas', 'schemas-protected']
 
   for (const dir of dirs) {
     // List files in this directory at the given commit
-    let listing: string;
+    let listing: string
     try {
       listing = execSync(`git ls-tree --name-only ${commitOid} ${dir}/`, {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
     } catch {
       // Directory doesn't exist in this commit
-      continue;
+      continue
     }
 
-    const filenames = listing.trim().split("\n").filter(Boolean);
+    const filenames = listing.trim().split('\n').filter(Boolean)
     for (const filePath of filenames) {
-      if (!filePath.endsWith(".json") || filePath.includes("/.")) continue;
+      if (!filePath.endsWith('.json') || filePath.includes('/.')) continue
 
       try {
         const content = execSync(`git show ${commitOid}:${filePath}`, {
-          encoding: "utf-8",
-          stdio: ["pipe", "pipe", "pipe"],
-        });
-        files.set(filePath, content);
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        files.set(filePath, content)
       } catch {
         // File can't be read, skip
       }
     }
   }
 
-  return files;
+  return files
 }
 
-main().catch((err) => {
-  console.error(`qfg-verify: fatal: ${err.message}`);
-  process.exit(1);
-});
+main().catch((error) => {
+  console.error(`qfg-verify: fatal: ${error.message}`)
+  process.exit(1)
+})

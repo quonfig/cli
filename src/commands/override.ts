@@ -143,7 +143,6 @@ export default class Override extends APICommand {
     const {key, valueType, version} = config
 
     // Map the valueType to the format expected by the API
-    /* eslint-disable camelcase */
     const typeMapping: Record<string, string> = {
       bool: 'bool',
       string: 'string',
@@ -155,7 +154,6 @@ export default class Override extends APICommand {
       duration: 'duration',
       int_range: 'intRange',
     }
-    /* eslint-enable camelcase */
 
     const type = typeMapping[valueType.toLowerCase()] || valueType
 

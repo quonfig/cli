@@ -105,7 +105,7 @@ export const pollForToken = async (
     }
 
     // eslint-disable-next-line no-await-in-loop
-    const error = await response.json().catch(() => ({})) as Record<string, string>
+    const error = (await response.json().catch(() => ({}))) as Record<string, string>
     const errorCode = error.error || error.code
 
     if (errorCode === 'authorization_pending') {

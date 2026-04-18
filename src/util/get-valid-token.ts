@@ -19,7 +19,9 @@ export async function getValidAccessToken(): Promise<string> {
     if (typeof payload.exp === 'number') {
       expired = payload.exp * 1000 < Date.now()
     }
-  } catch { /* use stored expiresAt */ }
+  } catch {
+    /* use stored expiresAt */
+  }
 
   if (!expired) {
     return tokens.accessToken
@@ -37,7 +39,9 @@ export async function getValidAccessToken(): Promise<string> {
     if (typeof payload.exp === 'number') {
       expiresAt = payload.exp * 1000
     }
-  } catch { /* use fallback */ }
+  } catch {
+    /* use fallback */
+  }
 
   const updated = {
     ...tokens,

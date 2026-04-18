@@ -12,7 +12,6 @@ export const getApiUrl = (domain?: string): string => {
   return `https://app.${actualDomain}`
 }
 
-
 export const getAppUrl = (domain?: string): string => {
   // Allow explicit override for app URL
   if (process.env.QUONFIG_APP_BASE_URL_OVERRIDE) {

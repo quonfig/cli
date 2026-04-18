@@ -1,8 +1,4 @@
-import type {
-  LaunchChangeEntry,
-  LaunchChangeHistoryResponse,
-  LaunchProjectEnvironmentsResponse,
-} from './types.js'
+import type {LaunchChangeEntry, LaunchChangeHistoryResponse, LaunchProjectEnvironmentsResponse} from './types.js'
 
 const PROD_BASE_URL = 'https://api.reforge.com'
 const STAGING_BASE_URL = 'https://api.goatsofreforge.com'
@@ -55,10 +51,7 @@ export async function fetchEnvironments(apiKey: string): Promise<Record<string, 
   return envMap
 }
 
-export async function fetchChangeHistoryPage(
-  apiKey: string,
-  cursor?: string,
-): Promise<LaunchChangeHistoryResponse> {
+export async function fetchChangeHistoryPage(apiKey: string, cursor?: string): Promise<LaunchChangeHistoryResponse> {
   const params = new URLSearchParams({
     expands: 'changedBy',
     includeNewVersion: 'true',
@@ -70,16 +63,10 @@ export async function fetchChangeHistoryPage(
     params.set('cursor', cursor)
   }
 
-  return (await apiFetch(
-    `/api/v1/change-history?${params}`,
-    apiKey,
-  )) as LaunchChangeHistoryResponse
+  return (await apiFetch(`/api/v1/change-history?${params}`, apiKey)) as LaunchChangeHistoryResponse
 }
 
-export async function fetchAllChangeHistory(
-  apiKey: string,
-  sinceEpochMs?: number,
-): Promise<LaunchChangeEntry[]> {
+export async function fetchAllChangeHistory(apiKey: string, sinceEpochMs?: number): Promise<LaunchChangeEntry[]> {
   const collected: LaunchChangeEntry[] = []
   const seenCursors = new Set<string>()
   let cursor: string | undefined

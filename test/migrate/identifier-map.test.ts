@@ -22,12 +22,8 @@ describe('migrate/identifier-map', () => {
       const collisions = detectCollisions(map)
       expect(collisions).to.have.length(1)
       const collision = collisions[0]!
-      expect(new Set([collision.quonfigKeyA, collision.quonfigKeyB])).to.deep.equal(
-        new Set(['foo', 'FOO']),
-      )
-      expect(new Set([collision.legacyKeyA, collision.legacyKeyB])).to.deep.equal(
-        new Set(['legacyA', 'legacyB']),
-      )
+      expect(new Set([collision.quonfigKeyA, collision.quonfigKeyB])).to.deep.equal(new Set(['foo', 'FOO']))
+      expect(new Set([collision.legacyKeyA, collision.legacyKeyB])).to.deep.equal(new Set(['legacyA', 'legacyB']))
     })
 
     it('is deterministic regardless of insertion order', () => {
@@ -75,9 +71,7 @@ describe('migrate/identifier-map', () => {
     })
 
     it('throws IdentifierMapCollisionError and writes nothing on case collision', () => {
-      expect(() => writeIdentifierMap(tmpdir, {a: 'foo', b: 'FOO'})).to.throw(
-        IdentifierMapCollisionError,
-      )
+      expect(() => writeIdentifierMap(tmpdir, {a: 'foo', b: 'FOO'})).to.throw(IdentifierMapCollisionError)
       expect(fs.existsSync(path.join(tmpdir, '.qf', 'identifier-map.json'))).to.equal(false)
     })
 
@@ -103,9 +97,7 @@ describe('migrate/identifier-map', () => {
       const mapPath = path.join(qfDir, 'identifier-map.json')
       fs.writeFileSync(mapPath, '{"preexisting":"value"}\n')
 
-      expect(() => writeIdentifierMap(tmpdir, {a: 'foo', b: 'FOO'})).to.throw(
-        IdentifierMapCollisionError,
-      )
+      expect(() => writeIdentifierMap(tmpdir, {a: 'foo', b: 'FOO'})).to.throw(IdentifierMapCollisionError)
       expect(fs.readFileSync(mapPath, 'utf8')).to.equal('{"preexisting":"value"}\n')
     })
   })

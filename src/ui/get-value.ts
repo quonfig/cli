@@ -3,7 +3,6 @@ import type {Value, ConfigResponse} from '@quonfig/node'
 
 import {defaultValueFor} from '../quonfig.js'
 import {Result, failure, noop, success} from '../result.js'
-import autocomplete from '../util/autocomplete.js'
 import isInteractive from '../util/is-interactive.js'
 import validateValue from '../validations/value.js'
 import getString from './get-string.js'
@@ -80,7 +79,7 @@ const valueToString = (v: Value | undefined): string => {
 
 const promptForValue = async ({
   allowBlank,
-  config,
+  config: _config,
   currentDefault,
   message,
 }: {

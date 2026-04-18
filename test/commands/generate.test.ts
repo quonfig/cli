@@ -102,7 +102,7 @@ describe('generate', () => {
       .stdout()
       .stderr()
       .command(['generate', '--verbose', '--dir', FIXTURE_DIR, '--targets', 'react-ts'])
-      .it('react-ts output excludes sendToClientSdk:false configs', (ctx) => {
+      .it('react-ts output excludes sendToClientSdk:false configs', (_ctx) => {
         // my.string-config has sendToClientSdk: false, so it should NOT appear in react-ts output
         const clientFile = path.join(process.cwd(), 'generated', 'quonfig-client-types.d.ts')
         expect(fs.existsSync(clientFile)).to.be.true
@@ -114,7 +114,7 @@ describe('generate', () => {
       .stdout()
       .stderr()
       .command(['generate', '--verbose', '--dir', FIXTURE_DIR, '--targets', 'react-ts'])
-      .it('react-ts output includes sendToClientSdk:true int config', (ctx) => {
+      .it('react-ts output includes sendToClientSdk:true int config', (_ctx) => {
         // my.int-config has sendToClientSdk: true, so it SHOULD appear in react-ts output
         const clientFile = path.join(process.cwd(), 'generated', 'quonfig-client-types.d.ts')
         expect(fs.existsSync(clientFile)).to.be.true
@@ -126,7 +126,7 @@ describe('generate', () => {
       .stdout()
       .stderr()
       .command(['generate', '--verbose', '--dir', FIXTURE_DIR, '--targets', 'node-ts'])
-      .it('node-ts output contains all configs and flags', (ctx) => {
+      .it('node-ts output contains all configs and flags', (_ctx) => {
         const serverFile = path.join(process.cwd(), 'generated', 'quonfig-server-types.d.ts')
         expect(fs.existsSync(serverFile)).to.be.true
         const content = fs.readFileSync(serverFile, 'utf8')

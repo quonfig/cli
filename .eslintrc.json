@@ -19,7 +19,10 @@
     "perfectionist/sort-object-types": "off",
     "perfectionist/sort-union-types": "off",
     "perfectionist/sort-imports": "off",
-    "perfectionist/sort-named-imports": "off"
+    "perfectionist/sort-named-imports": "off",
+    "valid-jsdoc": "off",
+    "camelcase": "off",
+    "unicorn/filename-case": "off"
   },
   "overrides": [
     {
@@ -29,15 +32,20 @@
       }
     },
     {
-      "files": ["test/codegen/python/*.ts"],
+      "files": ["src/verify/standalone.ts"],
       "rules": {
-        "camelcase": "off"
+        "n/no-process-exit": "off",
+        "unicorn/no-process-exit": "off",
+        "unicorn/prefer-top-level-await": "off"
       }
     },
     {
       "files": ["test/**/*.ts"],
       "rules": {
-        "@typescript-eslint/no-explicit-any": "off"
+        "@typescript-eslint/no-explicit-any": "off",
+        "unicorn/consistent-function-scoping": "off",
+        "no-bitwise": "off",
+        "no-await-in-loop": "off"
       }
     }
   ]

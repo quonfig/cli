@@ -47,11 +47,7 @@ const hasStagedChanges = async (dir: string): Promise<boolean> => {
   return stdout.trim().length > 0
 }
 
-const gitCommitFromStdin = (
-  cwd: string,
-  message: string,
-  env: NodeJS.ProcessEnv,
-): Promise<void> =>
+const gitCommitFromStdin = (cwd: string, message: string, env: NodeJS.ProcessEnv): Promise<void> =>
   new Promise((resolve, reject) => {
     const child = spawn('git', ['-C', cwd, 'commit', '-F', '-'], {env})
     let stderr = ''
@@ -73,21 +69,14 @@ const ensureQuonfigJson = (dir: string, environments: string[]): void => {
   fs.writeFileSync(filePath, JSON.stringify({environments: sorted}, null, 2) + '\n', 'utf8')
 }
 
-const ensureLocalRepo = async (
-  localDir: string,
-  branch: string,
-): Promise<'initialized' | 'reused'> => {
+const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initialized' | 'reused'> => {
   fs.mkdirSync(localDir, {recursive: true})
   if (await isGitRepo(localDir)) return 'reused'
   await execFile('git', ['init', `--initial-branch=${branch}`, localDir])
   return 'initialized'
 }
 
-const writeQuonfigFiles = (
-  dir: string,
-  changes: LegacyChange[],
-  source: MigrationSource,
-): void => {
+const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): void => {
   for (const change of changes) {
     const files = source.translate(change)
     for (const file of files) {
@@ -98,9 +87,7 @@ const writeQuonfigFiles = (
   }
 }
 
-export const applyLocalMigration = async (
-  opts: ApplyLocalMigrationOptions,
-): Promise<ApplyLocalMigrationResult> => {
+export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Promise<ApplyLocalMigrationResult> => {
   const branch = opts.branch ?? 'main'
   const author = opts.author ?? MIGRATOR_IDENTITY
 

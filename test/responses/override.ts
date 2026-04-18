@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-
 /**
  * Mock responses for override command tests
  * Uses oRPC API endpoints via https://app.quonfig.com
@@ -65,44 +64,33 @@ const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environmen
 )
 
 // POST /internal/ops/v1/assign-variant - set override (NOT oRPC, no json wrapper)
-const assignVariantHandler = http.post(
-  'https://app.quonfig.com/internal/ops/v1/assign-variant',
-  async ({request}) => {
-    const body = (await request.json()) as any
+const assignVariantHandler = http.post('https://app.quonfig.com/internal/ops/v1/assign-variant', async ({request}) => {
+  const body = (await request.json()) as any
 
-    // Check for invalid double value (NaN becomes null when JSON stringified)
-    if (body.configKey === 'my-double-key' && body.variant?.type === 'double' && body.variant?.value === null) {
-      return HttpResponse.json({error: 'Invalid double value'}, {status: 400})
-    }
+  // Check for invalid double value (NaN becomes null when JSON stringified)
+  if (body.configKey === 'my-double-key' && body.variant?.type === 'double' && body.variant?.value === null) {
+    return HttpResponse.json({error: 'Invalid double value'}, {status: 400})
+  }
 
-    return HttpResponse.json({
-      success: true,
-      newVersionId: (body.currentVersionId || 1) + 1,
-    })
-  },
-)
+  return HttpResponse.json({
+    success: true,
+    newVersionId: (body.currentVersionId || 1) + 1,
+  })
+})
 
 // POST /internal/ops/v1/remove-variant - remove override (NOT oRPC, no json wrapper)
-const removeVariantHandler = http.post(
-  'https://app.quonfig.com/internal/ops/v1/remove-variant',
-  async ({request}) => {
-    const body = (await request.json()) as any
+const removeVariantHandler = http.post('https://app.quonfig.com/internal/ops/v1/remove-variant', async ({request}) => {
+  const body = (await request.json()) as any
 
-    // Check if config has an override (jeffreys.test.key.reforge does, my-double-key doesn't)
-    if (body.configKey === 'my-double-key') {
-      return HttpResponse.json({message: 'No override found for my-double-key'}, {status: 404})
-    }
+  // Check if config has an override (jeffreys.test.key.reforge does, my-double-key doesn't)
+  if (body.configKey === 'my-double-key') {
+    return HttpResponse.json({message: 'No override found for my-double-key'}, {status: 404})
+  }
 
-    return HttpResponse.json({
-      success: true,
-      newVersionId: (body.currentVersionId || 1) + 1,
-    })
-  },
-)
+  return HttpResponse.json({
+    success: true,
+    newVersionId: (body.currentVersionId || 1) + 1,
+  })
+})
 
-export const server = setupServer(
-  metadataHandler,
-  environmentsHandler,
-  assignVariantHandler,
-  removeVariantHandler,
-)
+export const server = setupServer(metadataHandler, environmentsHandler, assignVariantHandler, removeVariantHandler)

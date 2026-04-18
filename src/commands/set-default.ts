@@ -1,8 +1,7 @@
 import {Flags} from '@oclif/core'
-import {ProvidedSource} from '@quonfig/node'
+import {ProvidedSource, ConfigValueType} from '@quonfig/node'
 
 import {APICommand} from '../index.js'
-import {ConfigValueType} from '@quonfig/node'
 import {JsonObj} from '../result.js'
 import getConfirmation, {confirmFlag} from '../ui/get-confirmation.js'
 import getEnvironment from '../ui/get-environment.js'
@@ -136,7 +135,10 @@ To see all current values and rules for a flag:
 
     // Check if existing config has encrypted values
     if (!secret.selected) {
-      const configDetailsRequest = await this.apiClient.post('/api/v1/metadata/getByKey', {workspaceId: this.workspaceId, key})
+      const configDetailsRequest = await this.apiClient.post('/api/v1/metadata/getByKey', {
+        workspaceId: this.workspaceId,
+        key,
+      })
       if (configDetailsRequest.ok) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const configDetails = configDetailsRequest.json as any
@@ -240,7 +242,6 @@ To see all current values and rules for a flag:
     key: string
     secret: Secret
   } & ValueOrEnvVar) {
-    /* eslint-disable camelcase */
     const typeMapping: Record<string, string> = {
       bool: 'bool',
       string: 'string',
@@ -252,7 +253,6 @@ To see all current values and rules for a flag:
       duration: 'duration',
       int_range: 'intRange',
     }
-    /* eslint-enable camelcase */
 
     const type = typeMapping[config.valueType.toLowerCase()] || config.valueType
 

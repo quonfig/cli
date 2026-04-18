@@ -3,9 +3,9 @@ import {getValidAccessToken} from './get-valid-token.js'
 import {GiteaTokenEntry, saveGiteaToken} from './gitea-token-storage.js'
 
 export interface GiteaTokenResponse {
-  token: string
-  repoUrl: string
   expiresAt: string | null
+  repoUrl: string
+  token: string
 }
 
 export const mintGiteaToken = async (
@@ -19,7 +19,7 @@ export const mintGiteaToken = async (
   const res = await fetch(`${apiUrl}/api/v1/gitea/token`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({json: {scope, workspaceId, purpose}}),
@@ -33,11 +33,13 @@ export const mintGiteaToken = async (
       // oRPC error shape
       if (body?.json?.message) message = body.json.message
       else if (body?.message) message = body.message
-    } catch { /* use raw text */ }
+    } catch {
+      /* use raw text */
+    }
     throw new Error(message || text)
   }
 
-  const body = await res.json() as {json?: GiteaTokenResponse} | GiteaTokenResponse
+  const body = (await res.json()) as {json?: GiteaTokenResponse} | GiteaTokenResponse
   const data = (body as {json?: GiteaTokenResponse}).json ?? (body as GiteaTokenResponse)
   return data
 }

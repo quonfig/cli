@@ -35,7 +35,7 @@ export default class WorkspaceSwitch extends BaseCommand {
       const res = await fetch(`${apiUrl}/api/v1/userWorkspaces/list`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({json: {}}),
@@ -45,7 +45,7 @@ export default class WorkspaceSwitch extends BaseCommand {
         return this.err(`Failed to fetch workspaces (${res.status}). Try \`qfg login\` to re-authenticate.`)
       }
 
-      const body = await res.json() as {json?: WorkspaceEntry[]}
+      const body = (await res.json()) as {json?: WorkspaceEntry[]}
       const all = (body.json ?? body) as unknown as WorkspaceEntry[]
       candidates = Array.isArray(all) ? all : []
     } catch (error) {
