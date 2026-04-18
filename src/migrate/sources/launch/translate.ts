@@ -127,10 +127,7 @@ function normalizeJsonValuesInConfig(out: Record<string, unknown>): void {
   }
 }
 
-export function transformConfig(
-  config: LaunchConfig,
-  envIdMap: Record<string, string>,
-): Record<string, unknown> {
+export function transformConfig(config: LaunchConfig, envIdMap: Record<string, string>): Record<string, unknown> {
   const out: Record<string, unknown> = JSON.parse(JSON.stringify(config))
 
   delete out.changedBy

@@ -5,11 +5,7 @@ import * as util from 'node:util'
 
 const execFile = util.promisify(execFileCb)
 
-const gitCommitFromStdin = (
-  cwd: string,
-  message: string,
-  env: NodeJS.ProcessEnv,
-): Promise<void> =>
+const gitCommitFromStdin = (cwd: string, message: string, env: NodeJS.ProcessEnv): Promise<void> =>
   new Promise((resolve, reject) => {
     const child = spawn('git', ['-C', cwd, 'commit', '-F', '-'], {env})
     let stderr = ''
@@ -67,10 +63,7 @@ export class PushConflictError extends Error {
   }
 }
 
-const runGit = async (
-  cwd: string,
-  args: string[],
-): Promise<{stdout: string; stderr: string}> => {
+const runGit = async (cwd: string, args: string[]): Promise<{stdout: string; stderr: string}> => {
   try {
     return await execFile('git', args, {cwd})
   } catch (error: unknown) {
@@ -138,13 +131,7 @@ const ensureCloneOrReuse = async (
   }
 
   fs.mkdirSync(path.dirname(localDir), {recursive: true})
-  await runGit(path.dirname(localDir) || '.', [
-    'clone',
-    '--branch',
-    branch,
-    remoteUrl,
-    localDir,
-  ])
+  await runGit(path.dirname(localDir) || '.', ['clone', '--branch', branch, remoteUrl, localDir])
   return 'cloned'
 }
 
@@ -153,9 +140,7 @@ const hasStagedChanges = async (dir: string): Promise<boolean> => {
   return stdout.trim().length > 0
 }
 
-export const cloneAndStackPush = async (
-  opts: CloneAndStackPushOptions,
-): Promise<CloneAndStackPushResult> => {
+export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise<CloneAndStackPushResult> => {
   const branch = opts.branch ?? 'main'
   const author = opts.author ?? MIGRATOR_IDENTITY
 

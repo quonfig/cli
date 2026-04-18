@@ -14,9 +14,7 @@ const state: LaunchState = {apiKey: null, envIdMap: null}
 
 class MissingAuthError extends Error {
   constructor(operation: string) {
-    super(
-      `launch source ${operation} requires validateAuth(apiKey) to be called first (no API key configured).`,
-    )
+    super(`launch source ${operation} requires validateAuth(apiKey) to be called first (no API key configured).`)
     this.name = 'MissingAuthError'
   }
 }

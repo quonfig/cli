@@ -18,7 +18,10 @@ import {
   gitSetRemote,
 } from '../util/git-ops.js'
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 
 export default class Sync extends BaseCommand {
   static description = 'Continuously poll for workspace config updates and apply them locally'
@@ -43,8 +46,8 @@ export default class Sync extends BaseCommand {
     }),
   }
 
-  private workspaceId!: string
   private resolvedDir!: string
+  private workspaceId!: string
 
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Sync)
@@ -89,9 +92,35 @@ export default class Sync extends BaseCommand {
     // Poll loop
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      // eslint-disable-next-line no-await-in-loop
       await sleep(intervalSec * 1000)
+      // eslint-disable-next-line no-await-in-loop
       await this.runSync()
     }
+  }
+
+  private async ensureRemoteUrl(): Promise<void> {
+    const entry = await loadGiteaToken(this.workspaceId)
+
+    if (!entry || isGiteaTokenExpired(entry)) {
+      await this.refreshToken()
+      return
+    }
+
+    await gitSetRemote(this.resolvedDir, entry.repoUrl)
+  }
+
+  private looksLike401(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err)
+    return msg.includes('401') || msg.toLowerCase().includes('authentication failed')
+  }
+
+  private async refreshToken(): Promise<void> {
+    const data = await mintGiteaToken(this.workspaceId, 'read', 'pull')
+    const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
+    await saveGiteaToken(this.workspaceId, entry)
+    await gitSetRemote(this.resolvedDir, entry.repoUrl)
+    this.verboseLog('Sync', 'Token refreshed.')
   }
 
   private async runSync(): Promise<void> {
@@ -138,43 +167,19 @@ export default class Sync extends BaseCommand {
       } else {
         this.log(`[${timestamp}] Updated.`)
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (this.looksLike401(err)) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (this.looksLike401(error)) {
         this.log(`[${timestamp}] Token expired, refreshing...`)
         try {
           await this.refreshToken()
           await this.ensureRemoteUrl()
-        } catch (refreshErr: unknown) {
-          this.log(`[${timestamp}] Warning: could not refresh token: ${String(refreshErr)}`)
+        } catch (error: unknown) {
+          this.log(`[${timestamp}] Warning: could not refresh token: ${String(error)}`)
         }
       } else {
         this.log(`[${timestamp}] Warning: sync failed: ${msg}`)
       }
     }
-  }
-
-  private async ensureRemoteUrl(): Promise<void> {
-    const entry = await loadGiteaToken(this.workspaceId)
-
-    if (!entry || isGiteaTokenExpired(entry)) {
-      await this.refreshToken()
-      return
-    }
-
-    await gitSetRemote(this.resolvedDir, entry.repoUrl)
-  }
-
-  private async refreshToken(): Promise<void> {
-    const data = await mintGiteaToken(this.workspaceId, 'read', 'pull')
-    const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
-    await saveGiteaToken(this.workspaceId, entry)
-    await gitSetRemote(this.resolvedDir, entry.repoUrl)
-    this.verboseLog('Sync', 'Token refreshed.')
-  }
-
-  private looksLike401(err: unknown): boolean {
-    const msg = err instanceof Error ? err.message : String(err)
-    return msg.includes('401') || msg.toLowerCase().includes('authentication failed')
   }
 }

@@ -12,10 +12,7 @@ function createWorkspace(): string {
   fs.mkdirSync(path.join(dir, 'schemas'), {recursive: true})
   fs.mkdirSync(path.join(dir, 'schemas-protected'), {recursive: true})
 
-  fs.writeFileSync(
-    path.join(dir, 'quonfig.json'),
-    JSON.stringify({environments: []}, null, 2),
-  )
+  fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({environments: []}, null, 2))
 
   fs.writeFileSync(
     path.join(dir, 'configs', 'feature.json'),
@@ -183,9 +180,7 @@ describe('validate', () => {
                 ],
               },
             ],
-            variants: [
-              {name: 'On', value: {type: 'bool', value: true}},
-            ],
+            variants: [{name: 'On', value: {type: 'bool', value: true}}],
           }),
         ],
       ])
@@ -214,8 +209,8 @@ describe('validate', () => {
                     type: 'weighted_values',
                     value: {
                       weightedValues: [
-                        {value: {type: 'bool', value: true}, weight: 50000},
-                        {value: {type: 'bool', value: false}, weight: 50000},
+                        {value: {type: 'bool', value: true}, weight: 50_000},
+                        {value: {type: 'bool', value: false}, weight: 50_000},
                       ],
                       hashByPropertyName: 'user.key',
                     },
@@ -254,8 +249,8 @@ describe('validate', () => {
                     type: 'weighted_values',
                     value: {
                       weightedValues: [
-                        {value: {type: 'string', value: 'red'}, weight: 50000},
-                        {value: {type: 'string', value: 'purple'}, weight: 50000},
+                        {value: {type: 'string', value: 'red'}, weight: 50_000},
+                        {value: {type: 'string', value: 'purple'}, weight: 50_000},
                       ],
                       hashByPropertyName: 'user.key',
                     },
@@ -334,8 +329,8 @@ describe('validate', () => {
                       type: 'weighted_values',
                       value: {
                         weightedValues: [
-                          {value: {type: 'string', value: 'red'}, weight: 50000},
-                          {value: {type: 'string', value: 'blue'}, weight: 50000},
+                          {value: {type: 'string', value: 'red'}, weight: 50_000},
+                          {value: {type: 'string', value: 'blue'}, weight: 50_000},
                         ],
                         hashByPropertyName: 'user.key',
                       },
@@ -376,9 +371,7 @@ describe('validate', () => {
               ],
             },
             environments: [],
-            variants: [
-              {name: 'A', value: {type: 'string', value: 'alpha'}},
-            ],
+            variants: [{name: 'A', value: {type: 'string', value: 'alpha'}}],
           }),
         ],
       ])
@@ -394,10 +387,7 @@ describe('validate', () => {
 
       try {
         fs.mkdirSync(path.join(workspace, 'feature-flags'), {recursive: true})
-        fs.writeFileSync(
-          path.join(workspace, 'quonfig.json'),
-          JSON.stringify({environments: []}, null, 2),
-        )
+        fs.writeFileSync(path.join(workspace, 'quonfig.json'), JSON.stringify({environments: []}, null, 2))
         fs.writeFileSync(
           path.join(workspace, 'feature-flags', 'bad-flag.json'),
           JSON.stringify({
@@ -621,10 +611,7 @@ describe('validate', () => {
       const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-stc-'))
       try {
         fs.mkdirSync(path.join(workspace, 'feature-flags'), {recursive: true})
-        fs.writeFileSync(
-          path.join(workspace, 'quonfig.json'),
-          JSON.stringify({environments: []}, null, 2),
-        )
+        fs.writeFileSync(path.join(workspace, 'quonfig.json'), JSON.stringify({environments: []}, null, 2))
         fs.writeFileSync(
           path.join(workspace, 'feature-flags', 'bad-client-flag.json'),
           JSON.stringify({

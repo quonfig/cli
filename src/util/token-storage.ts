@@ -11,7 +11,7 @@ export interface TokenStorageOptions {
 const getQuonfigDir = (options?: TokenStorageOptions) => options?.quonfigDir || path.join(os.homedir(), '.quonfig')
 const getTokenFile = (options?: TokenStorageOptions) => {
   const domain = getDomain()
-  const filename = domain !== 'quonfig.com' ? `tokens-${domain.replaceAll('.', '-')}.json` : 'tokens.json'
+  const filename = domain === 'quonfig.com' ? 'tokens.json' : `tokens-${domain.replaceAll('.', '-')}.json`
   return path.join(getQuonfigDir(options), filename)
 }
 const getConfigFile = (options?: TokenStorageOptions) => path.join(getQuonfigDir(options), 'config')
@@ -127,7 +127,7 @@ export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<Aut
     }
 
     // Parse profiles — each block starts with [profile name] and contains key=value lines
-    const profileBlockRegex = /\[profile\s+(\w+)]\s*\n((?:[^\[]*\n?)*)/g
+    const profileBlockRegex = /\[profile\s+(\w+)]\s*\n((?:[^[]*\n?)*)/g
     let match
 
     while ((match = profileBlockRegex.exec(data)) !== null) {

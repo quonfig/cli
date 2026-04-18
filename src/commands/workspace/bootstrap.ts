@@ -6,7 +6,7 @@ import {Flags} from '@oclif/core'
 import type {JsonObj} from '../../result.js'
 
 import {BaseCommand} from '../../index.js'
-import {getActiveProfile, loadAuthConfig, loadTokens} from '../../util/token-storage.js'
+import {getActiveProfile, loadAuthConfig} from '../../util/token-storage.js'
 import {mintGiteaToken} from '../../util/gitea-api.js'
 import {
   isGitRepo,
@@ -19,7 +19,7 @@ import {
 } from '../../util/git-ops.js'
 
 export default class WorkspaceBootstrap extends BaseCommand {
-  static description = 'Push a local git repo to Gitea as this workspace\'s config repository'
+  static description = "Push a local git repo to Gitea as this workspace's config repository"
 
   static examples = [
     '<%= config.bin %> workspace bootstrap --dir ./our-config',
@@ -69,7 +69,9 @@ export default class WorkspaceBootstrap extends BaseCommand {
     // Validate: must be a git repo with at least one commit
     const isRepo = await isGitRepo(resolvedDir)
     if (!isRepo) {
-      return this.err(`${resolvedDir} is not a git repository.\nInitialize it with \`git init\` and commit your config files first.`)
+      return this.err(
+        `${resolvedDir} is not a git repository.\nInitialize it with \`git init\` and commit your config files first.`,
+      )
     }
 
     const hasCommit = await hasAtLeastOneCommit(resolvedDir)
@@ -93,8 +95,8 @@ export default class WorkspaceBootstrap extends BaseCommand {
           return this.err('Validation failed.')
         }
         this.log('Validation passed.\n')
-      } catch (err: unknown) {
-        this.verboseLog('Validation error', String(err))
+      } catch (error: unknown) {
+        this.verboseLog('Validation error', String(error))
         this.log('Warning: could not run validation. Proceeding anyway.')
         this.log('Use --skip-validate to suppress this warning.\n')
       }
@@ -126,8 +128,10 @@ export default class WorkspaceBootstrap extends BaseCommand {
     let tokenData: {token: string; repoUrl: string; expiresAt: string | null}
     try {
       tokenData = await mintGiteaToken(workspaceId, 'write', 'bootstrap')
-    } catch (err: unknown) {
-      return this.err(`Could not get Gitea credentials: ${String(err)}\n\nMake sure the workspace is fully provisioned in the Quonfig app before bootstrapping.`)
+    } catch (error: unknown) {
+      return this.err(
+        `Could not get Gitea credentials: ${String(error)}\n\nMake sure the workspace is fully provisioned in the Quonfig app before bootstrapping.`,
+      )
     }
 
     const {repoUrl} = tokenData
@@ -160,8 +164,8 @@ export default class WorkspaceBootstrap extends BaseCommand {
       } else {
         await gitPushForceLease(resolvedDir)
       }
-    } catch (err: unknown) {
-      return this.err(`Push failed: ${String(err)}`)
+    } catch (error: unknown) {
+      return this.err(`Push failed: ${String(error)}`)
     }
 
     this.log(`\nBootstrap complete.`)

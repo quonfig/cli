@@ -37,10 +37,10 @@ describe('migrate doctor', () => {
     test
       .stdout()
       .command(['migrate:doctor', '--json', '--dir', '.', '--language', 'node'])
-      .catch((err) => {
+      .catch((error) => {
         // Expected — workspace-provisioned will fail since we have no API client,
         // but the JSON output must still be valid on stdout before exit.
-        expect((err as {exitCode?: number}).exitCode ?? 1).to.equal(1)
+        expect((error as {exitCode?: number}).exitCode ?? 1).to.equal(1)
       })
       .it('emits valid JSON with a checks array', (ctx) => {
         const output = JSON.parse(ctx.stdout)
@@ -63,8 +63,8 @@ describe('migrate doctor', () => {
     test
       .stdout()
       .command(['migrate:doctor', '--json', '--dir', '.'])
-      .catch((err) => {
-        expect((err as {exitCode?: number}).exitCode ?? 1).to.equal(1)
+      .catch((error) => {
+        expect((error as {exitCode?: number}).exitCode ?? 1).to.equal(1)
       })
       .it('reports qfg-login as failed', (ctx) => {
         const output = JSON.parse(ctx.stdout)
@@ -87,16 +87,16 @@ describe('migrate doctor', () => {
         expect(ctx.stdout).to.match(/\bfail\b/)
         expect(ctx.stdout).to.match(/qfg-login/)
         // eslint-disable-next-line no-control-regex
-        expect(ctx.stdout).to.match(/^[\x00-\x7F]+$/)
+        expect(ctx.stdout).to.match(/^[\u0000-\u007F]+$/)
       })
   })
 
   describe('unsupported --from source', () => {
     test
       .command(['migrate:doctor', '--from', 'launchdarkly'])
-      .catch((err) => {
+      .catch((error) => {
         // oclif Flags.options validation rejects this at parse time
-        expect(err.message.toLowerCase()).to.match(/launch/)
+        expect(error.message.toLowerCase()).to.match(/launch/)
       })
       .it('rejects sources other than launch')
   })

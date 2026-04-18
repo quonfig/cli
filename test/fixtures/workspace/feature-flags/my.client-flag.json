@@ -7,7 +7,7 @@
     "rules": [
       {
         "criteria": [],
-        "value": { "type": "bool", "value": true }
+        "value": {"type": "bool", "value": true}
       }
     ]
   },

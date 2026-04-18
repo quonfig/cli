@@ -30,13 +30,7 @@ function seedRemote(remoteDir: string, rootTmp: string): void {
   run(seed, 'push', 'origin', 'main')
 }
 
-function addUiCommit(
-  remoteDir: string,
-  rootTmp: string,
-  relPath: string,
-  contents: string,
-  message: string,
-): void {
+function addUiCommit(remoteDir: string, rootTmp: string, relPath: string, contents: string, message: string): void {
   const tmp = fs.mkdtempSync(path.join(rootTmp, 'ui-'))
   run(tmp, 'clone', remoteDir, '.')
   run(tmp, 'config', 'user.email', 'ui@test')
@@ -60,9 +54,7 @@ function logSubjects(dir: string): string[] {
 }
 
 /** Fake source whose translate() round-trips per-change file outputs. */
-function makeFakeSource(
-  filesByKey: Map<string, QuonfigFile[]>,
-): MigrationSource {
+function makeFakeSource(filesByKey: Map<string, QuonfigFile[]>): MigrationSource {
   return {
     async *fetchChanges() {
       // Not used; caller feeds `changes` directly into pushMigrationToCloud.
@@ -136,9 +128,9 @@ describe('pushMigrationToCloud', () => {
     ])
 
     const result = await pushMigrationToCloud({
-      changes: [makeChange('flag-a', 1_000), makeChange('flag-b', 2_000)],
+      changes: [makeChange('flag-a', 1000), makeChange('flag-b', 2000)],
       commitMessage: 'migrator: import 2 flags',
-      importState: {lastProcessedAt: 2_000, source: 'fake'},
+      importState: {lastProcessedAt: 2000, source: 'fake'},
       localDir,
       remoteUrl: remote,
       reportData: {
@@ -166,7 +158,7 @@ describe('pushMigrationToCloud', () => {
 
     const state = JSON.parse(fs.readFileSync(path.join(reader, '.qf/import-state.json'), 'utf8'))
     expect(state.source).to.equal('fake')
-    expect(state.lastProcessedAt).to.equal(2_000)
+    expect(state.lastProcessedAt).to.equal(2000)
 
     expect(logSubjects(reader)).to.deep.equal(['migrator: import 2 flags', 'initial'])
   })
@@ -178,9 +170,9 @@ describe('pushMigrationToCloud', () => {
 
     // First run: import flag-a (v1) and flag-b (v1)
     await pushMigrationToCloud({
-      changes: [makeChange('flag-a', 1_000), makeChange('flag-b', 2_000)],
+      changes: [makeChange('flag-a', 1000), makeChange('flag-b', 2000)],
       commitMessage: 'migrator: run 1',
-      importState: {lastProcessedAt: 2_000, source: 'fake'},
+      importState: {lastProcessedAt: 2000, source: 'fake'},
       localDir,
       remoteUrl: remote,
       reportData: {
@@ -223,9 +215,9 @@ describe('pushMigrationToCloud', () => {
     // Re-run: flag-a is flipped in Launch (updated value) and flag-c is newly added.
     // flag-b is NOT re-exported — simulating that Launch did not change it and we only push the delta.
     const result = await pushMigrationToCloud({
-      changes: [makeChange('flag-a', 3_000), makeChange('flag-c', 4_000)],
+      changes: [makeChange('flag-a', 3000), makeChange('flag-c', 4000)],
       commitMessage: 'migrator: run 2 delta',
-      importState: {lastProcessedAt: 4_000, source: 'fake'},
+      importState: {lastProcessedAt: 4000, source: 'fake'},
       localDir,
       remoteUrl: remote,
       reportData: {
@@ -295,7 +287,7 @@ describe('pushMigrationToCloud', () => {
 
     // import-state.json cursor advanced
     const state = JSON.parse(fs.readFileSync(path.join(reader, '.qf/import-state.json'), 'utf8'))
-    expect(state.lastProcessedAt).to.equal(4_000)
+    expect(state.lastProcessedAt).to.equal(4000)
   })
 
   it('strips .qf from .gitignore so state file is committed (re-run picks up cursor)', async () => {
@@ -307,20 +299,13 @@ describe('pushMigrationToCloud', () => {
     const localDir = path.join(root, 'workspace')
 
     await pushMigrationToCloud({
-      changes: [makeChange('flag-a', 1_000)],
+      changes: [makeChange('flag-a', 1000)],
       commitMessage: 'migrator: import',
-      importState: {lastProcessedAt: 1_000, source: 'fake'},
+      importState: {lastProcessedAt: 1000, source: 'fake'},
       localDir,
       remoteUrl: remote,
       reportData: emptyReport(),
-      source: makeFakeSource(
-        new Map([
-          [
-            'flag-a',
-            [{contents: '{"v":1}\n', path: 'feature-flags/flag-a.json'}],
-          ],
-        ]),
-      ),
+      source: makeFakeSource(new Map([['flag-a', [{contents: '{"v":1}\n', path: 'feature-flags/flag-a.json'}]]])),
     })
 
     const reader = cloneForRead(remote, root)

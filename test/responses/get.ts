@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-
 /**
  * Mock responses for get command tests
  * Uses oRPC API endpoints via https://app.quonfig.com
@@ -152,8 +151,4 @@ const evaluationHandler = http.post('https://app.quonfig.com/api/v1/evaluations/
   return HttpResponse.json({json: results})
 })
 
-export const server = setupServer(
-  metadataHandler,
-  environmentsHandler,
-  evaluationHandler,
-)
+export const server = setupServer(metadataHandler, environmentsHandler, evaluationHandler)

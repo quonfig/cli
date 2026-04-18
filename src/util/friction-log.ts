@@ -8,7 +8,7 @@ export interface FrictionEntry {
   ts: string
 }
 
-export function getFrictionLogPath(envValue: string | undefined, cwd: string = process.cwd()): null | string {
+export function getFrictionLogPath(envValue?: string | undefined, cwd: string = process.cwd()): null | string {
   if (envValue === undefined) return null
   const trimmed = envValue.trim()
   if (trimmed === '' || trimmed === 'false' || trimmed === '0') return null
@@ -46,8 +46,12 @@ const MAX_STDERR_CAPTURE = 4000
 
 export function extractLastErrorLine(stderr: string): string | undefined {
   if (!stderr) return undefined
+  // eslint-disable-next-line no-control-regex
   const stripped = stderr.replaceAll(/\u001B\[[\d;]*[A-Za-z]/g, '')
-  const lines = stripped.split('\n').map((l) => l.trim()).filter(Boolean)
+  const lines = stripped
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
   if (lines.length === 0) return undefined
   const errorLine = [...lines].reverse().find((l) => /^(error|»|×|✖)/i.test(l))
   return (errorLine ?? lines.at(-1))?.replace(/^»\s*/, '').replace(/^error:\s*/i, '')

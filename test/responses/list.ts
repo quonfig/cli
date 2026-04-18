@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-
 /**
  * Mock responses for list command tests
  * Uses oRPC API endpoints via https://app.quonfig.com

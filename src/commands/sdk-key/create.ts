@@ -9,11 +9,11 @@ import {getEnvironments} from '../../api/get-environments.js'
 type KeyType = 'backend' | 'frontend'
 
 interface CreatedSdkKey {
-  id: string
+  createdAt: string | null
   environmentId: string
   environmentName: string
+  id: string
   keyType: KeyType
-  createdAt: string | null
   rawKey: string
 }
 
@@ -61,20 +61,18 @@ export default class SdkKeyCreate extends APICommand {
       }
       environmentId = match.id
       environmentName = match.name
+    } else if (environments.length === 1) {
+      environmentId = environments[0].id
+      environmentName = environments[0].name
+      this.log(`Using environment: ${environmentName}`)
     } else {
-      if (environments.length === 1) {
-        environmentId = environments[0].id
-        environmentName = environments[0].name
-        this.log(`Using environment: ${environmentName}`)
-      } else {
-        const chosen = await select({
-          choices: environments.map((e) => ({name: e.name, value: e.id})),
-          message: 'Select environment:',
-        })
-        const match = environments.find((e) => e.id === chosen)!
-        environmentId = match.id
-        environmentName = match.name
-      }
+      const chosen = await select({
+        choices: environments.map((e) => ({name: e.name, value: e.id})),
+        message: 'Select environment:',
+      })
+      const match = environments.find((e) => e.id === chosen)!
+      environmentId = match.id
+      environmentName = match.name
     }
 
     // Resolve key type

@@ -32,11 +32,7 @@ describe('set-rollout', () => {
         {value: {type: 'string', value: 'hello-worldZ'}, weight: 34_000},
       ])
 
-      expect(variants.map((v) => v.name)).to.deep.equal([
-        'hello-worl',
-        'hello-worl-2',
-        'hello-worl-3',
-      ])
+      expect(variants.map((v) => v.name)).to.deep.equal(['hello-worl', 'hello-worl-2', 'hello-worl-3'])
     })
 
     it('handles non-string values via JSON stringification', () => {
@@ -49,9 +45,7 @@ describe('set-rollout', () => {
     })
 
     it('preserves the original value on the variant', () => {
-      const variants = synthesizeVariants([
-        {value: {type: 'json', value: {foo: 'bar'}}, weight: 100_000},
-      ])
+      const variants = synthesizeVariants([{value: {type: 'json', value: {foo: 'bar'}}, weight: 100_000}])
 
       expect(variants).to.have.length(1)
       expect(variants[0].value).to.deep.equal({type: 'json', value: {foo: 'bar'}})

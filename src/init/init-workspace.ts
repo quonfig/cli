@@ -23,9 +23,9 @@ import {
 
 export interface InitOptions {
   dir: string
+  dryRun: boolean
   /** true = force include samples, false = force skip, undefined = auto-detect */
   samples: boolean | undefined
-  dryRun: boolean
 }
 
 export type ActionKind =
@@ -38,9 +38,9 @@ export type ActionKind =
   | 'skip-hook'
 
 export interface InitAction {
+  description: string
   kind: ActionKind
   path: string
-  description: string
 }
 
 export interface InitPlan {
@@ -51,13 +51,7 @@ export interface InitPlan {
 
 // ── Directories that define a workspace ────────────────────────────────
 
-const WORKSPACE_DIRS = [
-  'configs',
-  'feature-flags',
-  'segments',
-  'log-levels',
-  'schemas',
-]
+const WORKSPACE_DIRS = ['configs', 'feature-flags', 'segments', 'log-levels', 'schemas']
 
 // ── Plan ───────────────────────────────────────────────────────────────
 
@@ -96,7 +90,7 @@ export function planInit(options: InitOptions): InitPlan {
     {file: 'AGENTS.md', content: agentsMdTemplate()},
   ]
 
-  for (const {file, content: _content} of managedFiles) {
+  for (const {file} of managedFiles) {
     const filePath = path.join(dir, file)
     const verb = fs.existsSync(filePath) ? 'Update' : 'Create'
     actions.push({kind: 'write-file', path: file, description: `${verb} ${file}`})
@@ -125,21 +119,41 @@ export function planInit(options: InitOptions): InitPlan {
   // 5. Git pre-commit hook (always runs — git repo guaranteed by step 0)
   if (needsGitInit) {
     // Fresh git init — hook will be created
-    actions.push({kind: 'create-hook', path: '.git/hooks/pre-commit', description: 'Install pre-commit hook (qfg verify)'})
+    actions.push({
+      kind: 'create-hook',
+      path: '.git/hooks/pre-commit',
+      description: 'Install pre-commit hook (qfg verify)',
+    })
   } else {
     const hooksDir = path.join(gitDir, 'hooks')
     const hookPath = path.join(hooksDir, 'pre-commit')
     if (fs.existsSync(hookPath)) {
-      const existing = fs.readFileSync(hookPath, 'utf-8')
+      const existing = fs.readFileSync(hookPath, 'utf8')
       if (existing.includes(PRE_COMMIT_MARKER)) {
-        actions.push({kind: 'skip-hook', path: '.git/hooks/pre-commit', description: 'Pre-commit hook already installed'})
+        actions.push({
+          kind: 'skip-hook',
+          path: '.git/hooks/pre-commit',
+          description: 'Pre-commit hook already installed',
+        })
       } else if (existing.includes('qfg verify')) {
-        actions.push({kind: 'skip-hook', path: '.git/hooks/pre-commit', description: 'Pre-commit hook already runs qfg verify'})
+        actions.push({
+          kind: 'skip-hook',
+          path: '.git/hooks/pre-commit',
+          description: 'Pre-commit hook already runs qfg verify',
+        })
       } else {
-        actions.push({kind: 'update-hook', path: '.git/hooks/pre-commit', description: 'Append qfg verify to existing pre-commit hook'})
+        actions.push({
+          kind: 'update-hook',
+          path: '.git/hooks/pre-commit',
+          description: 'Append qfg verify to existing pre-commit hook',
+        })
       }
     } else {
-      actions.push({kind: 'create-hook', path: '.git/hooks/pre-commit', description: 'Install pre-commit hook (qfg verify)'})
+      actions.push({
+        kind: 'create-hook',
+        path: '.git/hooks/pre-commit',
+        description: 'Install pre-commit hook (qfg verify)',
+      })
     }
   }
 
@@ -187,7 +201,7 @@ export function executeInit(plan: InitPlan, dir: string): void {
 
         const content = managedContent[action.path] ?? sampleContent[action.path]
         if (content) {
-          fs.writeFileSync(fullPath, content, 'utf-8')
+          fs.writeFileSync(fullPath, content, 'utf8')
         }
 
         break
@@ -199,15 +213,15 @@ export function executeInit(plan: InitPlan, dir: string): void {
           fs.mkdirSync(hooksDir, {recursive: true})
         }
 
-        fs.writeFileSync(fullPath, preCommitHookContent(), 'utf-8')
+        fs.writeFileSync(fullPath, preCommitHookContent(), 'utf8')
         fs.chmodSync(fullPath, 0o755)
         break
       }
 
       case 'update-hook': {
-        const existing = fs.readFileSync(fullPath, 'utf-8')
+        const existing = fs.readFileSync(fullPath, 'utf8')
         const appended = existing.trimEnd() + '\n\n' + preCommitHookContent().split('\n').slice(1).join('\n')
-        fs.writeFileSync(fullPath, appended, 'utf-8')
+        fs.writeFileSync(fullPath, appended, 'utf8')
         break
       }
 

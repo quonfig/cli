@@ -6,19 +6,23 @@ const execFile = util.promisify(execFileCb)
 /**
  * Redact a token from a URL string so it is safe to display to users.
  */
-export const redactToken = (url: string): string => url.replace(/:([^@/]+)@/, ':***@')
+export const redactToken = (url: string): string => url.replace(/:([^/@]+)@/, ':***@')
 
 /**
  * Wrap execFile errors to strip tokens from the message.
  */
-const safeExec = async (file: string, args: string[], options?: {cwd?: string}): Promise<{stdout: string; stderr: string}> => {
+const safeExec = async (
+  file: string,
+  args: string[],
+  options?: {cwd?: string},
+): Promise<{stdout: string; stderr: string}> => {
   try {
     return await execFile(file, args, {cwd: options?.cwd})
-  } catch (err: unknown) {
-    const e = err as Error & {stdout?: string; stderr?: string; cmd?: string}
-    const message = redactToken(e.message || String(err))
+  } catch (error: unknown) {
+    const e = error as {stdout?: string; stderr?: string; cmd?: string} & Error
+    const message = redactToken(e.message || String(error))
     const stderr = redactToken(e.stderr ?? '')
-    const safeErr = new Error(message) as Error & {stderr?: string}
+    const safeErr = new Error(message) as {stderr?: string} & Error
     safeErr.stderr = stderr
     throw safeErr
   }
@@ -144,10 +148,10 @@ export const gitMergeFfOnly = async (dir: string): Promise<string[]> => {
  */
 export const gitSetRemote = async (dir: string, url: string): Promise<void> => {
   const existing = await getRemoteUrl(dir)
-  if (existing !== null) {
-    await safeExec('git', ['-C', dir, 'remote', 'set-url', 'origin', url])
-  } else {
+  if (existing === null) {
     await safeExec('git', ['-C', dir, 'remote', 'add', 'origin', url])
+  } else {
+    await safeExec('git', ['-C', dir, 'remote', 'set-url', 'origin', url])
   }
 }
 

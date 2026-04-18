@@ -36,25 +36,18 @@ type SuggestedCommand = {
   implicitFlags: string[]
 }
 
-const commands: SuggestedCommand[] = [
-  SetDefault,
-  GenerateNewHexKey,
-  Create,
-  Get,
-  Info,
-  Mcp,
-  Override,
-  List,
-].map((command): SuggestedCommand => {
-  const id = convertToKebabCase(command.name)
-  return {
-    command,
-    description: command.description,
-    displayCommandName: id,
-    id,
-    implicitFlags: [],
-  }
-})
+const commands: SuggestedCommand[] = [SetDefault, GenerateNewHexKey, Create, Get, Info, Mcp, Override, List].map(
+  (command): SuggestedCommand => {
+    const id = convertToKebabCase(command.name)
+    return {
+      command,
+      description: command.description,
+      displayCommandName: id,
+      id,
+      implicitFlags: [],
+    }
+  },
+)
 
 commands.push(
   {

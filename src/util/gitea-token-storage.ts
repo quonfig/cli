@@ -10,15 +10,14 @@ const getQuonfigDir = () => path.join(os.homedir(), '.quonfig')
 
 const getGiteaTokenFile = () => {
   const domain = getDomain()
-  const filename =
-    domain !== 'quonfig.com' ? `gitea-tokens-${domain.replaceAll('.', '-')}.json` : 'gitea-tokens.json'
+  const filename = domain === 'quonfig.com' ? 'gitea-tokens.json' : `gitea-tokens-${domain.replaceAll('.', '-')}.json`
   return path.join(getQuonfigDir(), filename)
 }
 
 export interface GiteaTokenEntry {
-  token: string
-  repoUrl: string // authenticated clone URL
   expiresAt: string | null
+  repoUrl: string // authenticated clone URL
+  token: string
 }
 
 type GiteaTokenStore = Record<string, GiteaTokenEntry>

@@ -1,8 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {SECRET_VALUE} from '../test-helper.js'
-
 const conflictResponse = {
   message: 'Conflict',
   error: 'already exists',
@@ -155,9 +153,4 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
   return HttpResponse.json({json: {error: 'Config not found'}}, {status: 404})
 })
 
-export const server = setupServer(
-  flagsCreateHandler,
-  configsCreateHandler,
-  metadataHandler,
-  getByKeyHandler,
-)
+export const server = setupServer(flagsCreateHandler, configsCreateHandler, metadataHandler, getByKeyHandler)

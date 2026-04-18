@@ -148,14 +148,7 @@ To inspect the current rollout:
     // Build weighted values
     let weightedValues: Array<{value: {type: string; value: unknown}; weight: number}>
 
-    if (flags['true-percent'] !== undefined) {
-      const truePercent = flags['true-percent']
-      const falsePercent = 100 - truePercent
-      weightedValues = [
-        {value: {type: 'bool', value: true}, weight: truePercent * (WEIGHT_TOTAL / 100)},
-        {value: {type: 'bool', value: false}, weight: falsePercent * (WEIGHT_TOTAL / 100)},
-      ]
-    } else {
+    if (flags['true-percent'] === undefined) {
       // Parse --weights "value1:N,value2:M,..."
       const parsed = this.parseWeights(flags.weights!, config.valueType)
       if (!parsed.ok) {
@@ -163,11 +156,20 @@ To inspect the current rollout:
       }
 
       weightedValues = parsed.weights
+    } else {
+      const truePercent = flags['true-percent']
+      const falsePercent = 100 - truePercent
+      weightedValues = [
+        {value: {type: 'bool', value: true}, weight: truePercent * (WEIGHT_TOTAL / 100)},
+        {value: {type: 'bool', value: false}, weight: falsePercent * (WEIGHT_TOTAL / 100)},
+      ]
     }
 
     const totalWeight = weightedValues.reduce((sum, wv) => sum + wv.weight, 0)
     if (totalWeight !== WEIGHT_TOTAL) {
-      return this.err(`Weights must sum to 100. Got: ${weightedValues.map((wv) => `${wv.weight / 1000}%`).join(' + ')} = ${totalWeight / 1000}%`)
+      return this.err(
+        `Weights must sum to 100. Got: ${weightedValues.map((wv) => `${wv.weight / 1000}%`).join(' + ')} = ${totalWeight / 1000}%`,
+      )
     }
 
     const rolloutValue = {
@@ -224,7 +226,9 @@ To inspect the current rollout:
       const synthesized = synthesizeVariants(weightedValues)
       if (synthesized.length > 0) {
         updateFields.variants = synthesized
-        this.log(`${checkmark} Auto-created ${synthesized.length} variant${synthesized.length === 1 ? '' : 's'}: ${synthesized.map((v) => v.name).join(', ')}`)
+        this.log(
+          `${checkmark} Auto-created ${synthesized.length} variant${synthesized.length === 1 ? '' : 's'}: ${synthesized.map((v) => v.name).join(', ')}`,
+        )
       }
     }
 
@@ -262,10 +266,17 @@ To inspect the current rollout:
 
     this.verboseLog(request.error)
 
-    return this.err(
-      `Failed to set rollout: ${request.status} | ${JSON.stringify(request.error)}`,
-      {key, serverError: request.error},
-    )
+    return this.err(`Failed to set rollout: ${request.status} | ${JSON.stringify(request.error)}`, {
+      key,
+      serverError: request.error,
+    })
+  }
+
+  private coerceValue(
+    raw: string,
+    valueType: string,
+  ): {ok: true; typed: {type: string; value: unknown}} | {ok: false; error: string} {
+    return coerceValue(raw, valueType)
   }
 
   private parseWeights(
@@ -307,13 +318,6 @@ To inspect the current rollout:
     }
 
     return {ok: true, weights}
-  }
-
-  private coerceValue(
-    raw: string,
-    valueType: string,
-  ): {ok: true; typed: {type: string; value: unknown}} | {ok: false; error: string} {
-    return coerceValue(raw, valueType)
   }
 }
 

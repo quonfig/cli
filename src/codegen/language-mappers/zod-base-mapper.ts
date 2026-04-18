@@ -142,12 +142,12 @@ export abstract class ZodBaseMapper {
   protected abstract function(args: string, returns: string): string
   protected abstract functionArguments(value?: $ZodFunctionArgs): string
   protected abstract functionReturns(value: $ZodFunctionOut): string
-  protected abstract null(): string
   protected abstract literal(value: string | number | boolean | null): string
+  protected abstract never(): string
+  protected abstract null(): string
   protected abstract number(isInteger: boolean): string
   protected abstract object(properties: [string, z.ZodTypeAny][]): string
   protected abstract optional(wrappedType: string): string
-  protected abstract never(): string
   protected abstract record(keyType: string, valueType: string): string
   protected abstract string(): string
   protected abstract tuple(wrappedTypes: string[]): string

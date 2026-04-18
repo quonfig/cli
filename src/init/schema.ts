@@ -13,17 +13,27 @@ const logLevels = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'] as const
 
 const operators = [
   'ALWAYS_TRUE',
-  'PROP_IS_ONE_OF', 'PROP_IS_NOT_ONE_OF',
-  'PROP_STARTS_WITH_ONE_OF', 'PROP_DOES_NOT_START_WITH_ONE_OF',
-  'PROP_ENDS_WITH_ONE_OF', 'PROP_DOES_NOT_END_WITH_ONE_OF',
-  'PROP_CONTAINS_ONE_OF', 'PROP_DOES_NOT_CONTAIN_ONE_OF',
-  'PROP_LESS_THAN', 'PROP_LESS_THAN_OR_EQUAL',
-  'PROP_GREATER_THAN', 'PROP_GREATER_THAN_OR_EQUAL',
-  'PROP_BEFORE', 'PROP_AFTER',
-  'PROP_MATCHES', 'PROP_DOES_NOT_MATCH',
-  'IN_SEG', 'NOT_IN_SEG',
+  'PROP_IS_ONE_OF',
+  'PROP_IS_NOT_ONE_OF',
+  'PROP_STARTS_WITH_ONE_OF',
+  'PROP_DOES_NOT_START_WITH_ONE_OF',
+  'PROP_ENDS_WITH_ONE_OF',
+  'PROP_DOES_NOT_END_WITH_ONE_OF',
+  'PROP_CONTAINS_ONE_OF',
+  'PROP_DOES_NOT_CONTAIN_ONE_OF',
+  'PROP_LESS_THAN',
+  'PROP_LESS_THAN_OR_EQUAL',
+  'PROP_GREATER_THAN',
+  'PROP_GREATER_THAN_OR_EQUAL',
+  'PROP_BEFORE',
+  'PROP_AFTER',
+  'PROP_MATCHES',
+  'PROP_DOES_NOT_MATCH',
+  'IN_SEG',
+  'NOT_IN_SEG',
   'IN_INT_RANGE',
-  'LOOKUP_KEY_IN', 'LOOKUP_KEY_NOT_IN',
+  'LOOKUP_KEY_IN',
+  'LOOKUP_KEY_NOT_IN',
 ] as const
 
 // ── Value sub-schemas ──────────────────────────────────────────────────
@@ -189,10 +199,7 @@ const weightedValuesValue = {
 }
 
 const ruleValue = {
-  oneOf: [
-    ...simpleValue.oneOf,
-    weightedValuesValue,
-  ],
+  oneOf: [...simpleValue.oneOf, weightedValuesValue],
 }
 
 // ── Criterion ──────────────────────────────────────────────────────────
@@ -202,7 +209,8 @@ const criterion = {
   properties: {
     operator: {
       enum: [...operators],
-      description: 'ALWAYS_TRUE needs no extra fields. PROP_* operators require propertyName and valueToMatch. IN_SEG/NOT_IN_SEG require valueToMatch with segment key.',
+      description:
+        'ALWAYS_TRUE needs no extra fields. PROP_* operators require propertyName and valueToMatch. IN_SEG/NOT_IN_SEG require valueToMatch with segment key.',
     },
     propertyName: {
       type: 'string' as const,
@@ -286,11 +294,13 @@ export function storedConfigJsonSchema(): object {
       },
       type: {
         enum: [...configTypes],
-        description: 'Determines which directory the file lives in: config→configs/, feature_flag→feature-flags/, segment→segments/, log_level→log-levels/.',
+        description:
+          'Determines which directory the file lives in: config→configs/, feature_flag→feature-flags/, segment→segments/, log_level→log-levels/.',
       },
       valueType: {
         enum: [...valueTypes],
-        description: 'The value type. Must match the "type" field in rule values. Segments must use "bool". Log levels must use "log_level".',
+        description:
+          'The value type. Must match the "type" field in rule values. Segments must use "bool". Log levels must use "log_level".',
       },
       default: {
         type: 'object',
@@ -337,10 +347,11 @@ export function storedConfigJsonSchema(): object {
     required: ['key', 'type', 'valueType', 'default'],
     additionalProperties: true,
 
-    // Type-specific constraints
+    // Type-specific constraints (JSON Schema if/then/else — not Promise thenables)
     allOf: [
       {
         if: {properties: {type: {const: 'segment'}}},
+        // eslint-disable-next-line unicorn/no-thenable
         then: {
           properties: {
             valueType: {const: 'bool'},
@@ -350,6 +361,7 @@ export function storedConfigJsonSchema(): object {
       },
       {
         if: {properties: {type: {const: 'log_level'}}},
+        // eslint-disable-next-line unicorn/no-thenable
         then: {
           properties: {
             valueType: {const: 'log_level'},

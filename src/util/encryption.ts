@@ -111,7 +111,10 @@ export async function makeConfidentialValue(
   }
 
   // Fetch the encryption key config
-  const configRequest = await command.apiClient.post('/api/v1/metadata/getByKey', {workspaceId: command.workspaceId, key: secret.keyName})
+  const configRequest = await command.apiClient.post('/api/v1/metadata/getByKey', {
+    workspaceId: command.workspaceId,
+    key: secret.keyName,
+  })
 
   if (!configRequest.ok) {
     const message =

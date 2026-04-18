@@ -26,7 +26,12 @@ interface ConfigMetadataResponse {
 export default class Override extends APICommand {
   static args = {...nameArg}
 
-  static description = 'Override the value of an item for your user/SDK key combo'
+  static description = `Override the value of an item for your user/SDK key combo.
+
+To target users other than yourself, or to express rules like "user.email == X → value Y",
+you cannot use override — see:
+  qfg config-schema   # operator reference + worked multi-rule example
+  qfg pull            # clone the workspace so you can edit JSON directly`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> # will prompt for name and value',
@@ -143,7 +148,6 @@ export default class Override extends APICommand {
     const {key, valueType, version} = config
 
     // Map the valueType to the format expected by the API
-    /* eslint-disable camelcase */
     const typeMapping: Record<string, string> = {
       bool: 'bool',
       string: 'string',
@@ -155,7 +159,6 @@ export default class Override extends APICommand {
       duration: 'duration',
       int_range: 'intRange',
     }
-    /* eslint-enable camelcase */
 
     const type = typeMapping[valueType.toLowerCase()] || valueType
 

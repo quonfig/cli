@@ -16,13 +16,15 @@ export const setupTestAuth = () => {
   fs.mkdirSync(quonfigDir, {recursive: true})
 
   // Write tokens file with a valid-looking JWT (header.payload.signature)
-  const jwtPayload = Buffer.from(JSON.stringify({
-    email: 'test@example.com',
-    exp: Math.floor(Date.now() / 1000) + 3600,
-    iat: Math.floor(Date.now() / 1000),
-    org_id: 'org_workspace-123',
-    sub: 'user_test-123',
-  })).toString('base64url')
+  const jwtPayload = Buffer.from(
+    JSON.stringify({
+      email: 'test@example.com',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      iat: Math.floor(Date.now() / 1000),
+      org_id: 'org_workspace-123',
+      sub: 'user_test-123',
+    }),
+  ).toString('base64url')
   const mockJwt = `eyJhbGciOiJSUzI1NiJ9.${jwtPayload}.mock-signature`
 
   const mockTokens = {

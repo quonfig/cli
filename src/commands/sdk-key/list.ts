@@ -5,13 +5,13 @@ import type {JsonObj} from '../../result.js'
 import {APICommand} from '../../index.js'
 
 interface SdkKeySummary {
-  id: string
+  createdAt: string | null
+  createdByUserEmail: string | null
+  createdByUserName: string | null
   environmentId: string
   environmentName: string
+  id: string
   keyType: 'backend' | 'frontend'
-  createdByUserName: string | null
-  createdByUserEmail: string | null
-  createdAt: string | null
 }
 
 export default class SdkKeyList extends APICommand {

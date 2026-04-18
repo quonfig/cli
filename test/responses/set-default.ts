@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-
 /**
  * Mock responses for set-default command tests
  * Uses oRPC API endpoints via https://app.quonfig.com
@@ -192,7 +191,12 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
           rules: [
             {
               criteria: [],
-              value: {type: 'string', value: 'encrypted-value-here', confidential: true, decryptWith: 'quonfig.secrets.encryption.key'},
+              value: {
+                type: 'string',
+                value: 'encrypted-value-here',
+                confidential: true,
+                decryptWith: 'quonfig.secrets.encryption.key',
+              },
             },
           ],
         },

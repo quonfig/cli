@@ -5,12 +5,8 @@ import path from 'node:path'
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {
-  CrossSourceError,
-  type ImportState,
-  assertSourceMatches,
-  readImportState,
-} from '../migrate/import-state.js'
+import {CrossSourceError, type ImportState, assertSourceMatches, readImportState} from '../migrate/import-state.js'
+import {applyLocalMigration} from '../migrate/local-write.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError} from '../migrate/push-strategy.js'
 import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
@@ -19,12 +15,7 @@ import {type LegacyChange, NotYetImplementedError} from '../migrate/source.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
-import {
-  type AuthConfig,
-  getActiveProfile,
-  loadAuthConfig,
-  resolveWorkspaceId,
-} from '../util/token-storage.js'
+import {type AuthConfig, getActiveProfile, loadAuthConfig, resolveWorkspaceId} from '../util/token-storage.js'
 
 const DEFAULT_DIR = 'quonfig-config'
 
@@ -97,9 +88,7 @@ export default class Migrate extends BaseCommand {
     }
 
     if (!flags['api-key']) {
-      return this.err(
-        '--api-key is required. For --from launch you can also set LAUNCH_API_KEY in your environment.',
-      )
+      return this.err('--api-key is required. For --from launch you can also set LAUNCH_API_KEY in your environment.')
     }
 
     let workspaceContext: {authConfig: AuthConfig; workspaceId: string} | null = null
@@ -134,7 +123,7 @@ export default class Migrate extends BaseCommand {
 
     try {
       await source.validateAuth(flags['api-key'])
-      await source.listEnvironments()
+      const environments = await source.listEnvironments()
 
       const existing = readImportState(dir)
       const sinceEpochMs = computeSince(flags, existing)
@@ -180,9 +169,7 @@ export default class Migrate extends BaseCommand {
         const importState: ImportState = {source: flags.from}
         if (latestChangedAt !== undefined) importState.lastProcessedAt = latestChangedAt
 
-        this.log(
-          `Pushing ${toProcess.length} change(s) to workspace ${workspaceId} (clone-and-stack)...`,
-        )
+        this.log(`Pushing ${toProcess.length} change(s) to workspace ${workspaceId} (clone-and-stack)...`)
         try {
           const result = await pushMigrationToCloud({
             changes: toProcess,
@@ -219,11 +206,36 @@ export default class Migrate extends BaseCommand {
         }
       }
 
+      const latestLocalChangedAt = latestChangedAtOf(toProcess, sinceEpochMs ?? undefined)
+      const localImportState: ImportState = {source: flags.from}
+      if (latestLocalChangedAt !== undefined) {
+        localImportState.lastProcessedAt = latestLocalChangedAt
+      }
+
+      this.log(`Fetched ${changes.length} change(s) from ${flags.from}; processing ${toProcess.length} into ${dir}.`)
+
+      const localResult = await applyLocalMigration({
+        changes: toProcess,
+        commitMessage: buildCommitMessage(flags.from, toProcess.length),
+        environments,
+        importState: localImportState,
+        localDir: dir,
+        reportData: buildReportData(flags.from, toProcess.length),
+        source,
+      })
+
       this.log(
-        `Fetched ${changes.length} change(s) from ${flags.from}; processing ${toProcess.length}.\n` +
-          'Writing files to a local dir without --push ships in follow-on beads (see qfg-zfl.10).',
+        localResult.committed
+          ? `Committed ${toProcess.length} change(s). commit=${localResult.commitSha?.slice(0, 8) ?? ''} action=${localResult.action}`
+          : `No net changes produced by this run. Nothing to commit.`,
       )
-      return payload
+
+      return {
+        ...payload,
+        action: localResult.action,
+        commitSha: localResult.commitSha,
+        committed: localResult.committed,
+      }
     } catch (error) {
       if (error instanceof NotYetImplementedError) return this.err(error.message)
       throw error
@@ -242,9 +254,7 @@ export default class Migrate extends BaseCommand {
     }
 
     const activeProfile = getActiveProfile()
-    const profile =
-      authConfig.profiles[activeProfile] ||
-      authConfig.profiles[authConfig.defaultProfile || 'default']
+    const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
     if (!profile) {
       return 'No active profile found. Pass --workspace <slug> or run `qfg login` first.'
     }
@@ -253,10 +263,7 @@ export default class Migrate extends BaseCommand {
   }
 }
 
-function latestChangedAtOf(
-  changes: LegacyChange[],
-  fallback: number | undefined,
-): number | undefined {
+function latestChangedAtOf(changes: LegacyChange[], fallback: number | undefined): number | undefined {
   let latest: number | undefined
   for (const change of changes) {
     if (typeof change.changedAt === 'number' && (latest === undefined || change.changedAt > latest)) {
@@ -296,10 +303,7 @@ function resolveTargetDir(dirFlag: string | undefined, cwd: string): string {
   return path.resolve(cwd, DEFAULT_DIR)
 }
 
-function computeSince(
-  flags: {reset?: boolean; since?: string},
-  existing: ImportState | null,
-): null | number {
+function computeSince(flags: {reset?: boolean; since?: string}, existing: ImportState | null): null | number {
   if (flags.reset) return null
 
   if (flags.since) {

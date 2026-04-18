@@ -164,7 +164,9 @@ const checkSdkDatadirSupport = (ctx: DoctorContext): DoctorCheck => {
   }
 
   return {
-    message: language ? `SDK language "${language}" supports datadir mode.` : 'No SDK language specified; assuming datadir-capable.',
+    message: language
+      ? `SDK language "${language}" supports datadir mode.`
+      : 'No SDK language specified; assuming datadir-capable.',
     name: 'sdk-datadir-support',
     passed: true,
   }

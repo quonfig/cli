@@ -30,17 +30,7 @@ describe('migrate', () => {
 
   describe('flag validation', () => {
     test
-      .command([
-        'migrate',
-        '--from',
-        'launch',
-        '--api-key',
-        'dummy',
-        '--dir',
-        './out',
-        '--workspace',
-        'acme',
-      ])
+      .command(['migrate', '--from', 'launch', '--api-key', 'dummy', '--dir', './out', '--workspace', 'acme'])
       .catch((error) => {
         expect(error.message).to.match(/mutually exclusive/i)
         expect(error.message).to.match(/--push/)
@@ -91,10 +81,7 @@ describe('migrate', () => {
     beforeEach(() => {
       const qfDir = path.join(tmpdir, '.qf')
       fs.mkdirSync(qfDir, {recursive: true})
-      fs.writeFileSync(
-        path.join(qfDir, 'import-state.json'),
-        JSON.stringify({source: 'flagsmith'}, null, 2) + '\n',
-      )
+      fs.writeFileSync(path.join(qfDir, 'import-state.json'), JSON.stringify({source: 'flagsmith'}, null, 2) + '\n')
     })
 
     test
@@ -164,10 +151,7 @@ describe('migrate', () => {
 
     test
       .do(() => {
-        fs.writeFileSync(
-          path.join(tmpdir, 'quonfig.json'),
-          JSON.stringify({environments: []}, null, 2) + '\n',
-        )
+        fs.writeFileSync(path.join(tmpdir, 'quonfig.json'), JSON.stringify({environments: []}, null, 2) + '\n')
         mockLaunchApi(LAUNCH_PROD_URL)
       })
       .stdout()
@@ -180,18 +164,7 @@ describe('migrate', () => {
     test
       .do(() => mockLaunchApi(LAUNCH_STAGING_URL))
       .stdout()
-      .command([
-        'migrate',
-        '--from',
-        'launch',
-        '--api-key',
-        'k',
-        '--dir',
-        './out',
-        '--dry-run',
-        '--staging',
-        '--json',
-      ])
+      .command(['migrate', '--from', 'launch', '--api-key', 'k', '--dir', './out', '--dry-run', '--staging', '--json'])
       .it('--staging hits the staging Launch API base URL', (ctx) => {
         const payload = JSON.parse(ctx.stdout)
         expect(payload.fetched).to.equal(1)

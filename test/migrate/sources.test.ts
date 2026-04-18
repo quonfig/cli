@@ -60,6 +60,7 @@ describe('migrate/registry', () => {
     it('throws NotYetImplementedError on fetchChanges', async () => {
       try {
         const iter = source.fetchChanges(null)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of iter) {
           // consume to trigger generator body
         }

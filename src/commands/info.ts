@@ -253,7 +253,6 @@ Related commands:
     // Fetch stats for all environments (similar to original implementation)
     const endTime = Date.now()
     const startTime = endTime - 24 * 60 * 60 * 1000 // 24 hours ago
-    const timeInterval = 'HOURLY'
 
     const statsPerEnv: JsonObj = {}
 

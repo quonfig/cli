@@ -144,7 +144,9 @@ export function getEnumValues(schema: z.ZodEnum<util.EnumLike>): util.EnumValue[
   return []
 }
 
-export function getLiteralValue(schema: z.ZodLiteral<string | number | boolean | null>): string | number | boolean | null {
+export function getLiteralValue(
+  schema: z.ZodLiteral<string | number | boolean | null>,
+): string | number | boolean | null {
   return schema.def.values[0] as string | number | boolean | null
 }
 

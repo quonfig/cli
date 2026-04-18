@@ -1,7 +1,6 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
-
 type SchemaDocument = Record<string, unknown>
 
 interface StoredSchema {
@@ -152,8 +151,4 @@ const updateSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/up
   })
 })
 
-export const server = setupServer(
-  getSchemaHandler,
-  createSchemaHandler,
-  updateSchemaHandler,
-)
+export const server = setupServer(getSchemaHandler, createSchemaHandler, updateSchemaHandler)

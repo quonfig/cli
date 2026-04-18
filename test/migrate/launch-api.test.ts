@@ -72,14 +72,35 @@ describe('migrate/sources/launch/api', () => {
     it('paginates using returned cursor and returns oldest→newest order', async () => {
       const page1 = {
         changes: [
-          {changedAt: 300, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k3', newConfigId: 3, type: 'FEATURE_FLAG'},
-          {changedAt: 200, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k2', newConfigId: 2, type: 'FEATURE_FLAG'},
+          {
+            changedAt: 300,
+            changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+            deleted: false,
+            key: 'k3',
+            newConfigId: 3,
+            type: 'FEATURE_FLAG',
+          },
+          {
+            changedAt: 200,
+            changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+            deleted: false,
+            key: 'k2',
+            newConfigId: 2,
+            type: 'FEATURE_FLAG',
+          },
         ],
         cursor: '200:k2',
       }
       const page2 = {
         changes: [
-          {changedAt: 100, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k1', newConfigId: 1, type: 'FEATURE_FLAG'},
+          {
+            changedAt: 100,
+            changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+            deleted: false,
+            key: 'k1',
+            newConfigId: 1,
+            type: 'FEATURE_FLAG',
+          },
         ],
       }
 
@@ -100,9 +121,30 @@ describe('migrate/sources/launch/api', () => {
     it('stops pagination when a change at or before sinceEpochMs is reached (delta cursor stop)', async () => {
       const page1 = {
         changes: [
-          {changedAt: 300, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k3', newConfigId: 3, type: 'FEATURE_FLAG'},
-          {changedAt: 250, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k2.5', newConfigId: 25, type: 'FEATURE_FLAG'},
-          {changedAt: 200, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k2', newConfigId: 2, type: 'FEATURE_FLAG'},
+          {
+            changedAt: 300,
+            changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+            deleted: false,
+            key: 'k3',
+            newConfigId: 3,
+            type: 'FEATURE_FLAG',
+          },
+          {
+            changedAt: 250,
+            changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+            deleted: false,
+            key: 'k2.5',
+            newConfigId: 25,
+            type: 'FEATURE_FLAG',
+          },
+          {
+            changedAt: 200,
+            changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+            deleted: false,
+            key: 'k2',
+            newConfigId: 2,
+            type: 'FEATURE_FLAG',
+          },
         ],
         cursor: '200:k2',
       }
@@ -114,7 +156,14 @@ describe('migrate/sources/launch/api', () => {
             page2Requested = true
             return HttpResponse.json({
               changes: [
-                {changedAt: 100, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: 'k1', newConfigId: 1, type: 'FEATURE_FLAG'},
+                {
+                  changedAt: 100,
+                  changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+                  deleted: false,
+                  key: 'k1',
+                  newConfigId: 1,
+                  type: 'FEATURE_FLAG',
+                },
               ],
             })
           }
@@ -137,7 +186,14 @@ describe('migrate/sources/launch/api', () => {
           calls++
           return HttpResponse.json({
             changes: [
-              {changedAt: calls * 100, changedBy: {id: 'u1', email: 'a@b', type: 'user'}, deleted: false, key: `k${calls}`, newConfigId: calls, type: 'FEATURE_FLAG'},
+              {
+                changedAt: calls * 100,
+                changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+                deleted: false,
+                key: `k${calls}`,
+                newConfigId: calls,
+                type: 'FEATURE_FLAG',
+              },
             ],
             cursor: 'stuck',
           })
