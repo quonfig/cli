@@ -5,13 +5,7 @@ import path from 'node:path'
 import type {JsonObj} from '../../result.js'
 
 import {BaseCommand} from '../../index.js'
-
-interface ImportStateFile {
-  lastProcessedAt?: number | string
-  source?: string
-  sourceWorkspaceId?: string
-  [key: string]: unknown
-}
+import {readImportState} from '../../migrate/import-state.js'
 
 interface WorkspaceCounts {
   environments: number
@@ -19,23 +13,12 @@ interface WorkspaceCounts {
   segments: number
 }
 
-const STATE_PATH = path.join('.qf', 'import-state.json')
 const FLAGS_DIR = 'feature-flags'
 const SEGMENTS_DIR = 'segments'
 const WORKSPACE_FILE = 'quonfig.json'
 
 const NO_STATE_MESSAGE =
   'No migration state found. Run qfg migrate --from <source> first.'
-
-function readStateFile(dir: string): ImportStateFile | null {
-  const filePath = path.join(dir, STATE_PATH)
-  if (!fs.existsSync(filePath)) return null
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as ImportStateFile
-  } catch {
-    return null
-  }
-}
 
 function countJsonFiles(dir: string): number {
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return 0
@@ -129,9 +112,9 @@ export default class MigrateStatus extends BaseCommand {
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(MigrateStatus)
     const dir = path.resolve(flags.dir)
-    const state = readStateFile(dir)
+    const state = readImportState(dir)
 
-    if (!state || !state.source) {
+    if (!state) {
       const payload = {
         dir,
         found: false as const,
