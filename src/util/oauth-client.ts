@@ -7,8 +7,8 @@ const WORKOS_CLIENT_ID_PRODUCTION = 'client_01KKCCWMNB2K8HYQZQ96G1MXE0'
 const WORKOS_CLIENT_ID_STAGING = 'client_01KKCCWM4K87JS0MKS8PHZ0ZY1'
 
 const getClientId = (): string => {
-  if (process.env.WORKOS_CLIENT_ID) {
-    return process.env.WORKOS_CLIENT_ID
+  if (process.env.CLI_WORKOS_CLIENT_ID) {
+    return process.env.CLI_WORKOS_CLIENT_ID
   }
 
   const domain = getDomain()

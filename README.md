@@ -14,7 +14,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.6 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.0.9 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -27,6 +27,9 @@ USAGE
 <!-- commands -->
 * [`qfg config-schema`](#qfg-config-schema)
 * [`qfg create NAME`](#qfg-create-name)
+* [`qfg flag info [NAME]`](#qfg-flag-info-name)
+* [`qfg flag list`](#qfg-flag-list)
+* [`qfg flag show [NAME]`](#qfg-flag-show-name)
 * [`qfg generate`](#qfg-generate)
 * [`qfg generate-new-hex-key`](#qfg-generate-new-hex-key)
 * [`qfg get [NAME]`](#qfg-get-name)
@@ -47,6 +50,7 @@ USAGE
 * [`qfg set-default [NAME]`](#qfg-set-default-name)
 * [`qfg set-rollout [NAME]`](#qfg-set-rollout-name)
 * [`qfg sync`](#qfg-sync)
+* [`qfg toggle [NAME]`](#qfg-toggle-name)
 * [`qfg verify [PATH]`](#qfg-verify-path)
 * [`qfg whoami`](#qfg-whoami)
 * [`qfg workspace`](#qfg-workspace)
@@ -80,7 +84,7 @@ EXAMPLES
   $ qfg config-schema --json-schema    # full JSON Schema document (copy into your editor)
 ```
 
-_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/config-schema.ts)_
+_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/config-schema.ts)_
 
 ## `qfg create NAME`
 
@@ -152,7 +156,137 @@ EXAMPLES
   $ qfg set-rollout my.new.flag --environment production --true-percent 20
 ```
 
-_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/create.ts)_
+_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/create.ts)_
+
+## `qfg flag info [NAME]`
+
+Show current values, rules, and evaluation stats for a flag or config.
+
+```
+USAGE
+  $ qfg flag info [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--exclude-evaluations]
+
+ARGUMENTS
+  NAME  config/feature-flag/etc. name
+
+FLAGS
+  --exclude-evaluations  Exclude evaluation data
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Show current values, rules, and evaluation stats for a flag or config.
+
+  Output shows the value for each environment:
+  - A simple value (true / false / "hello") means a single unconditional rule.
+  - "[see rules]" means the environment has targeting rules or a percentage rollout.
+  - "[inherit]" means the environment falls back to the Default value.
+
+  Percentage rollouts are displayed as "20.0% true, 80.0% false".
+  Evaluation counts for the past 24 hours are included by default.
+
+  Related commands:
+  qfg set-default my.flag --environment production --value true   # set a scalar fallback
+  qfg set-rollout my.flag --environment production --true-percent 20  # set a % rollout
+
+ALIASES
+  $ qfg flag show
+  $ qfg flag info
+
+EXAMPLES
+  $ qfg flag info my.config.name
+
+  $ qfg flag info my.config.name --exclude-evaluations   # skip 24h stats
+```
+
+## `qfg flag list`
+
+Show keys for your config/feature flags/etc.
+
+```
+USAGE
+  $ qfg flag list [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--configs] [--feature-flags]
+    [--log-levels] [--schemas] [--segments]
+
+FLAGS
+  --configs        include configs
+  --feature-flags  include flags
+  --log-levels     include log levels
+  --schemas        include schemas
+  --segments       include segments
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Show keys for your config/feature flags/etc.
+
+  All types are returned by default. If you pass one or more type flags (e.g. --configs), only those types will be
+  returned
+
+ALIASES
+  $ qfg flag list
+
+EXAMPLES
+  $ qfg flag list
+
+  $ qfg flag list --feature-flags
+```
+
+## `qfg flag show [NAME]`
+
+Show current values, rules, and evaluation stats for a flag or config.
+
+```
+USAGE
+  $ qfg flag show [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--exclude-evaluations]
+
+ARGUMENTS
+  NAME  config/feature-flag/etc. name
+
+FLAGS
+  --exclude-evaluations  Exclude evaluation data
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Show current values, rules, and evaluation stats for a flag or config.
+
+  Output shows the value for each environment:
+  - A simple value (true / false / "hello") means a single unconditional rule.
+  - "[see rules]" means the environment has targeting rules or a percentage rollout.
+  - "[inherit]" means the environment falls back to the Default value.
+
+  Percentage rollouts are displayed as "20.0% true, 80.0% false".
+  Evaluation counts for the past 24 hours are included by default.
+
+  Related commands:
+  qfg set-default my.flag --environment production --value true   # set a scalar fallback
+  qfg set-rollout my.flag --environment production --true-percent 20  # set a % rollout
+
+ALIASES
+  $ qfg flag show
+  $ qfg flag info
+
+EXAMPLES
+  $ qfg flag show my.config.name
+
+  $ qfg flag show my.config.name --exclude-evaluations   # skip 24h stats
+```
 
 ## `qfg generate`
 
@@ -222,7 +356,7 @@ EXAMPLES
   $ qfg generate --targets node-ts -o ./dist # combine with targets
 ```
 
-_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/generate.ts)_
+_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/generate.ts)_
 
 ## `qfg generate-new-hex-key`
 
@@ -245,7 +379,7 @@ EXAMPLES
   $ qfg generate-new-hex-key
 ```
 
-_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/generate-new-hex-key.ts)_
+_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/generate-new-hex-key.ts)_
 
 ## `qfg get [NAME]`
 
@@ -277,7 +411,7 @@ EXAMPLES
   $ qfg get my.config.name --environment=production
 ```
 
-_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/get.ts)_
+_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/get.ts)_
 
 ## `qfg info [NAME]`
 
@@ -315,13 +449,17 @@ DESCRIPTION
   qfg set-default my.flag --environment production --value true   # set a scalar fallback
   qfg set-rollout my.flag --environment production --true-percent 20  # set a % rollout
 
+ALIASES
+  $ qfg flag show
+  $ qfg flag info
+
 EXAMPLES
   $ qfg info my.config.name
 
   $ qfg info my.config.name --exclude-evaluations   # skip 24h stats
 ```
 
-_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/info.ts)_
+_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/info.ts)_
 
 ## `qfg init [DIRECTORY]`
 
@@ -359,7 +497,7 @@ EXAMPLES
   $ qfg init --dry-run
 ```
 
-_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/init.ts)_
+_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/init.ts)_
 
 ## `qfg interactive`
 
@@ -377,7 +515,7 @@ EXAMPLES
   $ qfg
 ```
 
-_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/interactive.ts)_
+_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/interactive.ts)_
 
 ## `qfg list`
 
@@ -408,13 +546,16 @@ DESCRIPTION
   All types are returned by default. If you pass one or more type flags (e.g. --configs), only those types will be
   returned
 
+ALIASES
+  $ qfg flag list
+
 EXAMPLES
   $ qfg list
 
   $ qfg list --feature-flags
 ```
 
-_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/list.ts)_
+_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/list.ts)_
 
 ## `qfg login`
 
@@ -439,7 +580,7 @@ EXAMPLES
   $ qfg login --profile myprofile
 ```
 
-_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/login.ts)_
+_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/login.ts)_
 
 ## `qfg logout`
 
@@ -462,7 +603,7 @@ EXAMPLES
   $ qfg logout
 ```
 
-_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/logout.ts)_
+_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/logout.ts)_
 
 ## `qfg mcp`
 
@@ -495,7 +636,7 @@ EXAMPLES
   $ qfg mcp --url http://local-app.quonfig-staging.com:3003/api/v1/mcp
 ```
 
-_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/mcp.ts)_
+_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/mcp.ts)_
 
 ## `qfg override [NAME]`
 
@@ -534,7 +675,7 @@ EXAMPLES
   $ qfg override my.double.config --value=3.14159
 ```
 
-_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/override.ts)_
+_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/override.ts)_
 
 ## `qfg pull`
 
@@ -578,7 +719,7 @@ EXAMPLES
   $ qfg pull  # uses QUONFIG_DIR env var
 ```
 
-_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/pull.ts)_
+_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/pull.ts)_
 
 ## `qfg schema NAME`
 
@@ -616,7 +757,7 @@ EXAMPLES
   $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
 ```
 
-_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/schema.ts)_
+_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/schema.ts)_
 
 ## `qfg sdk-key`
 
@@ -643,7 +784,7 @@ EXAMPLES
   $ qfg sdk-key revoke <key-id>
 ```
 
-_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key.ts)_
+_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key.ts)_
 
 ## `qfg sdk-key create`
 
@@ -675,7 +816,7 @@ EXAMPLES
   $ qfg sdk-key create --environment staging --type browser
 ```
 
-_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key/create.ts)_
+_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key/create.ts)_
 
 ## `qfg sdk-key list`
 
@@ -704,7 +845,7 @@ EXAMPLES
   $ qfg sdk-key list --environment production
 ```
 
-_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key/list.ts)_
+_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key/list.ts)_
 
 ## `qfg sdk-key revoke KEYID`
 
@@ -731,7 +872,7 @@ EXAMPLES
   $ qfg sdk-key revoke a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
-_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sdk-key/revoke.ts)_
+_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sdk-key/revoke.ts)_
 
 ## `qfg set-default [NAME]`
 
@@ -779,6 +920,9 @@ DESCRIPTION
   To see all current values and rules for a flag:
   qfg info my.flag
 
+ALIASES
+  $ qfg toggle
+
 EXAMPLES
   $ qfg set-default my.flag.name                                          # prompts for value and env
 
@@ -795,7 +939,7 @@ EXAMPLES
   $ qfg set-rollout my.flag.name --environment production --true-percent 20
 ```
 
-_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/set-default.ts)_
+_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/set-default.ts)_
 
 ## `qfg set-rollout [NAME]`
 
@@ -872,7 +1016,7 @@ EXAMPLES
   $ qfg set-rollout my.variant.flag --environment production --weights "a:33,b:33,c:34" --hash-by user.id
 ```
 
-_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/set-rollout.ts)_
+_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/set-rollout.ts)_
 
 ## `qfg sync`
 
@@ -904,7 +1048,72 @@ EXAMPLES
   $ qfg sync --watch --dir ./our-config --interval 30
 ```
 
-_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/sync.ts)_
+_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/sync.ts)_
+
+## `qfg toggle [NAME]`
+
+Set the unconditional fallback value for a flag or config in a specific environment.
+
+```
+USAGE
+  $ qfg toggle [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
+    [--env-var <value>] [--environment <value>] [--value <value>] [--confirm] [--secret] [--secret-key-name <value>]
+
+ARGUMENTS
+  NAME  config/feature-flag/etc. name
+
+FLAGS
+  --confidential             mark the value as confidential
+  --confirm                  confirm without prompt
+  --env-var=<value>          environment variable to use as default value
+  --environment=<value>      environment to change
+  --secret                   encrypt the value of this item
+  --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
+                             encryption/decryption
+  --value=<value>            new default value
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Set the unconditional fallback value for a flag or config in a specific environment.
+
+  This updates the catch-all rule — the value users receive when NO targeting rule matches.
+  Any targeting rules or percentage rollouts you have configured are NOT affected; they
+  continue to fire before this fallback is evaluated.
+
+  "Other rules still apply" means: if you have rules targeting specific users, segments,
+  or properties, those rules still take priority. This command only changes what everyone
+  else sees.
+
+  To set a percentage rollout (gradual rollout / A/B test / canary deploy) instead:
+  qfg set-rollout my.flag --environment production --true-percent 20
+
+  To see all current values and rules for a flag:
+  qfg info my.flag
+
+ALIASES
+  $ qfg toggle
+
+EXAMPLES
+  $ qfg toggle my.flag.name                                          # prompts for value and env
+
+  $ qfg toggle my.flag.name --value=true --environment=staging
+
+  $ qfg toggle my.flag.name --value=false --environment=production   # kill-switch: turn off for everyone
+
+  $ qfg toggle my.flag.name --value=true --secret
+
+  $ qfg toggle my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
+
+  # For a percentage rollout, use set-rollout instead:
+
+  $ qfg set-rollout my.flag.name --environment production --true-percent 20
+```
 
 ## `qfg verify [PATH]`
 
@@ -937,7 +1146,7 @@ EXAMPLES
   $ qfg verify --json
 ```
 
-_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/verify.ts)_
+_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/verify.ts)_
 
 ## `qfg whoami`
 
@@ -960,7 +1169,7 @@ EXAMPLES
   $ qfg whoami
 ```
 
-_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/whoami.ts)_
+_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/whoami.ts)_
 
 ## `qfg workspace`
 
@@ -983,7 +1192,7 @@ EXAMPLES
   $ qfg workspace
 ```
 
-_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/workspace.ts)_
+_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/workspace.ts)_
 
 ## `qfg workspace bootstrap`
 
@@ -1016,7 +1225,7 @@ EXAMPLES
   $ qfg workspace bootstrap --dir ./our-config --skip-validate
 ```
 
-_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/workspace/bootstrap.ts)_
+_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/workspace/bootstrap.ts)_
 
 ## `qfg workspace switch`
 
@@ -1039,7 +1248,7 @@ EXAMPLES
   $ qfg workspace switch
 ```
 
-_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.0.6/src/commands/workspace/switch.ts)_
+_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.0.9/src/commands/workspace/switch.ts)_
 <!-- commandsstop -->
 
 ## Local Development
