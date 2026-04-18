@@ -11,6 +11,7 @@ import {
   assertSourceMatches,
   readImportState,
 } from '../migrate/import-state.js'
+import {applyLocalMigration} from '../migrate/local-write.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError} from '../migrate/push-strategy.js'
 import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
@@ -134,7 +135,7 @@ export default class Migrate extends BaseCommand {
 
     try {
       await source.validateAuth(flags['api-key'])
-      await source.listEnvironments()
+      const environments = await source.listEnvironments()
 
       const existing = readImportState(dir)
       const sinceEpochMs = computeSince(flags, existing)
@@ -219,11 +220,38 @@ export default class Migrate extends BaseCommand {
         }
       }
 
+      const latestLocalChangedAt = latestChangedAtOf(toProcess, sinceEpochMs ?? undefined)
+      const localImportState: ImportState = {source: flags.from}
+      if (latestLocalChangedAt !== undefined) {
+        localImportState.lastProcessedAt = latestLocalChangedAt
+      }
+
       this.log(
-        `Fetched ${changes.length} change(s) from ${flags.from}; processing ${toProcess.length}.\n` +
-          'Writing files to a local dir without --push ships in follow-on beads (see qfg-zfl.10).',
+        `Fetched ${changes.length} change(s) from ${flags.from}; processing ${toProcess.length} into ${dir}.`,
       )
-      return payload
+
+      const localResult = await applyLocalMigration({
+        changes: toProcess,
+        commitMessage: buildCommitMessage(flags.from, toProcess.length),
+        environments,
+        importState: localImportState,
+        localDir: dir,
+        reportData: buildReportData(flags.from, toProcess.length),
+        source,
+      })
+
+      this.log(
+        localResult.committed
+          ? `Committed ${toProcess.length} change(s). commit=${localResult.commitSha?.slice(0, 8) ?? ''} action=${localResult.action}`
+          : `No net changes produced by this run. Nothing to commit.`,
+      )
+
+      return {
+        ...payload,
+        action: localResult.action,
+        commitSha: localResult.commitSha,
+        committed: localResult.committed,
+      }
     } catch (error) {
       if (error instanceof NotYetImplementedError) return this.err(error.message)
       throw error
