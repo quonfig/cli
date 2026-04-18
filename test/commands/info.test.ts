@@ -3,6 +3,7 @@ import {expect, test} from '@oclif/test'
 import {resetClientCache} from '../../src/util/get-client.js'
 import {
   confidentialKey,
+  jsonKey,
   keyWithEvaluations,
   keyWithNoEvaluations,
   rawSecret,
@@ -158,6 +159,14 @@ No evaluations found for the past 24 hours
       .it('shows [confidential] for confidential items', (ctx) => {
         expect(ctx.stdout).not.contains(rawSecret)
         expect(ctx.stdout).contains('Default: [confidential]')
+      })
+
+    test
+      .stdout()
+      .command(['info', jsonKey])
+      .it('renders JSON default as JSON (not [object Object])', (ctx) => {
+        expect(ctx.stdout).not.contains('[object Object]')
+        expect(ctx.stdout).contains('Default: {"maxTokens":500,"model":"claude"}')
       })
   })
 

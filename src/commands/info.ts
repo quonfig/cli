@@ -344,6 +344,10 @@ Related commands:
         if (value.type === 'stringList' && Array.isArray(value.value)) {
           return value.value.join(',')
         }
+        // JSON values must be stringified, else they render as [object Object]
+        if (value.type === 'json') {
+          return JSON.stringify(value.value)
+        }
         return String(value.value)
       }
       // New format: {string: 'abc'}
