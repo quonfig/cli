@@ -101,9 +101,9 @@ export const SAMPLE_FILES: SampleFile[] = [
     },
   },
   {
-    path: 'log-levels/example.app.json',
+    path: 'log-levels/log-level.example.app.json',
     content: {
-      key: 'example.app',
+      key: 'log-level.example.app',
       type: 'log_level',
       valueType: 'log_level',
       sendToClientSdk: false,
