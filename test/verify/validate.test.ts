@@ -308,6 +308,57 @@ describe('validate', () => {
       expect(result.issues).to.be.empty
     })
 
+    it('errors when a weighted_values rollout has no variants defined', () => {
+      const files = new Map<string, string>([
+        [
+          'configs/color.json',
+          JSON.stringify({
+            key: 'color',
+            type: 'config',
+            valueType: 'string',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'string', value: 'red'},
+                },
+              ],
+            },
+            environments: [
+              {
+                id: 'production',
+                rules: [
+                  {
+                    criteria: [],
+                    value: {
+                      type: 'weighted_values',
+                      value: {
+                        weightedValues: [
+                          {value: {type: 'string', value: 'red'}, weight: 50000},
+                          {value: {type: 'string', value: 'blue'}, weight: 50000},
+                        ],
+                        hashByPropertyName: 'user.key',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+            variants: [],
+          }),
+        ],
+      ])
+
+      const result = validateFileMap(files)
+
+      expect(result.valid).to.be.false
+      const missingVariantIssues = result.issues.filter((i) =>
+        i.message.includes('weighted_values rollout requires at least one variant'),
+      )
+      expect(missingVariantIssues).to.have.length(1)
+      expect(missingVariantIssues[0].message).to.include('environments[production].rules[0]')
+    })
+
     it('skips variant check for provided value types', () => {
       const files = new Map<string, string>([
         [

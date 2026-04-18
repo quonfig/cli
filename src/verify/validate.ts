@@ -979,6 +979,21 @@ function validateRules(
       if (wv.weightedValues.length === 0) {
         issues.push({ file, message: `${ruleCtx}: weighted values list is empty`, severity: "error" });
       }
+      // Percentage rollouts must reference named variants — the UI cannot edit
+      // a rollout when variants is empty. Bool configs are exempt because the
+      // UI supplies implicit true/false variants.
+      if (
+        wv.weightedValues.length > 0 &&
+        variants.length === 0 &&
+        expectedValueType !== "bool"
+      ) {
+        issues.push({
+          file,
+          message: `${ruleCtx}: weighted_values rollout requires at least one variant, but variants is empty`,
+          severity: "error",
+          suggestion: `Define variants for the possible rollout values, then reference them from weightedValues.`,
+        });
+      }
       for (let j = 0; j < wv.weightedValues.length; j++) {
         if (wv.weightedValues[j].value.type !== expectedValueType) {
           issues.push({

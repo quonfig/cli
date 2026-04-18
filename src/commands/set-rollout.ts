@@ -202,6 +202,7 @@ To inspect the current rollout:
       commitSha: string
       environments: Array<{id: string; rules: unknown[]}>
       default: {rules: unknown[]}
+      variants?: Array<{name?: string; value: {type: string; value: unknown}; description?: string}>
     }
 
     const newRule = {criteria: [], value: rolloutValue}
@@ -212,7 +213,20 @@ To inspect the current rollout:
       ? existingEnvs.map((e) => (e.id === envKey ? {...e, rules: [newRule]} : e))
       : [...existingEnvs, {id: envKey, rules: [newRule]}]
 
-    const updateFields = {environments: updatedEnvironments}
+    // Auto-create variants when the config has none. The UI cannot render a
+    // rollout without named variants, and the server/gitea verify now rejects
+    // it. Bool configs are exempt — the UI supplies implicit true/false variants.
+    const existingVariants = currentConfig.variants ?? []
+    const updateFields: {environments: typeof updatedEnvironments; variants?: typeof existingVariants} = {
+      environments: updatedEnvironments,
+    }
+    if (existingVariants.length === 0 && config.valueType !== 'bool') {
+      const synthesized = synthesizeVariants(weightedValues)
+      if (synthesized.length > 0) {
+        updateFields.variants = synthesized
+        this.log(`${checkmark} Auto-created ${synthesized.length} variant${synthesized.length === 1 ? '' : 's'}: ${synthesized.map((v) => v.name).join(', ')}`)
+      }
+    }
 
     this.verboseLog('Update fields:', JSON.stringify(updateFields, null, 2))
 
@@ -299,39 +313,71 @@ To inspect the current rollout:
     raw: string,
     valueType: string,
   ): {ok: true; typed: {type: string; value: unknown}} | {ok: false; error: string} {
-    const type = valueType.toLowerCase()
+    return coerceValue(raw, valueType)
+  }
+}
 
-    switch (type) {
-      case 'bool': {
-        if (raw !== 'true' && raw !== 'false') {
-          return {error: `Invalid boolean value "${raw}". Must be "true" or "false".`, ok: false}
-        }
+/**
+ * Pick a short, stable variant name from a rollout value. Uses the first
+ * 10 characters of the stringified value, then dedupes collisions by
+ * appending `-2`, `-3`, ... so each name is unique within the set.
+ */
+export function synthesizeVariants(
+  weightedValues: Array<{value: {type: string; value: unknown}; weight: number}>,
+): Array<{name: string; value: {type: string; value: unknown}}> {
+  const used = new Set<string>()
+  const variants: Array<{name: string; value: {type: string; value: unknown}}> = []
+  for (const wv of weightedValues) {
+    const raw = typeof wv.value.value === 'string' ? wv.value.value : JSON.stringify(wv.value.value)
+    const base = (raw || wv.value.type).slice(0, 10)
+    let name = base
+    let suffix = 2
+    while (used.has(name)) {
+      name = `${base}-${suffix}`
+      suffix += 1
+    }
+    used.add(name)
+    variants.push({name, value: wv.value})
+  }
+  return variants
+}
 
-        return {ok: true, typed: {type: 'bool', value: raw === 'true'}}
+function coerceValue(
+  raw: string,
+  valueType: string,
+): {ok: true; typed: {type: string; value: unknown}} | {ok: false; error: string} {
+  const type = valueType.toLowerCase()
+
+  switch (type) {
+    case 'bool': {
+      if (raw !== 'true' && raw !== 'false') {
+        return {error: `Invalid boolean value "${raw}". Must be "true" or "false".`, ok: false}
       }
 
-      case 'int': {
-        const n = Number.parseInt(raw, 10)
-        if (Number.isNaN(n)) {
-          return {error: `Invalid int value "${raw}".`, ok: false}
-        }
+      return {ok: true, typed: {type: 'bool', value: raw === 'true'}}
+    }
 
-        return {ok: true, typed: {type: 'int', value: n}}
+    case 'int': {
+      const n = Number.parseInt(raw, 10)
+      if (Number.isNaN(n)) {
+        return {error: `Invalid int value "${raw}".`, ok: false}
       }
 
-      case 'double': {
-        const n = Number.parseFloat(raw)
-        if (Number.isNaN(n)) {
-          return {error: `Invalid double value "${raw}".`, ok: false}
-        }
+      return {ok: true, typed: {type: 'int', value: n}}
+    }
 
-        return {ok: true, typed: {type: 'double', value: n}}
+    case 'double': {
+      const n = Number.parseFloat(raw)
+      if (Number.isNaN(n)) {
+        return {error: `Invalid double value "${raw}".`, ok: false}
       }
 
-      default: {
-        // string, json, etc — pass as-is
-        return {ok: true, typed: {type, value: raw}}
-      }
+      return {ok: true, typed: {type: 'double', value: n}}
+    }
+
+    default: {
+      // string, json, etc — pass as-is
+      return {ok: true, typed: {type, value: raw}}
     }
   }
 }
