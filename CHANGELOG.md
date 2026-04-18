@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.11 - 2026-04-18
+
+- fix: `qfg get` resolves `providedBy` (ENV_VAR) pointers and decrypts `decryptWith` ciphertext locally against the new raw-match response shape from `/api/v1/evaluations/evaluate` (qfg-c7d.3). Prior 0.0.10 still expected the legacy shape and silently printed nothing for confidential configs.
+
 ## 0.0.8 - 2026-04-17
 
 - fix: `qfg get` sends the environment slug instead of the DB UUID to `/api/v1/evaluations/evaluate` (rename `environmentId` → `environmentName` on that endpoint). Fixes 500s on value evaluation.
