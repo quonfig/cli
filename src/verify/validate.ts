@@ -81,7 +81,13 @@ const BoolValueSchema = z.object({ type: z.literal("bool"), value: z.boolean() }
 const StringValueSchema = z.object({ type: z.literal("string"), value: z.string() });
 const IntValueSchema = z.object({ type: z.literal("int"), value: z.union([z.number(), z.string()]) });
 const DoubleValueSchema = z.object({ type: z.literal("double"), value: z.union([z.number(), z.string()]) });
-const JsonValueSchema = z.object({ type: z.literal("json"), value: z.unknown() });
+const JsonValueSchema = z.object({
+  type: z.literal("json"),
+  value: z.any().refine((v) => typeof v !== "string", {
+    message:
+      'json values must be native JSON (object/array/number/boolean/null). Stringified JSON is no longer allowed — use { "a": 1 } instead of "{\\"a\\":1}".',
+  }),
+});
 const StringListValueSchema = z.object({ type: z.literal("string_list"), value: z.array(z.string()) });
 const DurationValueSchema = z.object({ type: z.literal("duration"), value: z.string() });
 const LogLevelValueSchema = z.object({ type: z.literal("log_level"), value: LogLevelSchema });

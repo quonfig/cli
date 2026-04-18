@@ -21,3 +21,4 @@ src/reforge
 test-*.sh
 _verify_build/
 quonfig.*.config.json
+.qfg-friction.log
