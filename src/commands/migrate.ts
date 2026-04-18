@@ -11,9 +11,20 @@ import {
   assertSourceMatches,
   readImportState,
 } from '../migrate/import-state.js'
+import {type MigrationReportData} from '../migrate/migration-report.js'
+import {PushConflictError} from '../migrate/push-strategy.js'
+import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
 import {type LegacyChange, NotYetImplementedError} from '../migrate/source.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
+import {mintGiteaToken} from '../util/gitea-api.js'
+import {displayUrl} from '../util/git-ops.js'
+import {
+  type AuthConfig,
+  getActiveProfile,
+  loadAuthConfig,
+  resolveWorkspaceId,
+} from '../util/token-storage.js'
 
 const DEFAULT_DIR = 'quonfig-config'
 
@@ -91,6 +102,13 @@ export default class Migrate extends BaseCommand {
       )
     }
 
+    let workspaceContext: {authConfig: AuthConfig; workspaceId: string} | null = null
+    if (flags.push) {
+      const resolved = await this.resolvePushWorkspace(flags.workspace)
+      if (typeof resolved === 'string') return this.err(resolved)
+      workspaceContext = resolved
+    }
+
     const dir = resolveTargetDir(flags.dir, process.cwd())
 
     if (!flags.reset) {
@@ -142,15 +160,133 @@ export default class Migrate extends BaseCommand {
         return payload
       }
 
+      if (flags.push && workspaceContext) {
+        const {workspaceId} = workspaceContext
+        this.log('Connecting to Gitea...')
+        let repoUrl: string
+        try {
+          const tokenData = await mintGiteaToken(workspaceId, 'write', 'bootstrap')
+          repoUrl = tokenData.repoUrl
+        } catch (error) {
+          return this.err(
+            `Could not get Gitea credentials for workspace ${workspaceId}: ${String(error)}\n` +
+              'Make sure the workspace is fully provisioned in the Quonfig app before pushing.',
+          )
+        }
+
+        this.verboseLog('Migrate', {repoUrl: displayUrl(repoUrl)})
+
+        const latestChangedAt = latestChangedAtOf(toProcess, sinceEpochMs ?? undefined)
+        const importState: ImportState = {source: flags.from}
+        if (latestChangedAt !== undefined) importState.lastProcessedAt = latestChangedAt
+
+        this.log(
+          `Pushing ${toProcess.length} change(s) to workspace ${workspaceId} (clone-and-stack)...`,
+        )
+        try {
+          const result = await pushMigrationToCloud({
+            changes: toProcess,
+            commitMessage: buildCommitMessage(flags.from, toProcess.length),
+            importState,
+            localDir: dir,
+            remoteUrl: repoUrl,
+            reportData: buildReportData(flags.from, toProcess.length),
+            source,
+          })
+
+          this.log(
+            result.committed
+              ? `Pushed ${toProcess.length} change(s). commit=${result.commitSha?.slice(0, 8) ?? ''} action=${result.action}`
+              : `No net changes produced by this run. Nothing to commit or push.`,
+          )
+
+          return {
+            ...payload,
+            action: result.action,
+            commitSha: result.commitSha,
+            committed: result.committed,
+            pushed: true,
+            workspaceId,
+          }
+        } catch (error) {
+          if (error instanceof PushConflictError) {
+            return this.err(
+              `${error.message}\n\nRe-run \`qfg migrate --from ${flags.from} --workspace ${workspaceId} --push\` to pick up remote changes before retrying.`,
+            )
+          }
+
+          throw error
+        }
+      }
+
       this.log(
         `Fetched ${changes.length} change(s) from ${flags.from}; processing ${toProcess.length}.\n` +
-          'Writing files and pushing to cloud workspaces ships in follow-on beads (see project/plans/qfg-migrate.md).',
+          'Writing files to a local dir without --push ships in follow-on beads (see qfg-zfl.10).',
       )
       return payload
     } catch (error) {
       if (error instanceof NotYetImplementedError) return this.err(error.message)
       throw error
     }
+  }
+
+  private async resolvePushWorkspace(
+    slugOrId: string | undefined,
+  ): Promise<{authConfig: AuthConfig; workspaceId: string} | string> {
+    const authConfig = await loadAuthConfig()
+    if (!authConfig) return 'Not logged in. Run `qfg login` first, then re-run with --push.'
+
+    if (slugOrId) {
+      const resolved = resolveWorkspaceId(authConfig, slugOrId)
+      return {authConfig, workspaceId: resolved ?? slugOrId}
+    }
+
+    const activeProfile = getActiveProfile()
+    const profile =
+      authConfig.profiles[activeProfile] ||
+      authConfig.profiles[authConfig.defaultProfile || 'default']
+    if (!profile) {
+      return 'No active profile found. Pass --workspace <slug> or run `qfg login` first.'
+    }
+
+    return {authConfig, workspaceId: profile.workspace}
+  }
+}
+
+function latestChangedAtOf(
+  changes: LegacyChange[],
+  fallback: number | undefined,
+): number | undefined {
+  let latest: number | undefined
+  for (const change of changes) {
+    if (typeof change.changedAt === 'number' && (latest === undefined || change.changedAt > latest)) {
+      latest = change.changedAt
+    }
+  }
+
+  return latest ?? fallback
+}
+
+function buildCommitMessage(source: string, count: number): string {
+  return `migrator: import ${count} change(s) from ${source}`
+}
+
+function buildReportData(source: string, count: number): MigrationReportData {
+  return {
+    cleanMappings: [],
+    counts: {
+      environmentsMapped: 0,
+      flagsMigrated: count,
+      itemsSkipped: 0,
+      segmentsMigrated: 0,
+    },
+    dryRun: false,
+    environmentMap: [],
+    followUp: {mustFixBeforeCutover: [], reviewPostCutover: []},
+    identifierMap: {},
+    lossyMappings: [],
+    source,
+    unsupportedFeatures: [],
   }
 }
 
