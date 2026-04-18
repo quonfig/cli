@@ -2135,7 +2135,7 @@ __metadata:
     acorn-walk: "npm:^8.2.0"
     chai: "npm:^4"
     chalk: "npm:^5.4.1"
-    comment-json: "npm:^4.2.5"
+    comment-json: "npm:^4.6.2"
     common-tags: "npm:^1.8.2"
     eslint: "npm:^8"
     eslint-config-oclif: "npm:^5"
@@ -4383,14 +4383,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"comment-json@npm:^4.2.5":
-  version: 4.3.0
-  resolution: "comment-json@npm:4.3.0"
+"comment-json@npm:^4.6.2":
+  version: 4.6.2
+  resolution: "comment-json@npm:4.6.2"
   dependencies:
     array-timsort: "npm:^1.0.3"
-    core-util-is: "npm:^1.0.3"
     esprima: "npm:^4.0.1"
-  checksum: 10c0/5e6dc23e9060a32b3f395438e8e8156e9033bdd4545539bcfd8caa5db7e746de589f66102c2ca0c09ed24a77b7e8ebf1af11202f1582c9ae16acf0f6a3956114
+  checksum: 10c0/8965ec6c40612aa0cc66d4324ff5819cf205c997f3a84dd82dffe4e6398449e37bbc5765184bc9149e95d15994f0c2740cee82284828fa1c0f733a669022d3dd
   languageName: node
   linkType: hard
 
@@ -4461,13 +4460,6 @@ __metadata:
   version: 0.7.2
   resolution: "cookie@npm:0.7.2"
   checksum: 10c0/9596e8ccdbf1a3a88ae02cf5ee80c1c50959423e1022e4e60b91dd87c622af1da309253d8abdb258fb5e3eacb4f08e579dc58b4897b8087574eee0fd35dfa5d2
-  languageName: node
-  linkType: hard
-
-"core-util-is@npm:^1.0.3":
-  version: 1.0.3
-  resolution: "core-util-is@npm:1.0.3"
-  checksum: 10c0/90a0e40abbddfd7618f8ccd63a74d88deea94e77d0e8dbbea059fa7ebebb8fbb4e2909667fe26f3a467073de1a542ebe6ae4c73a73745ac5833786759cd906c9
   languageName: node
   linkType: hard
 
