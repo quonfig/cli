@@ -5,6 +5,9 @@ import {setupServer} from 'msw/node'
 /**
  * Mock responses for get command tests
  * Uses oRPC API endpoints via https://app.quonfig.com
+ *
+ * Response shape matches sdk-node RawConfigWithDependencies — the raw-match
+ * path from qfg-c7d.2 that does NOT resolve ENV_VAR or decrypt on the server.
  */
 
 // POST /api/v1/metadata/list - list all configs
@@ -60,38 +63,89 @@ const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environmen
 )
 
 // POST /api/v1/evaluations/evaluate - evaluate configs
-// The get command sends {workspaceId, environmentId, context} and receives an array of EvaluationResult
-const evaluationHandler = http.post('https://app.quonfig.com/api/v1/evaluations/evaluate', async ({request}) => {
-  // Return all configs as evaluation results
-  // The get command will find the matching key from the array
+// Returns RawConfigWithDependencies[] — raw stored values + dependency pointers.
+// The CLI resolves providedBy (ENV_VAR) and decryptWith locally against its own
+// process.env. See qfg-c7d for the security background.
+const evaluationHandler = http.post('https://app.quonfig.com/api/v1/evaluations/evaluate', async () => {
   const results = [
     {
       key: 'my-string-list-key',
-      configType: 'CONFIG',
-      valueType: 'STRING_LIST',
+      type: 'string_list',
       value: ['a', 'b', 'c'],
-      displayValue: ['a', 'b', 'c'],
+      metadata: {
+        configRowIndex: 0,
+        conditionalValueIndex: 0,
+        type: 'config',
+        id: '1',
+        valueType: 'string_list',
+      },
     },
     {
       key: 'a.secret.config.reforge',
-      configType: 'CONFIG',
-      valueType: 'STRING',
+      type: 'string',
       value: 'hello.world',
-      displayValue: 'hello.world',
+      metadata: {
+        configRowIndex: 0,
+        conditionalValueIndex: 0,
+        type: 'config',
+        id: '2',
+        valueType: 'string',
+      },
     },
     {
       key: 'provided.config',
-      configType: 'CONFIG',
-      valueType: 'STRING',
-      value: 'server-resolved-value',
-      displayValue: 'server-resolved-value',
+      type: 'provided',
+      value: {source: 'ENV_VAR', lookup: 'TEST_CLI_PROVIDED_VAR'},
+      metadata: {
+        configRowIndex: 0,
+        conditionalValueIndex: 0,
+        type: 'config',
+        id: '3',
+        valueType: 'string',
+      },
+      dependencies: [
+        {
+          dependencyType: 'providedBy',
+          source: 'TEST_CLI_PROVIDED_VAR',
+        },
+      ],
     },
     {
       key: 'encrypted.config',
-      configType: 'CONFIG',
-      valueType: 'STRING',
-      value: 'test-secret',
-      displayValue: 'test-secret',
+      type: 'string',
+      value: '652cf03ad4e252bb9b69c9--03bbdb754d1923b2a3c5bfc3--ebb8c20805482ce013b1fd68cad57d69',
+      confidential: true,
+      metadata: {
+        configRowIndex: 0,
+        conditionalValueIndex: 0,
+        type: 'config',
+        id: '4',
+        valueType: 'string',
+      },
+      dependencies: [
+        {
+          dependencyType: 'decryptWith',
+          source: 'quonfig.encryption.key',
+          config: {
+            key: 'quonfig.encryption.key',
+            type: 'provided',
+            value: {source: 'ENV_VAR', lookup: 'TEST_CLI_ENCRYPTION_KEY'},
+            metadata: {
+              configRowIndex: 0,
+              conditionalValueIndex: 0,
+              type: 'config',
+              id: '5',
+              valueType: 'string',
+            },
+            dependencies: [
+              {
+                dependencyType: 'providedBy',
+                source: 'TEST_CLI_ENCRYPTION_KEY',
+              },
+            ],
+          },
+        },
+      ],
     },
   ]
 

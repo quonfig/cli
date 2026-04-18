@@ -7,6 +7,9 @@ import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 const validKey = 'my-string-list-key'
 const secretKey = 'a.secret.config.reforge'
 
+// 64-char hex key matching the one used in test/util/encryption.test.ts
+const TEST_ENCRYPTION_KEY_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+
 describe('get', () => {
   before(() => {
     setupTestAuth()
@@ -15,6 +18,8 @@ describe('get', () => {
   afterEach(() => {
     server.resetHandlers()
     resetClientCache()
+    delete process.env.TEST_CLI_PROVIDED_VAR
+    delete process.env.TEST_CLI_ENCRYPTION_KEY
   })
   after(() => {
     server.close()
@@ -41,23 +46,45 @@ describe('get', () => {
       expect(ctx.stdout).to.eql('hello.world\n')
     })
 
-  // In the new oRPC API, provided configs are resolved server-side.
-  // The evaluation response returns the resolved value directly.
+  // providedBy: the server returns the dependency pointer only; the CLI reads
+  // the env var from the CLI host and returns the resolved value.
   test
+    .do(() => {
+      process.env.TEST_CLI_PROVIDED_VAR = 'cli-host-env-value'
+    })
     .stdout()
     .command(['get', 'provided.config', '--environment=[default]'])
-    .it('returns a provided config value resolved by the server', (ctx) => {
-      expect(ctx.stdout).to.contain('server-resolved-value')
+    .it('resolves a providedBy config from the CLI host process.env', (ctx) => {
+      expect(ctx.stdout).to.contain('cli-host-env-value')
     })
 
-  // In the new oRPC API, encrypted configs are decrypted server-side.
-  // The evaluation response returns the decrypted value directly.
   test
     .stdout()
+    .command(['get', 'provided.config', '--json', '--environment=[default]'])
+    .catch((error: {missingEnvVar?: string} & Error) => {
+      expect(error.missingEnvVar).to.equal('TEST_CLI_PROVIDED_VAR')
+    })
+    .it('errors with missingEnvVar when the providedBy env var is unset')
+
+  // decryptWith: the server returns ciphertext + dependency chain; the CLI
+  // reads the encryption key from its own process.env and decrypts locally.
+  test
+    .do(() => {
+      process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
+    })
+    .stdout()
     .command(['get', 'encrypted.config', '--environment=[default]'])
-    .it('returns a decrypted config value resolved by the server', (ctx) => {
+    .it('decrypts an encrypted config locally using the CLI host env key', (ctx) => {
       expect(ctx.stdout).to.contain('test-secret')
     })
+
+  test
+    .stdout()
+    .command(['get', 'encrypted.config', '--json', '--environment=[default]'])
+    .catch((error: {missingEnvVar?: string} & Error) => {
+      expect(error.missingEnvVar).to.equal('TEST_CLI_ENCRYPTION_KEY')
+    })
+    .it('errors with missingEnvVar when the decryptWith key env var is unset')
 
   test
     .command(['get', 'this-does-not-exist', '--environment=[default]'])

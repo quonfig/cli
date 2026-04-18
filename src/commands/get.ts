@@ -8,31 +8,32 @@ import isInteractive from '../util/is-interactive.js'
 import nameArg from '../util/name-arg.js'
 import {decrypt} from '../util/encryption.js'
 
+// Mirrors sdk-node's RawConfigWithDependencies. The /evaluations/evaluate
+// endpoint returns an array of these (qfg-c7d.2) — raw stored values plus
+// dependency pointers for providedBy / decryptWith chains. ENV_VAR resolution
+// and decryption happen locally on the CLI host, never on the server.
 interface EvaluationMetadata {
   conditionalValueIndex: number
   configRowIndex: number
-  id: number
+  id: string
   type: string
   valueType: string
+  weightedValueIndex?: number
 }
 
 interface Dependency {
-  config?: ConfigWithDependencies
+  config?: RawConfigWithDependencies
   dependencyType: 'decryptWith' | 'providedBy'
   source: string
 }
 
-interface ConfigWithDependencies {
+interface RawConfigWithDependencies {
   confidential?: boolean
   dependencies?: Dependency[]
   key: string
   metadata: EvaluationMetadata
   type: string
-  value: string
-}
-
-interface EvaluationResponseV2 {
-  config: ConfigWithDependencies
+  value: unknown
 }
 
 export default class Get extends APICommand {
@@ -124,101 +125,78 @@ export default class Get extends APICommand {
       return this.err(errorMsg, {serverError: request.error})
     }
 
-    // oRPC returns EvaluationResult[] — find the matching key
-    const results = (Array.isArray(request.json) ? request.json : []) as Array<{
-      key: string
-      configType: string
-      valueType: string
-      value: unknown
-      displayValue: string
-    }>
+    const results = (Array.isArray(request.json) ? request.json : []) as RawConfigWithDependencies[]
 
-    const result = results.find((r) => r.key === key)
-    if (!result) {
+    const config = results.find((r) => r.key === key)
+    if (!config) {
       return this.err(`${key} could not be evaluated in this environment`)
     }
 
-    // Adapt to the legacy response shape for downstream compatibility
-    const config: ConfigWithDependencies = {
-      key: result.key,
-      type: result.configType,
-      value: result.displayValue,
-      metadata: {
-        conditionalValueIndex: 0,
-        configRowIndex: 0,
-        id: 0,
-        type: result.configType,
-        valueType: result.valueType,
-      },
+    let value: unknown = config.value
+
+    const providedByDep = config.dependencies?.find((dep) => dep.dependencyType === 'providedBy')
+
+    if (providedByDep) {
+      const envVarName = providedByDep.source
+      this.log(`This config is provided by env var '${envVarName}'`)
+
+      const envValue = process.env[envVarName]
+
+      if (envValue === undefined) {
+        return this.err(`Environment variable '${envVarName}' is not set. Cannot resolve config '${key}'.`, {
+          [key]: null,
+          provided: true,
+          missingEnvVar: envVarName,
+        })
+      }
+
+      value = envValue
+      this.log(`Successfully resolved config '${key}' from env var`)
     }
-    let value = config.value
 
-    // Check if this config has dependencies
-    if (config.dependencies && config.dependencies.length > 0) {
-      // Check for providedBy dependency (config value from env var)
-      const providedByDep = config.dependencies.find((dep) => dep.dependencyType === 'providedBy')
+    const decryptWithDep = config.dependencies?.find((dep) => dep.dependencyType === 'decryptWith')
 
-      if (providedByDep) {
-        const envVarName = providedByDep.source
-        this.log(`This config is provided by env var '${envVarName}'`)
+    if (decryptWithDep && decryptWithDep.config) {
+      const encryptionKeyConfig = decryptWithDep.config
+      const keyProvidedByDep = encryptionKeyConfig.dependencies?.find((dep) => dep.dependencyType === 'providedBy')
 
-        // Check if the env var is present
-        const envValue = process.env[envVarName]
+      if (keyProvidedByDep) {
+        const envVarName = keyProvidedByDep.source
+        this.log(
+          `This config is encrypted by key '${encryptionKeyConfig.key}' that should be found in env var '${envVarName}'`,
+        )
 
-        if (!envValue) {
-          return this.err(`Environment variable '${envVarName}' is not set. Cannot resolve config '${key}'.`, {
-            [key]: value,
-            provided: true,
+        const encryptionKey = process.env[envVarName]
+
+        if (encryptionKey === undefined) {
+          return this.err(`Environment variable '${envVarName}' is not set. Cannot decrypt config '${key}'.`, {
+            [key]: null,
+            encrypted: true,
             missingEnvVar: envVarName,
           })
         }
 
-        value = envValue
-        this.log(`Successfully resolved config '${key}' from env var`)
-      }
+        if (typeof value !== 'string') {
+          return this.err(`Config '${key}' is marked decryptWith but its value is not a string.`, {
+            [key]: null,
+            encrypted: true,
+          })
+        }
 
-      // Check for decryptWith dependency (encrypted config)
-      const decryptWithDep = config.dependencies.find((dep) => dep.dependencyType === 'decryptWith')
-
-      if (decryptWithDep && decryptWithDep.config) {
-        const encryptionKeyConfig = decryptWithDep.config
-
-        // Find the providedBy dependency to get the env var name for the encryption key
-        const keyProvidedByDep = encryptionKeyConfig.dependencies?.find((dep) => dep.dependencyType === 'providedBy')
-
-        if (keyProvidedByDep) {
-          const envVarName = keyProvidedByDep.source
-          this.log(
-            `This config is encrypted by key '${encryptionKeyConfig.key}' that should be found in env var '${envVarName}'`,
-          )
-
-          // Check if the env var is present
-          const encryptionKey = process.env[envVarName]
-
-          if (!encryptionKey) {
-            return this.err(`Environment variable '${envVarName}' is not set. Cannot decrypt config '${key}'.`, {
-              [key]: value,
-              encrypted: true,
-              missingEnvVar: envVarName,
-            })
-          }
-
-          // Attempt decryption
-          try {
-            value = decrypt(value, encryptionKey)
-            this.log(`Successfully decrypted config '${key}'`)
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error)
-            return this.err(`Failed to decrypt config '${key}': ${errorMessage}`, {
-              [key]: value,
-              encrypted: true,
-              error: errorMessage,
-            })
-          }
+        try {
+          value = decrypt(value, encryptionKey)
+          this.log(`Successfully decrypted config '${key}'`)
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          return this.err(`Failed to decrypt config '${key}': ${errorMessage}`, {
+            [key]: null,
+            encrypted: true,
+            error: errorMessage,
+          })
         }
       }
     }
 
-    return this.ok(this.toSuccessJson(value), {[key]: value})
+    return this.ok(this.toSuccessJson(value), {[key]: value as JsonObj[string]})
   }
 }
