@@ -6,6 +6,7 @@ export const keyWithEvaluations = 'my-string-list-key'
 export const keyWithNoEvaluations = 'jeffreys.test.key.reforge'
 export const secretKey = 'a.secret.config'
 export const confidentialKey = 'a.confidential.config'
+export const jsonKey = 'question.max-response.override'
 
 export const rawSecret = `875247386844c18c58a97c--b307b97a8288ac9da3ce0cf2--7ab0c32e044869e355586ed653a435de`
 
@@ -119,6 +120,25 @@ const secretConfig = {
   },
 }
 
+// v1 config response for a JSON-typed config (exercises [object Object] bug)
+const jsonConfig = {
+  key: jsonKey,
+  type: 'config',
+  valueType: 'json',
+  default: {
+    rules: [
+      {
+        criteria: [{operator: 'ALWAYS_TRUE'}],
+        value: {
+          type: 'json',
+          value: {maxTokens: 500, model: 'claude'},
+        },
+      },
+    ],
+  },
+  environments: [],
+}
+
 const confidentialConfig = {
   key: confidentialKey,
   type: 'config',
@@ -170,6 +190,7 @@ const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list'
           name: 'Confidential',
           description: '',
         },
+        {key: jsonKey, type: 'config', valueType: 'json', version: 1, id: 5, name: 'JSON Override', description: ''},
       ],
     },
   }),
@@ -194,6 +215,10 @@ const configHandler = http.post('https://app.quonfig.com/api/v1/metadata/getByKe
 
   if (key === confidentialKey) {
     return HttpResponse.json({json: confidentialConfig})
+  }
+
+  if (key === jsonKey) {
+    return HttpResponse.json({json: jsonConfig})
   }
 
   return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
