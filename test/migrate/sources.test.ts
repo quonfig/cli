@@ -106,8 +106,38 @@ describe('migrate/registry', () => {
       }
     })
 
+    it('throws NotYetImplementedError on listEnvironments', async () => {
+      try {
+        await source.listEnvironments()
+        expect.fail('expected listEnvironments to throw')
+      } catch (error) {
+        expect(error).to.be.instanceOf(NotYetImplementedError)
+      }
+    })
+
+    it('throws NotYetImplementedError on fetchChanges', async () => {
+      try {
+        const iter = source.fetchChanges(null)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        for await (const _ of iter) {
+          // consume to trigger generator body
+        }
+
+        expect.fail('expected fetchChanges to throw')
+      } catch (error) {
+        expect(error).to.be.instanceOf(NotYetImplementedError)
+      }
+    })
+
     it('throws NotYetImplementedError on translate', () => {
       expect(() => source.translate({source: 'flagsmith', raw: {}})).to.throw(NotYetImplementedError)
+    })
+
+    it('documents what must be investigated before the stub becomes real', () => {
+      const stubPath = path.join(CLI_ROOT, 'src', 'migrate', 'sources', 'flagsmith.ts')
+      const contents = fs.readFileSync(stubPath, 'utf8').toLowerCase()
+      expect(contents).to.contain('flagsmith api')
+      expect(contents).to.match(/delta|cursor/)
     })
   })
 
