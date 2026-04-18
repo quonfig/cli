@@ -121,6 +121,37 @@ describe('create', () => {
       .it('errors when no value is provided in non-interactive mode', () => {
         // Error assertion done in catch block
       })
+
+    // Regression: previously this would hang with "Detected unsettled top-level
+    // await" because isInteractive returned true in non-TTY contexts (the
+    // --interactive flag's default=true bypassed the TTY check). The fix
+    // auto-detects the non-TTY stdio and surfaces a clean error telling the
+    // user exactly which flag to pass.
+    describe('non-TTY auto-detection', () => {
+      let originalStdinTTY: boolean | undefined
+      let originalStdoutTTY: boolean | undefined
+
+      before(() => {
+        originalStdinTTY = process.stdin.isTTY
+        originalStdoutTTY = process.stdout.isTTY
+        Object.defineProperty(process.stdin, 'isTTY', {configurable: true, value: false})
+        Object.defineProperty(process.stdout, 'isTTY', {configurable: true, value: false})
+      })
+      after(() => {
+        Object.defineProperty(process.stdin, 'isTTY', {configurable: true, value: originalStdinTTY})
+        Object.defineProperty(process.stdout, 'isTTY', {configurable: true, value: originalStdoutTTY})
+      })
+
+      test
+        .command(['create', 'brand.new.json', '--type=json'])
+        .catch((error) => {
+          expect(error.message).to.contain('No value provided for')
+          expect(error.message).to.contain('--value')
+        })
+        .it('errors cleanly instead of hanging when stdin/stdout is not a TTY', () => {
+          // Error assertion done in catch block
+        })
+    })
   })
 
   describe('type=int', () => {

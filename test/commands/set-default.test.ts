@@ -199,5 +199,43 @@ describe('set-default', () => {
       .it('shows an error when provided a value and an env-var', () => {
         // Error assertion done in catch block
       })
+
+    // Regression: previously this would show the env-picker arrow-key UI and
+    // then crash with "Detected unsettled top-level await" because the TTY
+    // check was bypassed by the --interactive default. Now we auto-detect
+    // non-TTY stdio and surface a clean, actionable error.
+    describe('non-TTY auto-detection', () => {
+      let originalStdinTTY: boolean | undefined
+      let originalStdoutTTY: boolean | undefined
+
+      before(() => {
+        originalStdinTTY = process.stdin.isTTY
+        originalStdoutTTY = process.stdout.isTTY
+        Object.defineProperty(process.stdin, 'isTTY', {configurable: true, value: false})
+        Object.defineProperty(process.stdout, 'isTTY', {configurable: true, value: false})
+      })
+      after(() => {
+        Object.defineProperty(process.stdin, 'isTTY', {configurable: true, value: originalStdinTTY})
+        Object.defineProperty(process.stdout, 'isTTY', {configurable: true, value: originalStdoutTTY})
+      })
+
+      test
+        .command(['set-default', 'feature-flag.simple', '--value=true', '--confirm'])
+        .catch((error) => {
+          expect(error.message).to.contain("'environment' is required when interactive mode isn't available.")
+        })
+        .it('errors cleanly when environment is missing under non-TTY stdio', () => {
+          // Error assertion done in catch block
+        })
+
+      test
+        .command(['set-default', 'feature-flag.simple', '--environment=Development', '--value=true'])
+        .catch((error) => {
+          expect(error.message).to.contain('--confirm')
+        })
+        .it('errors cleanly when --confirm is missing under non-TTY stdio (no hanging confirm prompt)', () => {
+          // Error assertion done in catch block
+        })
+    })
   })
 })

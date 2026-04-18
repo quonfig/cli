@@ -4,6 +4,7 @@ import type {Value, ConfigResponse} from '@quonfig/node'
 import {defaultValueFor} from '../quonfig.js'
 import {Result, failure, noop, success} from '../result.js'
 import autocomplete from '../util/autocomplete.js'
+import isInteractive from '../util/is-interactive.js'
 import validateValue from '../validations/value.js'
 import getString from './get-string.js'
 
@@ -25,13 +26,15 @@ const getValue = async ({
   allowBlank?: boolean
   desiredValue: string | undefined
   environment?: Environment
-  flags: {interactive: boolean}
+  flags: {interactive?: boolean}
   key?: string
   message: string
   quonfig: Quonfig
 }): Promise<Result<string>> => {
-  if (desiredValue === undefined && !flags.interactive) {
-    return failure(`No value provided for ${key}`)
+  if (desiredValue === undefined && !isInteractive(flags)) {
+    return failure(
+      `No value provided for ${key ?? message}. Pass --value=<value> (or use --env-var) when running non-interactively.`,
+    )
   }
 
   if (!key) {
