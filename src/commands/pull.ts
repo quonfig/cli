@@ -12,7 +12,6 @@ import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
 import {
   isGitRepo,
   getRemoteUrl,
-  isWorkingTreeClean,
   gitFetch,
   gitSetRemote,
   canFastForward,
@@ -101,11 +100,12 @@ CLI shortcuts (no JSON editing needed for simple cases):
       // Update the remote URL to use current (possibly refreshed) token
       await gitSetRemote(resolvedDir, repoUrl)
 
-      // Check working tree
-      const clean = await isWorkingTreeClean(resolvedDir)
-      if (!clean) {
-        return this.err('Local changes present — commit, stash, or run `git reset --hard origin/main` to discard.')
-      }
+      // Note: we intentionally don't pre-check for untracked or modified files.
+      // Plain `git pull` is fine with untracked files, and `git merge --ff-only`
+      // below will fail loudly on real conflicts (tracked modifications, or an
+      // incoming commit that would overwrite an untracked file). Pre-checking
+      // just creates a self-trap when qfg itself writes files like
+      // `.qfg-friction.log` into the workspace dir (qfg-q2l).
 
       // Fetch
       this.log('Fetching from remote...')
