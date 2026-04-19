@@ -25,6 +25,10 @@ export default class Login extends BaseCommand {
     const {flags} = await this.parse(Login)
     const profileName = flags.profile || 'default'
 
+    if (process.env.QUONFIG_API_KEY && process.env.QUONFIG_API_KEY.length > 0) {
+      this.log('Note: QUONFIG_API_KEY is set — runtime will prefer it over the login session.')
+    }
+
     // Step 1: Request device code from WorkOS
     this.verboseLog('Requesting device authorization code...')
     const deviceAuth = await requestDeviceCode()
