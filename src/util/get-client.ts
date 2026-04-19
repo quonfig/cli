@@ -45,21 +45,53 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     const workspaceOverride = profile ?? process.env.QUONFIG_WORKSPACE
     if (!workspaceOverride) {
       command.error(
-        'QUONFIG_API_KEY is set but no workspace was specified. Set QUONFIG_WORKSPACE=<uuid> or pass --workspace=<uuid>.',
+        'QUONFIG_API_KEY is set but no workspace was specified. Set QUONFIG_WORKSPACE=<slug-or-uuid> or pass --workspace=<slug-or-uuid>.',
         {exit: 1},
       )
     }
 
     const uuidPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
-    if (!uuidPattern.test(workspaceOverride)) {
-      command.error(
-        `In API-key mode, --workspace / QUONFIG_WORKSPACE must be a UUID (got "${workspaceOverride}"). Slug resolution requires running \`qfg login\` first.`,
-        {exit: 1},
-      )
-    }
+    if (uuidPattern.test(workspaceOverride)) {
+      workspaceId = workspaceOverride
+      command.verboseLog('ApiKey auth', {source: 'uuid', workspaceId})
+    } else {
+      // Slug — resolve via the server since there's no local auth config in CI mode.
+      type WorkspaceEntry = {workspaceId: string; workspaceSlug: string}
+      let res: Response
+      try {
+        res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
+          method: 'POST',
+          headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
+          body: JSON.stringify({json: {}}),
+        })
+      } catch (error) {
+        command.error(
+          `Failed to resolve workspace slug "${workspaceOverride}": ${error instanceof Error ? error.message : String(error)}`,
+          {exit: 1},
+        )
+      }
 
-    workspaceId = workspaceOverride
-    command.verboseLog('ApiKey auth', {workspaceId})
+      if (!res.ok) {
+        command.error(
+          `Failed to resolve workspace slug "${workspaceOverride}" (HTTP ${res.status}). Check that QUONFIG_API_KEY is valid.`,
+          {exit: 1},
+        )
+      }
+
+      const body = (await res.json()) as {json?: WorkspaceEntry[]}
+      const entries = body.json ?? (body as unknown as WorkspaceEntry[]) ?? []
+      const match = entries.find((w) => w.workspaceSlug === workspaceOverride)
+      if (!match) {
+        const available = entries.map((w) => w.workspaceSlug).join(', ') || '(none)'
+        command.error(
+          `No workspace with slug "${workspaceOverride}" is accessible with this API key. Available: ${available}.`,
+          {exit: 1},
+        )
+      }
+
+      workspaceId = match.workspaceId
+      command.verboseLog('ApiKey auth', {source: 'slug', slug: workspaceOverride, workspaceId})
+    }
   } else {
     const authConfig = await loadAuthConfig()
     const tokens = await loadTokens()
