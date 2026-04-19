@@ -28,8 +28,39 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
   let jwt: string | undefined
   let workspaceId: string | undefined
 
-  // If no SDK key provided, use WorkOS OAuth tokens
-  if (!sdkKey) {
+  const apiKey = process.env.QUONFIG_API_KEY
+
+  // Auth precedence: explicit SDK key → QUONFIG_API_KEY env (CI) → WorkOS OAuth tokens.
+  if (sdkKey) {
+    // No jwt / workspace resolution — SDK-key path talks to api-delivery.
+  } else if (apiKey && apiKey.length > 0) {
+    // API-key (workspace-scoped bearer) path. getValidAccessToken short-circuits
+    // when QUONFIG_API_KEY is set, so this never touches disk.
+    try {
+      jwt = await getValidAccessToken()
+    } catch (error) {
+      command.error(error instanceof Error ? error.message : String(error), {exit: 1})
+    }
+
+    const workspaceOverride = profile ?? process.env.QUONFIG_WORKSPACE
+    if (!workspaceOverride) {
+      command.error(
+        'QUONFIG_API_KEY is set but no workspace was specified. Set QUONFIG_WORKSPACE=<uuid> or pass --workspace=<uuid>.',
+        {exit: 1},
+      )
+    }
+
+    const uuidPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
+    if (!uuidPattern.test(workspaceOverride)) {
+      command.error(
+        `In API-key mode, --workspace / QUONFIG_WORKSPACE must be a UUID (got "${workspaceOverride}"). Slug resolution requires running \`qfg login\` first.`,
+        {exit: 1},
+      )
+    }
+
+    workspaceId = workspaceOverride
+    command.verboseLog('ApiKey auth', {workspaceId})
+  } else {
     const authConfig = await loadAuthConfig()
     const tokens = await loadTokens()
 
