@@ -18,6 +18,13 @@ export interface GiteaTokenEntry {
   expiresAt: string | null
   repoUrl: string // authenticated clone URL
   token: string
+  /**
+   * Human-readable workspace slug (NOT the UUID). Populated from the
+   * `gitea.token` response. Optional to stay backward-compatible with older
+   * entries written before the field was added; callers must handle the
+   * `undefined` case by re-minting.
+   */
+  workspaceSlug?: string
 }
 
 type GiteaTokenStore = Record<string, GiteaTokenEntry>

@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import {PushConflictError, cloneAndStackPush} from '../../src/migrate/push-strategy.js'
+import {PushConflictError, cloneAndStackPush} from '../../src/util/clone-and-stack-push.js'
 
 function run(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, {cwd, encoding: 'utf8'}).trim()

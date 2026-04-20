@@ -8,6 +8,7 @@ import type {JsonObj} from '../../result.js'
 import {BaseCommand} from '../../index.js'
 import {getActiveProfile, loadAuthConfig} from '../../util/token-storage.js'
 import {mintGiteaToken} from '../../util/gitea-api.js'
+import {readWorkspaceSlug, writeWorkspaceSlug} from '../../util/quonfig-json.js'
 import {
   isGitRepo,
   hasAtLeastOneCommit,
@@ -125,7 +126,7 @@ export default class WorkspaceBootstrap extends BaseCommand {
 
     // Mint write token (backend provisions Gitea repo + bot account)
     this.log('Connecting to Gitea...')
-    let tokenData: {token: string; repoUrl: string; expiresAt: string | null}
+    let tokenData: {token: string; repoUrl: string; expiresAt: string | null; workspaceSlug: string}
     try {
       tokenData = await mintGiteaToken(workspaceId, 'write', 'bootstrap')
     } catch (error: unknown) {
@@ -134,8 +135,8 @@ export default class WorkspaceBootstrap extends BaseCommand {
       )
     }
 
-    const {repoUrl} = tokenData
-    this.verboseLog('WorkspaceBootstrap', {repoUrl: displayUrl(repoUrl)})
+    const {repoUrl, workspaceSlug: backendSlug} = tokenData
+    this.verboseLog('WorkspaceBootstrap', {repoUrl: displayUrl(repoUrl), backendSlug})
 
     // Idempotency: check if remote already has commits
     if (!flags.force) {
@@ -168,6 +169,35 @@ export default class WorkspaceBootstrap extends BaseCommand {
       return this.err(`Push failed: ${String(error)}`)
     }
 
+    // Write the workspace pin into `quonfig.json` (Guard 1 in
+    // project/plans/cli-git-sync.md). If the pin already exists and disagrees,
+    // we keep what is there — bootstrap is for fresh cases, not re-pinning.
+    // If we do write it, commit and push so the bootstrap leaves no
+    // uncommitted changes behind.
+    try {
+      const existingPin = await readWorkspaceSlug(resolvedDir)
+      if (existingPin && existingPin !== backendSlug) {
+        this.log('')
+        this.log(
+          `Warning: quonfig.json already pins workspace "${existingPin}", but the backend says this workspace is "${backendSlug}".`,
+        )
+        this.log('Leaving the existing pin in place. If this is wrong, edit quonfig.json manually and re-run.')
+      } else if (existingPin === backendSlug) {
+        this.verboseLog('WorkspaceBootstrap', `quonfig.json already pinned to ${backendSlug}; no-op.`)
+      } else {
+        this.log('')
+        this.log(`Pinning quonfig.json to workspace "${backendSlug}"...`)
+        await writeWorkspaceSlug(resolvedDir, backendSlug)
+        await this.commitAndPushPin(resolvedDir, backendSlug, flags.force)
+      }
+    } catch (error: unknown) {
+      // The main push has already succeeded, so don't fail the whole command.
+      // Surface the issue clearly so the user knows to follow up.
+      this.log('')
+      this.log(`Warning: could not write the workspace pin to quonfig.json: ${String(error)}`)
+      this.log('The workspace is connected, but you should re-run `qfg pull` to backfill the pin.')
+    }
+
     this.log(`\nBootstrap complete.`)
     this.log(`Workspace "${workspaceName}" is now connected to your local directory.`)
     this.log(`\nTo keep it in sync locally, run:`)
@@ -178,6 +208,37 @@ export default class WorkspaceBootstrap extends BaseCommand {
       repoUrl: displayUrl(repoUrl),
       workspaceId,
     }
+  }
+
+  /**
+   * Stage, commit, and push the `quonfig.json` pin. Runs after the main
+   * bootstrap push so the pin lands as a committed+pushed change rather than
+   * an uncommitted local edit. We stage only `quonfig.json` (not `-A`) so we
+   * don't accidentally sweep in unrelated user edits.
+   */
+  private async commitAndPushPin(dir: string, slug: string, force: boolean): Promise<void> {
+    const {execFile: execFileCb} = await import('node:child_process')
+    const util = await import('node:util')
+    const execFile = util.promisify(execFileCb)
+
+    // Stage just quonfig.json so we don't accidentally commit other dirty files.
+    await execFile('git', ['-C', dir, 'add', 'quonfig.json'])
+
+    // If `git add` produced no staged change (e.g. content matched an earlier
+    // version on disk), `git commit` would fail. Check the index first.
+    const {stdout: diffStat} = await execFile('git', ['-C', dir, 'diff', '--cached', '--name-only'])
+    if (!diffStat.trim()) {
+      this.verboseLog('WorkspaceBootstrap', 'quonfig.json pin matches HEAD; no commit needed.')
+      return
+    }
+
+    await execFile('git', ['-C', dir, 'commit', '-m', `chore: pin quonfig.json to workspace "${slug}"`])
+
+    // Push the new commit using the same force semantics as the main push.
+    const pushArgs = ['-C', dir, 'push', 'origin', 'main']
+    pushArgs.push(force ? '--force' : '--force-with-lease')
+    await execFile('git', pushArgs)
+    this.log(`Pushed pin commit.`)
   }
 
   private async remoteHasCommits(repoUrl: string): Promise<boolean> {

@@ -2,6 +2,7 @@ import {Args, Flags} from '@oclif/core'
 
 import {BaseCommand} from '../index.js'
 import {executeInit, planInit} from '../init/init-workspace.js'
+import {writeWorkspaceSlug} from '../util/quonfig-json.js'
 
 export default class Init extends BaseCommand {
   static args = {
@@ -30,6 +31,10 @@ export default class Init extends BaseCommand {
       allowNo: true,
       description: 'Include sample configs (default: yes on first init, no on update)',
     }),
+    workspace: Flags.string({
+      description: 'Workspace slug to pin in quonfig.json (Guard 1). If omitted, no pin is written.',
+      required: false,
+    }),
   }
 
   public async run(): Promise<object> {
@@ -54,6 +59,10 @@ export default class Init extends BaseCommand {
         for (const action of writeActions) {
           this.log(`  + ${action.description}`)
         }
+      }
+
+      if (flags.workspace) {
+        this.log(`  + Pin quonfig.json to workspace "${flags.workspace}"`)
       }
 
       if (skipActions.length > 0) {
@@ -82,10 +91,22 @@ export default class Init extends BaseCommand {
     // Execute for real
     executeInit(plan, dir)
 
+    // If the user passed --workspace, pin the slug in quonfig.json
+    // (Guard 1 in project/plans/cli-git-sync.md). We deliberately keep this
+    // non-interactive: flag → write, no flag → no write. Users who need the
+    // pin later can run `qfg pull` (backfills) or edit the file directly.
+    if (flags.workspace) {
+      await writeWorkspaceSlug(dir, flags.workspace)
+    }
+
     this.log(`${mode} workspace: ${dir === '.' ? process.cwd() : dir}\n`)
 
     for (const action of writeActions) {
       this.log(`  + ${action.description}`)
+    }
+
+    if (flags.workspace) {
+      this.log(`  + Pin quonfig.json to workspace "${flags.workspace}"`)
     }
 
     for (const action of skipActions) {

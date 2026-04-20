@@ -6,6 +6,7 @@ import * as path from 'node:path'
 import {executeInit, planInit} from '../../src/init/init-workspace.js'
 import {SAMPLE_FILES} from '../../src/init/samples.js'
 import {PRE_COMMIT_MARKER} from '../../src/init/templates.js'
+import {writeWorkspaceSlug, readWorkspaceSlug} from '../../src/util/quonfig-json.js'
 import {validateWorkspace} from '../../src/verify/validate.js'
 
 function tmpDir(): string {
@@ -285,6 +286,41 @@ describe('qfg init', () => {
         const content = fs.readFileSync(hookPath, 'utf8')
         expect(content).to.include('existing hook')
         expect(content).to.include('qfg verify')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+  })
+
+  // ── Workspace pin (Guard 1) ────────────────────────────────────────
+
+  describe('workspace pin (--workspace flag)', () => {
+    it('writes the workspace slug into quonfig.json when the flag is provided', async () => {
+      const dir = tmpDir()
+      try {
+        // Simulate the init command's full flow: execute init, then write pin.
+        initFresh(dir)
+        await writeWorkspaceSlug(dir, 'acme-prod')
+
+        // quonfig.json should now carry the pin AND keep the original environments field
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf8'))
+        expect(parsed.workspace).to.equal('acme-prod')
+        expect(parsed.environments).to.deep.equal([])
+
+        const slug = await readWorkspaceSlug(dir)
+        expect(slug).to.equal('acme-prod')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('does not write a workspace field when the flag is absent', () => {
+      const dir = tmpDir()
+      try {
+        initFresh(dir)
+
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf8'))
+        expect(parsed).to.not.have.property('workspace')
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }

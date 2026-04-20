@@ -3,7 +3,7 @@ import * as path from 'node:path'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
-import {type CloneAndStackPushOptions, type CloneAndStackPushResult, cloneAndStackPush} from './push-strategy.js'
+import {type CloneAndStackPushOptions, type CloneAndStackPushResult, cloneAndStackPush} from '../util/clone-and-stack-push.js'
 import type {LegacyChange, MigrationSource} from './source.js'
 
 export interface PushMigrationToCloudOptions {

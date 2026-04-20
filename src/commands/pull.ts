@@ -9,6 +9,7 @@ import {BaseCommand} from '../index.js'
 import {getActiveProfile, loadAuthConfig} from '../util/token-storage.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
+import {readWorkspaceSlug, writeWorkspaceSlug} from '../util/quonfig-json.js'
 import {
   isGitRepo,
   getRemoteUrl,
@@ -81,7 +82,8 @@ CLI shortcuts (no JSON editing needed for simple cases):
     this.verboseLog('Pull', {workspaceId, dir: resolvedDir})
 
     // Get or mint Gitea read token
-    const repoUrl = await this.resolveRepoUrl(workspaceId)
+    const tokenEntry = await this.resolveTokenEntry(workspaceId)
+    const repoUrl = tokenEntry.repoUrl
 
     // Perform git operation
     const isRepo = await isGitRepo(resolvedDir)
@@ -166,7 +168,65 @@ CLI shortcuts (no JSON editing needed for simple cases):
     // Write QUONFIG_DIR to ~/.quonfig/config if not set
     await this.maybeWriteQuonfigDir(resolvedDir)
 
+    // Backfill the `workspace` pin in `quonfig.json` if missing
+    // (Guard 1 in project/plans/cli-git-sync.md). Local-only write — we
+    // intentionally do NOT commit or push here; the user's next `qfg push`
+    // will sweep it up naturally.
+    await this.backfillWorkspacePin(resolvedDir, tokenEntry, workspaceId)
+
     return {dir: resolvedDir, workspaceId}
+  }
+
+  /**
+   * Local-only backfill of the `workspace` pin in `quonfig.json`.
+   *
+   * - Missing pin → write it from the token response's `workspaceSlug`.
+   * - Pin already set and matches → no-op.
+   * - Pin already set and disagrees → log a warning showing both values
+   *   and LEAVE IT ALONE. Overwriting someone's explicit pin is a Guard 2
+   *   concern, not a pull concern — the next `qfg push` is where the
+   *   identity-check dispatches a hard abort.
+   *
+   * This never throws — a broken `quonfig.json` shouldn't fail `qfg pull`.
+   */
+  private async backfillWorkspacePin(dir: string, tokenEntry: {workspaceSlug?: string}, workspaceId: string): Promise<void> {
+    let backendSlug = tokenEntry.workspaceSlug
+    if (!backendSlug) {
+      // Older cached entries lack the slug. Mint a fresh one solely to learn the
+      // slug. Cheap (one API call), and the refresh updates the cache for next time.
+      try {
+        const fresh = await mintAndStoreGiteaReadToken(workspaceId)
+        backendSlug = fresh.workspaceSlug
+      } catch (error: unknown) {
+        this.verboseLog('Pull', `Could not mint token to learn workspace slug: ${String(error)}`)
+        return
+      }
+    }
+
+    if (!backendSlug) {
+      this.verboseLog('Pull', 'Backend did not return a workspaceSlug; skipping pin backfill.')
+      return
+    }
+
+    try {
+      const existingPin = await readWorkspaceSlug(dir)
+      if (!existingPin) {
+        await writeWorkspaceSlug(dir, backendSlug)
+        this.verboseLog('Pull', `Backfilled workspace pin "${backendSlug}" into quonfig.json.`)
+        return
+      }
+
+      if (existingPin !== backendSlug) {
+        this.log('')
+        this.log(
+          `Warning: quonfig.json pins workspace "${existingPin}", but the backend says this workspace is "${backendSlug}".`,
+        )
+        this.log('Leaving the existing pin in place. Run `qfg push` to see the full identity check.')
+      }
+    } catch (error: unknown) {
+      // Non-fatal — pull itself already succeeded.
+      this.verboseLog('Pull', `Could not backfill workspace pin: ${String(error)}`)
+    }
   }
 
   private looksLike401(err: unknown): boolean {
@@ -195,12 +255,17 @@ CLI shortcuts (no JSON editing needed for simple cases):
 
   private async refreshAndGetUrl(workspaceId: string): Promise<string> {
     const data = await mintGiteaToken(workspaceId, 'read', 'pull')
-    const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
+    const entry = {
+      token: data.token,
+      repoUrl: data.repoUrl,
+      expiresAt: data.expiresAt,
+      workspaceSlug: data.workspaceSlug,
+    }
     await saveGiteaToken(workspaceId, entry)
     return entry.repoUrl
   }
 
-  private async resolveRepoUrl(workspaceId: string): Promise<string> {
+  private async resolveTokenEntry(workspaceId: string): Promise<{repoUrl: string; workspaceSlug?: string}> {
     let entry = await loadGiteaToken(workspaceId)
 
     if (!entry || isGiteaTokenExpired(entry)) {
@@ -208,7 +273,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
       entry = await mintAndStoreGiteaReadToken(workspaceId)
     }
 
-    return entry.repoUrl
+    return entry
   }
 }
 

@@ -344,7 +344,9 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         issues.push({file: 'quonfig.json', message: `Invalid JSON: ${(error as Error).message}`, severity: 'error'})
       }
 
-      const quonfigResult = z.object({environments: z.array(z.string())}).safeParse(quonfigParsed)
+      const quonfigResult = z
+        .object({environments: z.array(z.string()), workspace: z.string().optional()})
+        .safeParse(quonfigParsed)
       if (quonfigResult.success) {
         for (const envId of quonfigResult.data.environments) {
           declaredEnvIds.add(envId)
@@ -700,7 +702,9 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
     }
 
     if (quonfigParsed !== null) {
-      const quonfigResult = z.object({environments: z.array(z.string())}).safeParse(quonfigParsed)
+      const quonfigResult = z
+        .object({environments: z.array(z.string()), workspace: z.string().optional()})
+        .safeParse(quonfigParsed)
       if (quonfigResult.success) {
         for (const envId of quonfigResult.data.environments) {
           declaredEnvIds.add(envId)

@@ -6,12 +6,18 @@ export interface GiteaTokenResponse {
   expiresAt: string | null
   repoUrl: string
   token: string
+  /**
+   * Human-readable workspace slug (NOT the UUID). Used to pin `quonfig.json`
+   * and for identity-check guard messages. Required as of the Guard 1 rollout
+   * in `project/plans/cli-git-sync.md`; the backend always returns it.
+   */
+  workspaceSlug: string
 }
 
 export const mintGiteaToken = async (
   workspaceId: string,
   scope: 'read' | 'write',
-  purpose: 'pull' | 'bootstrap',
+  purpose: 'pull' | 'bootstrap' | 'push',
 ): Promise<GiteaTokenResponse> => {
   const accessToken = await getValidAccessToken()
 
@@ -53,6 +59,7 @@ export const mintAndStoreGiteaReadToken = async (workspaceId: string): Promise<G
     token: data.token,
     repoUrl: data.repoUrl,
     expiresAt: data.expiresAt,
+    workspaceSlug: data.workspaceSlug,
   }
   await saveGiteaToken(workspaceId, entry)
   return entry

@@ -5,7 +5,7 @@ import * as util from 'node:util'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
-import {MIGRATOR_IDENTITY, type PushIdentity} from './push-strategy.js'
+import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
 import type {LegacyChange, MigrationSource} from './source.js'
 
 const execFile = util.promisify(execFileCb)
