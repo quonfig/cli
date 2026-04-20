@@ -8,7 +8,8 @@ import {Flags} from '@oclif/core'
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {mintGiteaToken} from '../util/gitea-api.js'
+import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
+import type {GiteaTokenMintResult} from '../push/run-push.js'
 import {
   getRemoteUrl,
   gitFetch,
@@ -135,13 +136,39 @@ Enforces three guards before touching the remote:
 }
 
 /**
+ * Map a raw `gitea.token` API response into the `GiteaTokenMintResult` shape
+ * the push core (`runPush`) consumes. Kept as a pure function so we can unit
+ * test the wiring without a network — specifically, to regression-test that
+ * `workspaceId` on the result is the UUID the server returned, not the slug.
+ *
+ * The bug this guards against: before the backend started returning
+ * `workspaceId`, this module used `resp.workspaceSlug` as the `workspaceId`
+ * field, which caused `checkIdentity` to fail when the user passed
+ * `--workspace <UUID>` (requested=UUID, backend.workspaceId=slug → mismatch).
+ */
+export function giteaResponseToMintResult(resp: GiteaTokenResponse): GiteaTokenMintResult {
+  return {
+    token: resp.token,
+    repoUrl: resp.repoUrl,
+    expiresAt: resp.expiresAt,
+    workspaceSlug: resp.workspaceSlug,
+    // Canonical workspace UUID from the server. checkIdentity compares this
+    // against `requestedTarget` — so if the user passed --workspace as a
+    // UUID, the UUID path matches backend.workspaceId; if they passed a
+    // slug, the slug path matches backend.workspaceSlug. Either way the
+    // backend row is the same workspace.
+    workspaceId: resp.workspaceId,
+  }
+}
+
+/**
  * Wire the real implementations of every dependency runPush needs. Kept in
  * the command file so the pure core stays free of oclif / git shell imports.
  *
  * Returns a `{deps, cleanup}` pair. The caller MUST call `cleanup()` in a
  * finally block so the bare-path probe clone is removed even on errors.
  */
-function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; cleanup: () => Promise<void>} {
+export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; cleanup: () => Promise<void>} {
   const log = (line: string) => cmd.log(line)
   const errLog = (line: string) => cmd.logToStderr(line)
 
@@ -229,18 +256,7 @@ function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; cleanup
       // Stash the authenticated URL so the bare-path gitOps methods can
       // probe-clone it without a second mint.
       authenticatedRepoUrl = resp.repoUrl
-      return {
-        token: resp.token,
-        repoUrl: resp.repoUrl,
-        expiresAt: resp.expiresAt,
-        workspaceSlug: resp.workspaceSlug,
-        // The oRPC response carries the canonical UUID back only via repoUrl /
-        // the minted token's metadata. For identity-check we need *something*
-        // to compare the requested target against; we use the slug as both the
-        // slug AND the "id" field (checkIdentity treats slug==id as a valid
-        // backend identity).
-        workspaceId: resp.workspaceSlug,
-      }
+      return giteaResponseToMintResult(resp)
     },
     async validate(dir: string) {
       const {validateWorkspace} = await import('../verify/validate.js')

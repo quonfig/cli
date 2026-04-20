@@ -14,6 +14,8 @@ import {
   type RunPushInput,
 } from '../../src/push/run-push.js'
 import {FileDelta} from '../../src/push/diff-summary.js'
+import {giteaResponseToMintResult} from '../../src/commands/push.js'
+import type {GiteaTokenResponse} from '../../src/util/gitea-api.js'
 
 /**
  * Unit tests for `runPush` — the dependency-injected core of the `qfg push`
@@ -477,5 +479,44 @@ describe('runPush (core)', () => {
       const b = withPushedViaTrailer(a)
       expect(a).to.equal(b)
     })
+  })
+})
+
+/**
+ * Regression for qfg-gmg — staging verify hit "requested disagrees with
+ * backend" when the user passed `--workspace <UUID>` because buildRealDeps
+ * was setting `workspaceId: resp.workspaceSlug`. The backend now returns
+ * `workspaceId` on the gitea.token response; this test locks in that the
+ * CLI wiring passes the UUID through unchanged so checkIdentity's UUID
+ * path works against real responses.
+ */
+describe('giteaResponseToMintResult (qfg-gmg regression)', () => {
+  const SLUG = 'our-config-staging-test'
+  const UUID = '708c30c5-ee88-4572-ac14-4c362b904b38'
+
+  const response: GiteaTokenResponse = {
+    token: 'fake-token',
+    repoUrl: `https://gitea.example/${SLUG}/config.git`,
+    expiresAt: null,
+    workspaceSlug: SLUG,
+    workspaceId: UUID,
+  }
+
+  it('passes workspaceId (UUID) through from the response — not the slug', () => {
+    const mint: GiteaTokenMintResult = giteaResponseToMintResult(response)
+    expect(mint.workspaceId).to.equal(UUID)
+    expect(mint.workspaceId).to.not.equal(SLUG)
+  })
+
+  it('passes workspaceSlug through unchanged', () => {
+    const mint: GiteaTokenMintResult = giteaResponseToMintResult(response)
+    expect(mint.workspaceSlug).to.equal(SLUG)
+  })
+
+  it('preserves token / repoUrl / expiresAt verbatim', () => {
+    const mint: GiteaTokenMintResult = giteaResponseToMintResult(response)
+    expect(mint.token).to.equal(response.token)
+    expect(mint.repoUrl).to.equal(response.repoUrl)
+    expect(mint.expiresAt).to.equal(response.expiresAt)
   })
 })

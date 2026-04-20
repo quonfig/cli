@@ -180,4 +180,45 @@ describe('checkIdentity (Guards 1 + 2)', () => {
       ).to.throw(/requestedTarget/)
     })
   })
+
+  /**
+   * Regression matrix for qfg-gmg — verify that when backend.workspaceId is
+   * the canonical UUID (not the slug), both `--workspace <slug>` and
+   * `--workspace <UUID>` are accepted as "requested matches backend". This
+   * was broken when buildRealDeps was still setting backend.workspaceId to
+   * the slug — `--workspace <UUID>` aborted with a requested-mismatch.
+   */
+  describe('qfg-gmg regression — slug vs UUID requested targets', () => {
+    const BACKEND_UUID = BACKEND.workspaceId
+    const BACKEND_SLUG = BACKEND.workspaceSlug
+
+    it('ok when requested is the slug and backend.workspaceId is the UUID (staging shape)', () => {
+      const result = checkIdentity(
+        baseInput({
+          requestedTarget: BACKEND_SLUG,
+        }),
+      )
+      expect(result.kind).to.equal('ok')
+    })
+
+    it('ok when requested is the UUID and backend.workspaceId is the UUID (staging shape)', () => {
+      const result = checkIdentity(
+        baseInput({
+          requestedTarget: BACKEND_UUID,
+        }),
+      )
+      expect(result.kind).to.equal('ok')
+    })
+
+    it('aborts when requested is an unrelated UUID', () => {
+      const result = checkIdentity(
+        baseInput({
+          requestedTarget: '99999999-9999-9999-9999-999999999999',
+          repoPinSlug: undefined,
+          remoteOriginUrl: undefined,
+        }),
+      )
+      expect(result.kind).to.equal('abort')
+    })
+  })
 })

@@ -7,6 +7,14 @@ export interface GiteaTokenResponse {
   repoUrl: string
   token: string
   /**
+   * Canonical workspace UUID for the minted token. Used as the backend
+   * identity in the push identity check — required so the CLI can match a
+   * `--workspace <UUID>` request against the canonical workspace row without
+   * assuming the slug is also the UUID. Backend returns this alongside
+   * `workspaceSlug` as of the Guard 1 rollout in `project/plans/cli-git-sync.md`.
+   */
+  workspaceId: string
+  /**
    * Human-readable workspace slug (NOT the UUID). Used to pin `quonfig.json`
    * and for identity-check guard messages. Required as of the Guard 1 rollout
    * in `project/plans/cli-git-sync.md`; the backend always returns it.
