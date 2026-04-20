@@ -1,3 +1,4 @@
+import {Args} from '@oclif/core'
 import {select} from '@inquirer/prompts'
 
 import type {JsonObj} from '../../result.js'
@@ -7,12 +8,26 @@ import {getApiUrl} from '../../util/domain-urls.js'
 import {getValidAccessToken} from '../../util/get-valid-token.js'
 import {loadAuthConfig, saveAuthConfig} from '../../util/token-storage.js'
 
+const UUID_PATTERN = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
+
 export default class WorkspaceSwitch extends BaseCommand {
+  static args = {
+    slug: Args.string({
+      description: 'Workspace slug (or UUID) to switch to. Omit for an interactive picker.',
+      required: false,
+    }),
+  }
+
   static description = 'Switch to a different workspace'
 
-  static examples = ['<%= config.bin %> <%= command.id %>']
+  static examples = [
+    '<%= config.bin %> <%= command.id %>',
+    '<%= config.bin %> <%= command.id %> my-workspace-slug',
+  ]
 
   public async run(): Promise<JsonObj | void> {
+    const {args} = await this.parse(WorkspaceSwitch)
+
     // Get a valid token — refresh silently if needed, error if not logged in
     let accessToken: string
     try {
@@ -56,9 +71,18 @@ export default class WorkspaceSwitch extends BaseCommand {
       return this.err('No workspaces found for your account.')
     }
 
-    // Pick workspace
+    // Pick workspace: positional arg → interactive picker → auto-select if only one
     let match: WorkspaceEntry
-    if (candidates.length === 1) {
+    if (args.slug) {
+      const found = UUID_PATTERN.test(args.slug)
+        ? candidates.find((w) => w.workspaceId === args.slug)
+        : candidates.find((w) => w.workspaceSlug === args.slug)
+      if (!found) {
+        const available = candidates.map((w) => w.workspaceSlug).join(', ') || '(none)'
+        return this.err(`Workspace "${args.slug}" not found. Available: ${available}.`)
+      }
+      match = found
+    } else if (candidates.length === 1) {
       match = candidates[0]
       this.log(`Only one workspace available: ${match.organizationName} / ${match.workspaceSlug}`)
     } else {

@@ -45,7 +45,7 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     const workspaceOverride = profile ?? process.env.QUONFIG_WORKSPACE
     if (!workspaceOverride) {
       command.error(
-        'QUONFIG_API_KEY is set but no workspace was specified. Set QUONFIG_WORKSPACE=<slug-or-uuid> or pass --workspace=<slug-or-uuid>.',
+        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<workspace-slug> (UUIDs also work).',
         {exit: 1},
       )
     }
