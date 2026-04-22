@@ -38,6 +38,7 @@ export interface LaunchConfig {
   sendToClientSdk?: boolean
   type: string
   valueType: string
+  variants?: Array<{value?: LaunchValue}>
 }
 
 export interface LaunchChangeEntry {

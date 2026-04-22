@@ -11,7 +11,7 @@ import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError} from '../util/clone-and-stack-push.js'
 import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
-import {type LegacyChange, NotYetImplementedError} from '../migrate/source.js'
+import {type DroppedOverrideSummary, type LegacyChange, NotYetImplementedError} from '../migrate/source.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
@@ -187,6 +187,8 @@ export default class Migrate extends BaseCommand {
               : `No net changes produced by this run. Nothing to commit or push.`,
           )
 
+          warnAboutDroppedOverrides(this, result.droppedOverrides)
+
           return {
             ...payload,
             action: result.action,
@@ -229,6 +231,8 @@ export default class Migrate extends BaseCommand {
           ? `Committed ${toProcess.length} change(s). commit=${localResult.commitSha?.slice(0, 8) ?? ''} action=${localResult.action}`
           : `No net changes produced by this run. Nothing to commit.`,
       )
+
+      warnAboutDroppedOverrides(this, localResult.droppedOverrides)
 
       return {
         ...payload,
@@ -295,6 +299,26 @@ function buildReportData(source: string, count: number): MigrationReportData {
     source,
     unsupportedFeatures: [],
   }
+}
+
+function warnAboutDroppedOverrides(cmd: BaseCommand, dropped: DroppedOverrideSummary | null): void {
+  if (!dropped || dropped.total === 0) return
+  const envIds = Object.keys(dropped.byEnv).sort()
+  cmd.warn(
+    `Dropped ${dropped.total} override section(s) referencing ${envIds.length} env ID(s) not present in the source's env list (likely archived/deleted):`,
+  )
+  for (const envId of envIds) {
+    const perFlag = dropped.byEnv[envId]
+    const totalForEnv = Object.values(perFlag).reduce((s, n) => s + n, 0)
+    cmd.warn(`  env-${envId}: ${totalForEnv} dropped from ${Object.keys(perFlag).length} flag(s)`)
+    for (const flagPath of Object.keys(perFlag).sort()) {
+      cmd.warn(`    - ${flagPath} (${perFlag[flagPath]})`)
+    }
+  }
+
+  cmd.warn(
+    `If any of these envs are still in use, restore them in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
+  )
 }
 
 function resolveTargetDir(dirFlag: string | undefined, cwd: string): string {

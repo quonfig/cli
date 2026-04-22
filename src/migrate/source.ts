@@ -10,8 +10,23 @@ export interface QuonfigFile {
   path: string
 }
 
+export interface DroppedOverrideSummary {
+  /** Per-envId → per-output-path count of dropped override sections. */
+  byEnv: Record<string, Record<string, number>>
+  /** Total override sections dropped across every env + flag. */
+  total: number
+}
+
 export interface MigrationSource {
   fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange>
+  /**
+   * Optional post-translate accumulator. Returns any override sections that were
+   * dropped during translate() calls because the env.id was not present in the
+   * source's env map (e.g. archived/deleted Reforge envs). Returns null if nothing
+   * was dropped. Callers should consume + surface this before writing the migration
+   * report so customers can review the loss.
+   */
+  getDroppedOverrides?(): DroppedOverrideSummary | null
   listEnvironments(): Promise<string[]>
   name: string
   translate(change: LegacyChange): QuonfigFile[]

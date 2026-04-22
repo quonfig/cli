@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {IdentifierMap} from './identifier-map.js'
+import type {DroppedOverrideSummary} from './source.js'
 
 export interface MigrationReportCounts {
   environmentsMapped: number
@@ -39,6 +40,12 @@ export interface FollowUpChecklist {
 export interface MigrationReportData {
   cleanMappings: CleanMapping[]
   counts: MigrationReportCounts
+  /**
+   * Override sections that were dropped during translate() because the env.id was not
+   * present in the source's env map (e.g. archived/deleted Reforge envs). Null when
+   * nothing was dropped.
+   */
+  droppedOverrides?: DroppedOverrideSummary | null
   dryRun: boolean
   environmentMap: EnvironmentMapEntry[]
   followUp: FollowUpChecklist
@@ -100,6 +107,28 @@ const renderIdentifierMap = (map: IdentifierMap): string => {
   return [header, '', '| Legacy key | Quonfig key |', '| --- | --- |', ...rows].join('\n')
 }
 
+const renderDroppedOverrides = (dropped: DroppedOverrideSummary | null | undefined): null | string => {
+  if (!dropped || dropped.total === 0) return null
+  const envIds = Object.keys(dropped.byEnv).sort()
+  const lines: string[] = [
+    '## Dropped override sections',
+    '',
+    `Dropped **${dropped.total}** override section(s) referencing **${envIds.length}** env ID(s) not present in the source's env list (likely archived/deleted). If any of these envs are still in use, restore them in the source system and re-run the migration.`,
+  ]
+  for (const envId of envIds) {
+    const perFlag = dropped.byEnv[envId]
+    const totalForEnv = Object.values(perFlag).reduce((s, n) => s + n, 0)
+    const flagCount = Object.keys(perFlag).length
+    lines.push('', `### env-${envId} — ${totalForEnv} dropped from ${flagCount} flag(s)`, '')
+    const sorted = Object.keys(perFlag).sort()
+    for (const flagPath of sorted) {
+      lines.push(`- \`${flagPath}\` (${perFlag[flagPath]})`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 const renderFollowUp = (followUp: FollowUpChecklist): string => {
   const must =
     followUp.mustFixBeforeCutover.length === 0
@@ -138,8 +167,12 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
     renderUnsupported(data.unsupportedFeatures),
     renderEnvironmentMap(data.environmentMap),
     renderIdentifierMap(data.identifierMap),
-    renderFollowUp(data.followUp),
   )
+
+  const dropped = renderDroppedOverrides(data.droppedOverrides)
+  if (dropped !== null) sections.push(dropped)
+
+  sections.push(renderFollowUp(data.followUp))
 
   return sections.join('\n\n') + '\n'
 }

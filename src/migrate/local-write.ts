@@ -5,8 +5,9 @@ import * as util from 'node:util'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
+import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
-import type {LegacyChange, MigrationSource} from './source.js'
+import type {DroppedOverrideSummary, LegacyChange, MigrationSource} from './source.js'
 
 const execFile = util.promisify(execFileCb)
 
@@ -31,6 +32,8 @@ export interface ApplyLocalMigrationResult {
   commitSha: string | null
   /** `false` if translate produced no net changes — nothing was committed. */
   committed: boolean
+  /** Override sections dropped during translate because env.id was unknown. Null if none. */
+  droppedOverrides: DroppedOverrideSummary | null
 }
 
 const isGitRepo = async (dir: string): Promise<boolean> => {
@@ -77,14 +80,18 @@ const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initi
 }
 
 const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): void => {
+  const writtenPaths: Array<{path: string}> = []
   for (const change of changes) {
     const files = source.translate(change)
     for (const file of files) {
       const full = path.join(dir, file.path)
       fs.mkdirSync(path.dirname(full), {recursive: true})
       fs.writeFileSync(full, file.contents)
+      writtenPaths.push({path: file.path})
     }
   }
+
+  detectDuplicateKeys(writtenPaths)
 }
 
 export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Promise<ApplyLocalMigrationResult> => {
@@ -100,12 +107,17 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
   removeQfFromGitignore(opts.localDir)
   writeImportState(opts.localDir, opts.importState)
-  writeMigrationReport(opts.localDir, opts.reportData)
+
+  const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
+  const reportData: MigrationReportData = droppedOverrides
+    ? {...opts.reportData, droppedOverrides}
+    : opts.reportData
+  writeMigrationReport(opts.localDir, reportData)
 
   await execFile('git', ['-C', opts.localDir, 'add', '--all'])
 
   if (!(await hasStagedChanges(opts.localDir))) {
-    return {action, committed: false, commitSha: null}
+    return {action, committed: false, commitSha: null, droppedOverrides}
   }
 
   await gitCommitFromStdin(opts.localDir, opts.commitMessage, {
@@ -117,5 +129,5 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   })
 
   const {stdout: sha} = await execFile('git', ['-C', opts.localDir, 'rev-parse', 'HEAD'])
-  return {action, commitSha: sha.trim(), committed: true}
+  return {action, commitSha: sha.trim(), committed: true, droppedOverrides}
 }

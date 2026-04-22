@@ -11,6 +11,10 @@ export function isLegacyLogLevel(type: string): boolean {
   return type.toUpperCase() === 'LOG_LEVEL'
 }
 
+export function normalizeLogLevelKey(key: string): string {
+  return key.startsWith('log-level.') ? key : `log-level.${key}`
+}
+
 function zeroValue(valueType: string): {type: string; value: unknown} {
   switch (valueType) {
     case 'bool': {
@@ -127,7 +131,11 @@ function normalizeJsonValuesInConfig(out: Record<string, unknown>): void {
   }
 }
 
-export function transformConfig(config: LaunchConfig, envIdMap: Record<string, string>): Record<string, unknown> {
+export function transformConfig(
+  config: LaunchConfig,
+  envIdMap: Record<string, string>,
+  onDroppedEnv?: (envId: string) => void,
+): Record<string, unknown> {
   const out: Record<string, unknown> = JSON.parse(JSON.stringify(config))
 
   delete out.changedBy
@@ -147,6 +155,10 @@ export function transformConfig(config: LaunchConfig, envIdMap: Record<string, s
     out.valueType = 'log_level'
   }
 
+  if (out.type === 'log_level' && typeof out.key === 'string') {
+    out.key = normalizeLogLevelKey(out.key)
+  }
+
   if (typeof out.type === 'string' && out.type.toLowerCase() === 'schema') {
     throw new Error(
       `Schema-type configs are not yet supported by qfg migrate --from launch. ` +
@@ -155,20 +167,49 @@ export function transformConfig(config: LaunchConfig, envIdMap: Record<string, s
   }
 
   if (Array.isArray(out.environments)) {
+    const kept: Array<Record<string, unknown>> = []
     for (const env of out.environments as Array<Record<string, unknown>>) {
       if (typeof env.id === 'string') {
-        const name = envIdMap[env.id] ?? `env-${env.id}`
+        const name = envIdMap[env.id]
+        if (name === undefined) {
+          onDroppedEnv?.(env.id)
+          continue
+        }
+
         env.id = slugify(name)
+      }
+
+      kept.push(env)
+    }
+
+    out.environments = kept
+  }
+
+  if (
+    typeof out.valueType === 'string' &&
+    Array.isArray(out.variants) &&
+    !['provided', 'schema', 'weighted_values'].includes(out.valueType as string)
+  ) {
+    const configKey = String(out.key ?? 'unknown')
+    for (const [i, variant] of (out.variants as Array<Record<string, unknown>>).entries()) {
+      const v = variant?.value as {type?: unknown} | undefined
+      if (v && typeof v.type === 'string' && v.type !== out.valueType) {
+        throw new Error(
+          `Variant type mismatch for "${configKey}" at variants[${i}]: value type "${v.type}" does not match config valueType "${String(out.valueType)}"`,
+        )
       }
     }
   }
 
   if (!out.default && typeof out.valueType === 'string') {
+    const variants = Array.isArray(out.variants) ? (out.variants as Array<{value?: unknown}>) : []
+    const firstVariantValue =
+      variants.length > 0 && variants[0] && typeof variants[0] === 'object' ? variants[0].value : undefined
     out.default = {
       rules: [
         {
           criteria: [{operator: 'ALWAYS_TRUE'}],
-          value: zeroValue(out.valueType as string),
+          value: firstVariantValue ?? zeroValue(out.valueType as string),
         },
       ],
     }
@@ -188,7 +229,7 @@ export function getOutputPath(type: string, key: string): string {
     }
 
     case 'LOG_LEVEL_V2': {
-      return `log-levels/${key}.json`
+      return `log-levels/${normalizeLogLevelKey(key)}.json`
     }
 
     case 'SCHEMA': {
@@ -202,6 +243,45 @@ export function getOutputPath(type: string, key: string): string {
     default: {
       return `configs/${key}.json`
     }
+  }
+}
+
+const PATH_DIR_TO_TYPE: Record<string, string> = {
+  configs: 'config',
+  'feature-flags': 'feature_flag',
+  'log-levels': 'log_level',
+  schemas: 'schema',
+  segments: 'segment',
+}
+
+export function detectDuplicateKeys(files: Array<{path: string}>): void {
+  const keyToTypes = new Map<string, Set<string>>()
+  for (const {path} of files) {
+    const firstSlash = path.indexOf('/')
+    if (firstSlash < 0) continue
+    const dir = path.slice(0, firstSlash)
+    const type = PATH_DIR_TO_TYPE[dir]
+    if (!type) continue
+    const file = path.slice(firstSlash + 1)
+    const key = file.replace(/\.json$/, '')
+    const set = keyToTypes.get(key) ?? new Set<string>()
+    set.add(type)
+    keyToTypes.set(key, set)
+  }
+
+  const collisions: string[] = []
+  for (const [key, types] of keyToTypes) {
+    if (types.size > 1) {
+      collisions.push(`"${key}" (types: ${[...types].sort().join(', ')})`)
+    }
+  }
+
+  if (collisions.length > 0) {
+    collisions.sort()
+    throw new Error(
+      `Duplicate keys across types — qfg requires globally unique keys. ` +
+        `Resolve in the source system (e.g. Reforge) before re-running:\n  ${collisions.join('\n  ')}`,
+    )
   }
 }
 
