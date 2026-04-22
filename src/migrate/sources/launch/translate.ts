@@ -1,4 +1,5 @@
 import type {LaunchChangeEntry, LaunchChangeGroup, LaunchConfig} from './types.js'
+import {zodToJsonSchema} from './zod-to-json-schema.js'
 
 export function slugify(value: string): string {
   return value
@@ -160,10 +161,38 @@ export function transformConfig(
   }
 
   if (typeof out.type === 'string' && out.type.toLowerCase() === 'schema') {
-    throw new Error(
-      `Schema-type configs are not yet supported by qfg migrate --from launch. ` +
-        `File a bead to prioritize this: https://github.com/quonfig/cli/issues/new?title=qfg+migrate+schema+configs`,
-    )
+    const defaultSection = out.default as
+      | {
+          rules?: Array<{
+            value?: {
+              value?: {
+                schema?: unknown
+                schemaType?: unknown
+              }
+            }
+          }>
+        }
+      | undefined
+    const firstRule = defaultSection?.rules?.[0]
+    const innerValue = firstRule?.value?.value
+    if (!innerValue || innerValue.schemaType !== 'ZOD' || typeof innerValue.schema !== 'string') {
+      throw new Error(
+        `Unsupported schema payload for ${String((out as Record<string, unknown>).key ?? 'unknown')}`,
+      )
+    }
+
+    const key = String((out as Record<string, unknown>).key ?? 'unknown')
+    let converted
+    try {
+      converted = zodToJsonSchema(innerValue.schema)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `Schema conversion failed for "${key}": ${msg}\n--- Zod source ---\n${innerValue.schema}\n--- end ---`,
+      )
+    }
+
+    return converted.schema as Record<string, unknown>
   }
 
   if (Array.isArray(out.environments)) {

@@ -32,6 +32,7 @@
     "lodash.camelcase": "^4.3.0",
     "mustache": "^4.2.0",
     "node-forge": "^1.4.0",
+    "typescript": "^5",
     "zod": "^4.1.12"
   },
   "description": "Quonfig CLI. For arbitrary targeting rules (email, plan, segment, custom property), run `qfg config-schema` then `qfg pull`.",
@@ -58,8 +59,7 @@
     "prettier": "^3.6.2",
     "shx": "^0.3.4",
     "ts-node": "^10.9.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5"
+    "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">=18.0.0"
