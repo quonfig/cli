@@ -296,7 +296,26 @@ const PATH_DIR_TO_TYPE: Record<string, string> = {
   segments: 'segment',
 }
 
-export function detectDuplicateKeys(files: Array<{path: string}>): void {
+const TYPE_TO_DIR: Record<string, string> = Object.fromEntries(
+  Object.entries(PATH_DIR_TO_TYPE).map(([dir, type]) => [type, dir]),
+)
+
+/**
+ * Walks the set of written files looking for cross-type collisions (the same
+ * key appearing in multiple type-dirs). Reforge occasionally produces a config
+ * and a feature_flag with the same key simultaneously — qfg requires globally-
+ * unique keys, so we resolve the collision by keeping the config side and
+ * marking the other side(s) for deletion. Callers should fs.unlinkSync the
+ * paths in each resolution's `deleted` array and surface the resolutions in
+ * stderr + MIGRATION_REPORT.md so the customer can clean up the source data.
+ *
+ * When the collision does NOT include 'config' (an unexpected pattern we have
+ * not observed in production data), we still throw so the case surfaces for
+ * review rather than silently picking a tiebreak.
+ */
+export function detectDuplicateKeys(
+  files: Array<{path: string}>,
+): import('../../source.js').DuplicateResolution[] {
   const keyToTypes = new Map<string, Set<string>>()
   for (const {path} of files) {
     const firstSlash = path.indexOf('/')
@@ -311,20 +330,35 @@ export function detectDuplicateKeys(files: Array<{path: string}>): void {
     keyToTypes.set(key, set)
   }
 
-  const collisions: string[] = []
-  for (const [key, types] of keyToTypes) {
-    if (types.size > 1) {
-      collisions.push(`"${key}" (types: ${[...types].sort().join(', ')})`)
+  const resolutions: import('../../source.js').DuplicateResolution[] = []
+  const unexpected: string[] = []
+  for (const [key, types] of [...keyToTypes.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (types.size <= 1) continue
+    if (!types.has('config')) {
+      unexpected.push(`"${key}" (types: ${[...types].sort().join(', ')})`)
+      continue
     }
+
+    const kept = `configs/${key}.json`
+    const deleted: string[] = []
+    for (const type of [...types].sort()) {
+      if (type === 'config') continue
+      const dir = TYPE_TO_DIR[type]
+      if (!dir) continue
+      deleted.push(`${dir}/${key}.json`)
+    }
+
+    resolutions.push({collisionTypes: [...types].sort(), deleted, kept, key})
   }
 
-  if (collisions.length > 0) {
-    collisions.sort()
+  if (unexpected.length > 0) {
     throw new Error(
-      `Duplicate keys across types — qfg requires globally unique keys. ` +
-        `Resolve in the source system (e.g. Reforge) before re-running:\n  ${collisions.join('\n  ')}`,
+      `Unexpected cross-type key collision — no 'config' side to tiebreak on. ` +
+        `Please file a bead with the source data details:\n  ${unexpected.join('\n  ')}`,
     )
   }
+
+  return resolutions
 }
 
 export function groupChanges(changes: LaunchChangeEntry[]): LaunchChangeGroup[] {

@@ -5,7 +5,14 @@ import {type ImportState, removeQfFromGitignore, writeImportState} from './impor
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {type CloneAndStackPushOptions, type CloneAndStackPushResult, cloneAndStackPush} from '../util/clone-and-stack-push.js'
-import type {DroppedOverrideSummary, LegacyChange, MigrationSource, SkippedConfigSummary} from './source.js'
+import type {
+  DroppedOverrideSummary,
+  DuplicateResolution,
+  DuplicateResolutionSummary,
+  LegacyChange,
+  MigrationSource,
+  SkippedConfigSummary,
+} from './source.js'
 
 export interface PushMigrationToCloudOptions {
   branch?: string
@@ -20,10 +27,15 @@ export interface PushMigrationToCloudOptions {
 
 export interface PushMigrationToCloudResult extends CloneAndStackPushResult {
   droppedOverrides: DroppedOverrideSummary | null
+  duplicateResolutions: DuplicateResolutionSummary | null
   skippedConfigs: SkippedConfigSummary | null
 }
 
-const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): void => {
+const writeQuonfigFiles = (
+  dir: string,
+  changes: LegacyChange[],
+  source: MigrationSource,
+): DuplicateResolution[] => {
   const livePaths = new Map<string, true>()
   for (const change of changes) {
     const files = source.translate(change)
@@ -49,23 +61,42 @@ const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: Migrati
     }
   }
 
-  detectDuplicateKeys([...livePaths.keys()].map((p) => ({path: p})))
+  const resolutions = detectDuplicateKeys([...livePaths.keys()].map((p) => ({path: p})))
+  for (const resolution of resolutions) {
+    for (const toDelete of resolution.deleted) {
+      try {
+        fs.unlinkSync(path.join(dir, toDelete))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+
+      livePaths.delete(toDelete)
+    }
+  }
+
+  return resolutions
 }
 
 export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): Promise<PushMigrationToCloudResult> => {
   let droppedOverrides: DroppedOverrideSummary | null = null
+  let duplicateResolutions: DuplicateResolutionSummary | null = null
   let skippedConfigs: SkippedConfigSummary | null = null
   const cloneOpts: CloneAndStackPushOptions = {
     applyDelta(dir) {
-      writeQuonfigFiles(dir, opts.changes, opts.source)
+      const resolutionEntries = writeQuonfigFiles(dir, opts.changes, opts.source)
       removeQfFromGitignore(dir)
       writeImportState(dir, opts.importState)
 
       droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
       skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+      duplicateResolutions =
+        resolutionEntries.length > 0
+          ? {entries: resolutionEntries, total: resolutionEntries.length}
+          : null
       const reportData: MigrationReportData = {
         ...opts.reportData,
         ...(droppedOverrides ? {droppedOverrides} : {}),
+        ...(duplicateResolutions ? {duplicateResolutions} : {}),
         ...(skippedConfigs ? {skippedConfigs} : {}),
       }
       writeMigrationReport(dir, reportData)
@@ -77,5 +108,5 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
   if (opts.branch !== undefined) cloneOpts.branch = opts.branch
 
   const result = await cloneAndStackPush(cloneOpts)
-  return {...result, droppedOverrides, skippedConfigs}
+  return {...result, droppedOverrides, duplicateResolutions, skippedConfigs}
 }

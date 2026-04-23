@@ -277,47 +277,58 @@ describe('migrate/sources/launch/translate', () => {
     })
   })
 
-  describe('detectDuplicateKeys (qfg-0cz.4)', () => {
-    it('does not throw when all keys are unique across types', () => {
-      expect(() =>
+  describe('detectDuplicateKeys (qfg-0cz.4 + qfg-zfl.20)', () => {
+    it('returns [] when all keys are unique across types', () => {
+      expect(
         detectDuplicateKeys([
           {path: 'configs/a.json'},
           {path: 'feature-flags/b.json'},
           {path: 'segments/c.json'},
         ]),
-      ).to.not.throw()
+      ).to.deep.equal([])
     })
 
-    it('allows the same key within the same type (same path is a no-op)', () => {
-      expect(() =>
+    it('returns [] when the same key appears twice in the same type (no collision)', () => {
+      expect(
         detectDuplicateKeys([{path: 'configs/a.json'}, {path: 'configs/a.json'}]),
-      ).to.not.throw()
+      ).to.deep.equal([])
     })
 
-    it('throws when the same key appears across different types', () => {
-      expect(() =>
-        detectDuplicateKeys([
-          {path: 'configs/test-config.json'},
-          {path: 'feature-flags/test-config.json'},
-        ]),
-      ).to.throw(/test-config/)
-      expect(() =>
-        detectDuplicateKeys([
-          {path: 'configs/test-config.json'},
-          {path: 'feature-flags/test-config.json'},
-        ]),
-      ).to.throw(/config.*feature_flag|feature_flag.*config/)
+    it('resolves config + feature_flag collision by keeping the config (qfg-zfl.20)', () => {
+      const result = detectDuplicateKeys([
+        {path: 'configs/build.docuforge.json'},
+        {path: 'feature-flags/build.docuforge.json'},
+      ])
+      expect(result).to.have.length(1)
+      expect(result[0].key).to.equal('build.docuforge')
+      expect(result[0].kept).to.equal('configs/build.docuforge.json')
+      expect(result[0].deleted).to.deep.equal(['feature-flags/build.docuforge.json'])
+      expect(result[0].collisionTypes).to.have.members(['config', 'feature_flag'])
     })
 
-    it('lists every colliding key in a single error', () => {
+    it('returns a resolution per colliding key (qfg-zfl.20)', () => {
+      const result = detectDuplicateKeys([
+        {path: 'configs/k1.json'},
+        {path: 'feature-flags/k1.json'},
+        {path: 'configs/k2.json'},
+        {path: 'feature-flags/k2.json'},
+      ])
+      expect(result).to.have.length(2)
+      const keys = result.map((r) => r.key).sort()
+      expect(keys).to.deep.equal(['k1', 'k2'])
+      for (const r of result) {
+        expect(r.kept.startsWith('configs/')).to.equal(true)
+        expect(r.deleted).to.deep.equal([`feature-flags/${r.key}.json`])
+      }
+    })
+
+    it('still throws on a collision that does NOT include config (unexpected pattern)', () => {
       expect(() =>
         detectDuplicateKeys([
-          {path: 'configs/k1.json'},
-          {path: 'feature-flags/k1.json'},
-          {path: 'configs/k2.json'},
-          {path: 'feature-flags/k2.json'},
+          {path: 'segments/foo.json'},
+          {path: 'feature-flags/foo.json'},
         ]),
-      ).to.throw(/k1[\S\s]*k2|k2[\S\s]*k1/)
+      ).to.throw(/foo/)
     })
   })
 

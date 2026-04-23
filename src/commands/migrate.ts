@@ -13,6 +13,7 @@ import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
 import {
   type DroppedOverrideSummary,
+  type DuplicateResolutionSummary,
   type LegacyChange,
   NotYetImplementedError,
   type SkippedConfigSummary,
@@ -126,6 +127,7 @@ export default class Migrate extends BaseCommand {
       throw error
     }
 
+    let duplicateResolutionsForWarn: DuplicateResolutionSummary | null = null
     try {
       await source.validateAuth(flags['api-key'])
       const environments = await source.listEnvironments()
@@ -186,6 +188,7 @@ export default class Migrate extends BaseCommand {
             source,
           })
 
+          duplicateResolutionsForWarn = result.duplicateResolutions
           this.log(
             result.committed
               ? `Pushed ${toProcess.length} change(s). commit=${result.commitSha?.slice(0, 8) ?? ''} action=${result.action}`
@@ -229,6 +232,7 @@ export default class Migrate extends BaseCommand {
         source,
       })
 
+      duplicateResolutionsForWarn = localResult.duplicateResolutions
       this.log(
         localResult.committed
           ? `Committed ${toProcess.length} change(s). commit=${localResult.commitSha?.slice(0, 8) ?? ''} action=${localResult.action}`
@@ -249,6 +253,7 @@ export default class Migrate extends BaseCommand {
       // detectDuplicateKeys). The source accumulator holds the data regardless.
       warnAboutDroppedOverrides(this, source.getDroppedOverrides?.() ?? null)
       warnAboutSkippedConfigs(this, source.getSkippedConfigs?.() ?? null)
+      warnAboutDuplicateResolutions(this, duplicateResolutionsForWarn)
     }
   }
 
@@ -325,6 +330,21 @@ function warnAboutDroppedOverrides(cmd: BaseCommand, dropped: DroppedOverrideSum
   cmd.warn(
     `If any of these envs are still in use, restore them in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
   )
+}
+
+function warnAboutDuplicateResolutions(cmd: BaseCommand, resolved: DuplicateResolutionSummary | null): void {
+  if (!resolved || resolved.total === 0) return
+  cmd.warn(
+    `Resolved ${resolved.total} cross-type key collision(s) in the source data by keeping the config side and deleting the other type(s). Review each and clean up the source system so the collision stops recurring:`,
+  )
+  const sorted = [...resolved.entries].sort((a, b) => a.key.localeCompare(b.key))
+  for (const entry of sorted) {
+    cmd.warn(
+      `  ${entry.key} (${entry.collisionTypes.join(', ')}): kept ${entry.kept}, deleted ${entry.deleted.join(', ')}`,
+    )
+  }
+
+  cmd.warn('Full detail is also written to MIGRATION_REPORT.md.')
 }
 
 function warnAboutSkippedConfigs(cmd: BaseCommand, skipped: null | SkippedConfigSummary): void {

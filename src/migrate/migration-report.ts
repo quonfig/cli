@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {IdentifierMap} from './identifier-map.js'
-import type {DroppedOverrideSummary, SkippedConfigSummary} from './source.js'
+import type {DroppedOverrideSummary, DuplicateResolutionSummary, SkippedConfigSummary} from './source.js'
 
 export interface MigrationReportCounts {
   environmentsMapped: number
@@ -47,6 +47,12 @@ export interface MigrationReportData {
    */
   droppedOverrides?: DroppedOverrideSummary | null
   dryRun: boolean
+  /**
+   * Cross-type key collisions resolved by keeping the config side and deleting
+   * the non-config type(s). Null when none were detected. Customers should
+   * review each entry and clean up the source data to avoid the collision.
+   */
+  duplicateResolutions?: DuplicateResolutionSummary | null
   environmentMap: EnvironmentMapEntry[]
   followUp: FollowUpChecklist
   identifierMap: IdentifierMap
@@ -134,6 +140,28 @@ const renderDroppedOverrides = (dropped: DroppedOverrideSummary | null | undefin
   return lines.join('\n')
 }
 
+const renderDuplicateResolutions = (
+  resolved: DuplicateResolutionSummary | null | undefined,
+): null | string => {
+  if (!resolved || resolved.total === 0) return null
+  const lines: string[] = [
+    '## Resolved cross-type duplicates',
+    '',
+    `Reforge had **${resolved.total}** key(s) present as both a config and a feature_flag (or other types) at the same time. qfg requires globally-unique keys, so the migrator kept the **config** side and deleted the other type(s). Review each and clean up the source system so the collision stops recurring.`,
+    '',
+  ]
+  const sorted = [...resolved.entries].sort((a, b) => a.key.localeCompare(b.key))
+  for (const entry of sorted) {
+    lines.push(
+      `- \`${entry.key}\` (${entry.collisionTypes.join(', ')}): kept \`${entry.kept}\`, deleted ${entry.deleted
+        .map((p) => `\`${p}\``)
+        .join(', ')}`,
+    )
+  }
+
+  return lines.join('\n')
+}
+
 const renderSkippedConfigs = (skipped: null | SkippedConfigSummary | undefined): null | string => {
   if (!skipped || skipped.total === 0) return null
   const lines: string[] = [
@@ -192,6 +220,9 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
 
   const dropped = renderDroppedOverrides(data.droppedOverrides)
   if (dropped !== null) sections.push(dropped)
+
+  const resolved = renderDuplicateResolutions(data.duplicateResolutions)
+  if (resolved !== null) sections.push(resolved)
 
   const skipped = renderSkippedConfigs(data.skippedConfigs)
   if (skipped !== null) sections.push(skipped)

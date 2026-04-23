@@ -7,7 +7,14 @@ import {type ImportState, removeQfFromGitignore, writeImportState} from './impor
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
-import type {DroppedOverrideSummary, LegacyChange, MigrationSource, SkippedConfigSummary} from './source.js'
+import type {
+  DroppedOverrideSummary,
+  DuplicateResolution,
+  DuplicateResolutionSummary,
+  LegacyChange,
+  MigrationSource,
+  SkippedConfigSummary,
+} from './source.js'
 
 const execFile = util.promisify(execFileCb)
 
@@ -34,6 +41,8 @@ export interface ApplyLocalMigrationResult {
   committed: boolean
   /** Override sections dropped during translate because env.id was unknown. Null if none. */
   droppedOverrides: DroppedOverrideSummary | null
+  /** Cross-type key collisions resolved by preferring the config side. Null if none. */
+  duplicateResolutions: DuplicateResolutionSummary | null
   /** Configs soft-skipped during translate due to invalid source data. Null if none. */
   skippedConfigs: SkippedConfigSummary | null
 }
@@ -81,7 +90,11 @@ const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initi
   return 'initialized'
 }
 
-const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): void => {
+const writeQuonfigFiles = (
+  dir: string,
+  changes: LegacyChange[],
+  source: MigrationSource,
+): DuplicateResolution[] => {
   const livePaths = new Map<string, true>()
   for (const change of changes) {
     const files = source.translate(change)
@@ -107,7 +120,20 @@ const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: Migrati
     }
   }
 
-  detectDuplicateKeys([...livePaths.keys()].map((p) => ({path: p})))
+  const resolutions = detectDuplicateKeys([...livePaths.keys()].map((p) => ({path: p})))
+  for (const resolution of resolutions) {
+    for (const toDelete of resolution.deleted) {
+      try {
+        fs.unlinkSync(path.join(dir, toDelete))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+
+      livePaths.delete(toDelete)
+    }
+  }
+
+  return resolutions
 }
 
 export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Promise<ApplyLocalMigrationResult> => {
@@ -120,15 +146,18 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   await execFile('git', ['-C', opts.localDir, 'config', 'user.email', author.email])
 
   ensureQuonfigJson(opts.localDir, opts.environments)
-  writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
+  const resolutionEntries = writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
   removeQfFromGitignore(opts.localDir)
   writeImportState(opts.localDir, opts.importState)
 
   const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
   const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+  const duplicateResolutions: DuplicateResolutionSummary | null =
+    resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
   const reportData: MigrationReportData = {
     ...opts.reportData,
     ...(droppedOverrides ? {droppedOverrides} : {}),
+    ...(duplicateResolutions ? {duplicateResolutions} : {}),
     ...(skippedConfigs ? {skippedConfigs} : {}),
   }
   writeMigrationReport(opts.localDir, reportData)
@@ -136,7 +165,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   await execFile('git', ['-C', opts.localDir, 'add', '--all'])
 
   if (!(await hasStagedChanges(opts.localDir))) {
-    return {action, committed: false, commitSha: null, droppedOverrides, skippedConfigs}
+    return {action, committed: false, commitSha: null, droppedOverrides, duplicateResolutions, skippedConfigs}
   }
 
   await gitCommitFromStdin(opts.localDir, opts.commitMessage, {
@@ -148,5 +177,12 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   })
 
   const {stdout: sha} = await execFile('git', ['-C', opts.localDir, 'rev-parse', 'HEAD'])
-  return {action, commitSha: sha.trim(), committed: true, droppedOverrides, skippedConfigs}
+  return {
+    action,
+    commitSha: sha.trim(),
+    committed: true,
+    droppedOverrides,
+    duplicateResolutions,
+    skippedConfigs,
+  }
 }

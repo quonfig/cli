@@ -34,6 +34,22 @@ export interface SkippedConfigSummary {
   total: number
 }
 
+export interface DuplicateResolution {
+  /** All types that collided for this key (e.g. ['config', 'feature_flag']). */
+  collisionTypes: string[]
+  /** Paths that were deleted to resolve the collision. */
+  deleted: string[]
+  /** The path that was kept as the winning type. */
+  kept: string
+  /** The qfg key that collided across types. */
+  key: string
+}
+
+export interface DuplicateResolutionSummary {
+  entries: DuplicateResolution[]
+  total: number
+}
+
 export interface MigrationSource {
   fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange>
   /**
