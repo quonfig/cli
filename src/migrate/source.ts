@@ -6,7 +6,10 @@ export interface LegacyChange {
 }
 
 export interface QuonfigFile {
-  contents: string
+  /** File contents when writing. Ignored when deleted is true. */
+  contents?: string
+  /** When true, the file at `path` should be removed (tombstone). Default false. */
+  deleted?: boolean
   path: string
 }
 
@@ -14,6 +17,20 @@ export interface DroppedOverrideSummary {
   /** Per-envId → per-output-path count of dropped override sections. */
   byEnv: Record<string, Record<string, number>>
   /** Total override sections dropped across every env + flag. */
+  total: number
+}
+
+export interface SkippedConfigEntry {
+  /** Source key (pre-translate) that was skipped. */
+  key: string
+  /** Human-readable reason (e.g. variant/valueType mismatch). */
+  reason: string
+}
+
+export interface SkippedConfigSummary {
+  /** Individual skip records, in insertion order. */
+  entries: SkippedConfigEntry[]
+  /** Total configs skipped. */
   total: number
 }
 
@@ -27,6 +44,12 @@ export interface MigrationSource {
    * report so customers can review the loss.
    */
   getDroppedOverrides?(): DroppedOverrideSummary | null
+  /**
+   * Optional post-translate accumulator. Returns any configs that translate() soft-
+   * skipped due to invalid source data (e.g. variant/valueType mismatch). Null when
+   * nothing was skipped.
+   */
+  getSkippedConfigs?(): SkippedConfigSummary | null
   listEnvironments(): Promise<string[]>
   name: string
   translate(change: LegacyChange): QuonfigFile[]

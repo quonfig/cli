@@ -7,7 +7,7 @@ import {type ImportState, removeQfFromGitignore, writeImportState} from './impor
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
-import type {DroppedOverrideSummary, LegacyChange, MigrationSource} from './source.js'
+import type {DroppedOverrideSummary, LegacyChange, MigrationSource, SkippedConfigSummary} from './source.js'
 
 const execFile = util.promisify(execFileCb)
 
@@ -34,6 +34,8 @@ export interface ApplyLocalMigrationResult {
   committed: boolean
   /** Override sections dropped during translate because env.id was unknown. Null if none. */
   droppedOverrides: DroppedOverrideSummary | null
+  /** Configs soft-skipped during translate due to invalid source data. Null if none. */
+  skippedConfigs: SkippedConfigSummary | null
 }
 
 const isGitRepo = async (dir: string): Promise<boolean> => {
@@ -80,18 +82,32 @@ const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initi
 }
 
 const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): void => {
-  const writtenPaths: Array<{path: string}> = []
+  const livePaths = new Map<string, true>()
   for (const change of changes) {
     const files = source.translate(change)
     for (const file of files) {
       const full = path.join(dir, file.path)
-      fs.mkdirSync(path.dirname(full), {recursive: true})
-      fs.writeFileSync(full, file.contents)
-      writtenPaths.push({path: file.path})
+      if (file.deleted) {
+        try {
+          fs.unlinkSync(full)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+
+        livePaths.delete(file.path)
+      } else {
+        if (file.contents === undefined) {
+          throw new Error(`translate() emitted a write op for ${file.path} without contents`)
+        }
+
+        fs.mkdirSync(path.dirname(full), {recursive: true})
+        fs.writeFileSync(full, file.contents)
+        livePaths.set(file.path, true)
+      }
     }
   }
 
-  detectDuplicateKeys(writtenPaths)
+  detectDuplicateKeys([...livePaths.keys()].map((p) => ({path: p})))
 }
 
 export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Promise<ApplyLocalMigrationResult> => {
@@ -109,15 +125,18 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   writeImportState(opts.localDir, opts.importState)
 
   const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
-  const reportData: MigrationReportData = droppedOverrides
-    ? {...opts.reportData, droppedOverrides}
-    : opts.reportData
+  const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+  const reportData: MigrationReportData = {
+    ...opts.reportData,
+    ...(droppedOverrides ? {droppedOverrides} : {}),
+    ...(skippedConfigs ? {skippedConfigs} : {}),
+  }
   writeMigrationReport(opts.localDir, reportData)
 
   await execFile('git', ['-C', opts.localDir, 'add', '--all'])
 
   if (!(await hasStagedChanges(opts.localDir))) {
-    return {action, committed: false, commitSha: null, droppedOverrides}
+    return {action, committed: false, commitSha: null, droppedOverrides, skippedConfigs}
   }
 
   await gitCommitFromStdin(opts.localDir, opts.commitMessage, {
@@ -129,5 +148,5 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   })
 
   const {stdout: sha} = await execFile('git', ['-C', opts.localDir, 'rev-parse', 'HEAD'])
-  return {action, commitSha: sha.trim(), committed: true, droppedOverrides}
+  return {action, commitSha: sha.trim(), committed: true, droppedOverrides, skippedConfigs}
 }

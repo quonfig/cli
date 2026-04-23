@@ -1,6 +1,13 @@
-import {type DroppedOverrideSummary, type LegacyChange, type MigrationSource, type QuonfigFile} from '../source.js'
+import {
+  type DroppedOverrideSummary,
+  type LegacyChange,
+  type MigrationSource,
+  type QuonfigFile,
+  type SkippedConfigEntry,
+  type SkippedConfigSummary,
+} from '../source.js'
 import {fetchAllChangeHistory, fetchEnvironments} from './launch/api.js'
-import {getOutputPath, isLegacyLogLevel, slugify, transformConfig} from './launch/translate.js'
+import {InvalidSourceConfigError, getOutputPath, isLegacyLogLevel, slugify, transformConfig} from './launch/translate.js'
 import type {LaunchChangeEntry} from './launch/types.js'
 
 const SOURCE_NAME = 'launch'
@@ -9,9 +16,10 @@ interface LaunchState {
   apiKey: null | string
   droppedOverrides: Map<string, Map<string, number>>
   envIdMap: null | Record<string, string>
+  skippedConfigs: SkippedConfigEntry[]
 }
 
-const state: LaunchState = {apiKey: null, droppedOverrides: new Map(), envIdMap: null}
+const state: LaunchState = {apiKey: null, droppedOverrides: new Map(), envIdMap: null, skippedConfigs: []}
 
 class MissingAuthError extends Error {
   constructor(operation: string) {
@@ -59,21 +67,34 @@ function translateImpl(change: LegacyChange): QuonfigFile[] {
 
   if (typeof raw.type === 'string' && isLegacyLogLevel(raw.type)) return []
 
-  if (raw.deleted) return []
+  if (raw.deleted) {
+    return [{deleted: true, path: getOutputPath(raw.type, raw.key)}]
+  }
 
   if (!raw.newConfig) return []
 
   const envIdMap = state.envIdMap ?? {}
   const outputPath = getOutputPath(raw.type, raw.key)
-  const transformed = transformConfig(raw.newConfig, envIdMap, (envId) => {
-    let perFlag = state.droppedOverrides.get(envId)
-    if (!perFlag) {
-      perFlag = new Map<string, number>()
-      state.droppedOverrides.set(envId, perFlag)
+  let transformed: Record<string, unknown>
+  try {
+    transformed = transformConfig(raw.newConfig, envIdMap, (envId) => {
+      let perFlag = state.droppedOverrides.get(envId)
+      if (!perFlag) {
+        perFlag = new Map<string, number>()
+        state.droppedOverrides.set(envId, perFlag)
+      }
+
+      perFlag.set(outputPath, (perFlag.get(outputPath) ?? 0) + 1)
+    })
+  } catch (error) {
+    if (error instanceof InvalidSourceConfigError) {
+      state.skippedConfigs.push({key: raw.key, reason: error.message})
+      return []
     }
 
-    perFlag.set(outputPath, (perFlag.get(outputPath) ?? 0) + 1)
-  })
+    throw error
+  }
+
   return [{contents: JSON.stringify(transformed, null, 2), path: outputPath}]
 }
 
@@ -95,10 +116,16 @@ function getDroppedOverridesImpl(): DroppedOverrideSummary | null {
   return {byEnv, total}
 }
 
+function getSkippedConfigsImpl(): SkippedConfigSummary | null {
+  if (state.skippedConfigs.length === 0) return null
+  return {entries: [...state.skippedConfigs], total: state.skippedConfigs.length}
+}
+
 async function validateAuthImpl(apiKey: string): Promise<void> {
   await fetchEnvironments(apiKey)
   state.apiKey = apiKey
   state.droppedOverrides = new Map()
+  state.skippedConfigs = []
 }
 
 export const launchSource: MigrationSource = {
@@ -106,6 +133,7 @@ export const launchSource: MigrationSource = {
     return fetchChangesImpl(sinceEpochMs)
   },
   getDroppedOverrides: getDroppedOverridesImpl,
+  getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
   name: SOURCE_NAME,
   translate: translateImpl,
@@ -116,4 +144,5 @@ export function __resetLaunchSourceForTests(): void {
   state.apiKey = null
   state.envIdMap = null
   state.droppedOverrides = new Map()
+  state.skippedConfigs = []
 }

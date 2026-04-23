@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {IdentifierMap} from './identifier-map.js'
-import type {DroppedOverrideSummary} from './source.js'
+import type {DroppedOverrideSummary, SkippedConfigSummary} from './source.js'
 
 export interface MigrationReportCounts {
   environmentsMapped: number
@@ -51,6 +51,11 @@ export interface MigrationReportData {
   followUp: FollowUpChecklist
   identifierMap: IdentifierMap
   lossyMappings: LossyMapping[]
+  /**
+   * Configs soft-skipped by translate() because the source data was invalid
+   * (e.g. variant/valueType mismatch). Null when nothing was skipped.
+   */
+  skippedConfigs?: SkippedConfigSummary | null
   source: string
   unsupportedFeatures: UnsupportedFeature[]
 }
@@ -129,6 +134,22 @@ const renderDroppedOverrides = (dropped: DroppedOverrideSummary | null | undefin
   return lines.join('\n')
 }
 
+const renderSkippedConfigs = (skipped: null | SkippedConfigSummary | undefined): null | string => {
+  if (!skipped || skipped.total === 0) return null
+  const lines: string[] = [
+    '## Skipped invalid configs',
+    '',
+    `Skipped **${skipped.total}** config(s) with structurally invalid source data — the migrator refused to emit them rather than ship broken data. Fix each in the source system and re-run.`,
+    '',
+  ]
+  const sorted = [...skipped.entries].sort((a, b) => a.key.localeCompare(b.key))
+  for (const entry of sorted) {
+    lines.push(`- \`${entry.key}\` — ${entry.reason}`)
+  }
+
+  return lines.join('\n')
+}
+
 const renderFollowUp = (followUp: FollowUpChecklist): string => {
   const must =
     followUp.mustFixBeforeCutover.length === 0
@@ -171,6 +192,9 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
 
   const dropped = renderDroppedOverrides(data.droppedOverrides)
   if (dropped !== null) sections.push(dropped)
+
+  const skipped = renderSkippedConfigs(data.skippedConfigs)
+  if (skipped !== null) sections.push(skipped)
 
   sections.push(renderFollowUp(data.followUp))
 

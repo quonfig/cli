@@ -11,7 +11,12 @@ import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError} from '../util/clone-and-stack-push.js'
 import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
-import {type DroppedOverrideSummary, type LegacyChange, NotYetImplementedError} from '../migrate/source.js'
+import {
+  type DroppedOverrideSummary,
+  type LegacyChange,
+  NotYetImplementedError,
+  type SkippedConfigSummary,
+} from '../migrate/source.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
@@ -187,8 +192,6 @@ export default class Migrate extends BaseCommand {
               : `No net changes produced by this run. Nothing to commit or push.`,
           )
 
-          warnAboutDroppedOverrides(this, result.droppedOverrides)
-
           return {
             ...payload,
             action: result.action,
@@ -232,8 +235,6 @@ export default class Migrate extends BaseCommand {
           : `No net changes produced by this run. Nothing to commit.`,
       )
 
-      warnAboutDroppedOverrides(this, localResult.droppedOverrides)
-
       return {
         ...payload,
         action: localResult.action,
@@ -243,6 +244,11 @@ export default class Migrate extends BaseCommand {
     } catch (error) {
       if (error instanceof NotYetImplementedError) return this.err(error.message)
       throw error
+    } finally {
+      // Surface source-level warnings even if apply/push threw (e.g.
+      // detectDuplicateKeys). The source accumulator holds the data regardless.
+      warnAboutDroppedOverrides(this, source.getDroppedOverrides?.() ?? null)
+      warnAboutSkippedConfigs(this, source.getSkippedConfigs?.() ?? null)
     }
   }
 
@@ -319,6 +325,19 @@ function warnAboutDroppedOverrides(cmd: BaseCommand, dropped: DroppedOverrideSum
   cmd.warn(
     `If any of these envs are still in use, restore them in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
   )
+}
+
+function warnAboutSkippedConfigs(cmd: BaseCommand, skipped: null | SkippedConfigSummary): void {
+  if (!skipped || skipped.total === 0) return
+  cmd.warn(
+    `Skipped ${skipped.total} invalid config(s) from the source system — these were not written to the workspace. Fix each in the source system and re-run:`,
+  )
+  const sorted = [...skipped.entries].sort((a, b) => a.key.localeCompare(b.key))
+  for (const entry of sorted) {
+    cmd.warn(`  ${entry.key}: ${entry.reason}`)
+  }
+
+  cmd.warn('Full detail is also written to MIGRATION_REPORT.md.')
 }
 
 function resolveTargetDir(dirFlag: string | undefined, cwd: string): string {

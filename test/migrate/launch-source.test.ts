@@ -151,7 +151,8 @@ describe('migrate/sources/launch — MigrationSource wiring', () => {
       const files = launchSource.translate({key: 'my-flag', raw, source: 'launch'})
       expect(files).to.have.length(1)
       expect(files[0].path).to.equal('feature-flags/my-flag.json')
-      const parsed = JSON.parse(files[0].contents)
+      expect(files[0].contents).to.be.a('string')
+      const parsed = JSON.parse(files[0].contents!)
       expect(parsed.key).to.equal('my-flag')
       const environments = parsed.environments as Array<{id: string}>
       expect(environments[0].id).to.equal('prod')
@@ -174,6 +175,93 @@ describe('migrate/sources/launch — MigrationSource wiring', () => {
         source: 'launch',
       })
       expect(files).to.deep.equal([])
+    })
+
+    it('emits a deleted file op for a tombstone (qfg-zfl.18)', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () =>
+          HttpResponse.json({envs: [{id: 1, name: 'prod'}], projectId: 1}),
+        ),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchSource.validateAuth('key')
+      await launchSource.listEnvironments()
+
+      const files = launchSource.translate({
+        key: 'gone',
+        raw: {changedAt: 1, changedBy: USER, deleted: true, key: 'gone', newConfigId: 1, type: 'FEATURE_FLAG'},
+        source: 'launch',
+      })
+      expect(files).to.have.length(1)
+      expect(files[0]).to.deep.equal({deleted: true, path: 'feature-flags/gone.json'})
+    })
+
+    it('emits a deleted file op for a CONFIG tombstone with correct path (qfg-zfl.18)', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () =>
+          HttpResponse.json({envs: [{id: 1, name: 'prod'}], projectId: 1}),
+        ),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchSource.validateAuth('key')
+      await launchSource.listEnvironments()
+
+      const files = launchSource.translate({
+        key: 'gone-config',
+        raw: {changedAt: 1, changedBy: USER, deleted: true, key: 'gone-config', newConfigId: 1, type: 'CONFIG'},
+        source: 'launch',
+      })
+      expect(files).to.deep.equal([{deleted: true, path: 'configs/gone-config.json'}])
+    })
+
+    it('skips an invalid variant/valueType config with a warning and returns [] (qfg-zfl.19)', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () =>
+          HttpResponse.json({envs: [{id: 1, name: 'prod'}], projectId: 1}),
+        ),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchSource.validateAuth('key')
+      await launchSource.listEnvironments()
+
+      const files = launchSource.translate({
+        key: 'bad-variants',
+        raw: {
+          changedAt: 1,
+          changedBy: USER,
+          deleted: false,
+          key: 'bad-variants',
+          newConfig: {
+            default: {
+              rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: '44'}}],
+            },
+            environments: [],
+            id: '1',
+            key: 'bad-variants',
+            projectId: 'p',
+            type: 'config',
+            valueType: 'double',
+            variants: [
+              {value: {type: 'string', value: '44'}},
+              {value: {type: 'double', value: '23.0'}},
+            ],
+          },
+          newConfigId: 1,
+          type: 'CONFIG',
+        },
+        source: 'launch',
+      })
+      expect(files).to.deep.equal([])
+
+      const skipped = launchSource.getSkippedConfigs?.()
+      expect(skipped).to.not.equal(null)
+      expect(skipped!.total).to.equal(1)
+      expect(skipped!.entries).to.have.length(1)
+      expect(skipped!.entries[0].key).to.equal('bad-variants')
+      expect(skipped!.entries[0].reason).to.match(/variant.*mismatch|double|string/i)
     })
   })
 })

@@ -1,6 +1,19 @@
 import type {LaunchChangeEntry, LaunchChangeGroup, LaunchConfig} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema.js'
 
+/**
+ * Thrown by transformConfig when the source config is structurally invalid
+ * (e.g. variant/valueType mismatch) and the migrator cannot produce a valid
+ * qfg document from it. Callers in the source layer catch this specifically
+ * to soft-skip the config with a warning rather than aborting the whole run.
+ */
+export class InvalidSourceConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidSourceConfigError'
+  }
+}
+
 export function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -223,7 +236,7 @@ export function transformConfig(
     for (const [i, variant] of (out.variants as Array<Record<string, unknown>>).entries()) {
       const v = variant?.value as {type?: unknown} | undefined
       if (v && typeof v.type === 'string' && v.type !== out.valueType) {
-        throw new Error(
+        throw new InvalidSourceConfigError(
           `Variant type mismatch for "${configKey}" at variants[${i}]: value type "${v.type}" does not match config valueType "${String(out.valueType)}"`,
         )
       }
