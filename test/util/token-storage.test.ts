@@ -130,6 +130,44 @@ workspace = workspace-work # Work Org - Work Workspace
     })
   })
 
+  describe('domain-scoped file paths', () => {
+    afterEach(() => {
+      delete process.env.QUONFIG_DOMAIN
+    })
+
+    it('writes config to config-<domain> and isolates staging from prod', async () => {
+      const stagingConfig: AuthConfig = {
+        defaultProfile: 'default',
+        profiles: {
+          default: {workspace: 'staging-ws', workspaceSlug: 'lt-1'},
+        },
+      }
+      const prodConfig: AuthConfig = {
+        defaultProfile: 'default',
+        profiles: {
+          default: {workspace: 'prod-ws', workspaceSlug: 'prod-slug'},
+        },
+      }
+
+      process.env.QUONFIG_DOMAIN = 'quonfig-staging.com'
+      await saveAuthConfig(stagingConfig, options)
+      expect(fs.existsSync(path.join(quonfigDir, 'config-quonfig-staging-com'))).to.equal(true)
+      expect(fs.existsSync(configFile), 'prod config file should not be touched').to.equal(false)
+
+      delete process.env.QUONFIG_DOMAIN
+      await saveAuthConfig(prodConfig, options)
+      expect(fs.existsSync(configFile)).to.equal(true)
+
+      // Read each domain back and confirm they are independent
+      const prodLoaded = await loadAuthConfig(options)
+      expect(prodLoaded?.profiles.default.workspace).to.equal('prod-ws')
+
+      process.env.QUONFIG_DOMAIN = 'quonfig-staging.com'
+      const stagingLoaded = await loadAuthConfig(options)
+      expect(stagingLoaded?.profiles.default.workspace).to.equal('staging-ws')
+    })
+  })
+
   describe('getActiveProfile', () => {
     it('should return provided argument first', () => {
       process.env.QUONFIG_PROFILE = 'env-profile'

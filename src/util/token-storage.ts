@@ -14,7 +14,11 @@ const getTokenFile = (options?: TokenStorageOptions) => {
   const filename = domain === 'quonfig.com' ? 'tokens.json' : `tokens-${domain.replaceAll('.', '-')}.json`
   return path.join(getQuonfigDir(options), filename)
 }
-const getConfigFile = (options?: TokenStorageOptions) => path.join(getQuonfigDir(options), 'config')
+const getConfigFile = (options?: TokenStorageOptions) => {
+  const domain = getDomain()
+  const filename = domain === 'quonfig.com' ? 'config' : `config-${domain.replaceAll('.', '-')}`
+  return path.join(getQuonfigDir(options), filename)
+}
 
 export interface TokenData {
   accessToken: string
