@@ -18,6 +18,12 @@ export interface PushMigrationToCloudOptions {
   branch?: string
   changes: LegacyChange[]
   commitMessage: string
+  /**
+   * Source-side environments (slugified). Additively merged into the target
+   * workspace's quonfig.json so flag files that reference these envs verify
+   * cleanly. Existing target-only envs are preserved.
+   */
+  environments?: string[]
   importState: ImportState
   localDir: string
   remoteUrl: string
@@ -77,12 +83,41 @@ const writeQuonfigFiles = (
   return resolutions
 }
 
+const QUONFIG_JSON_FILENAME = 'quonfig.json'
+
+const mergeEnvironmentsIntoQuonfigJson = (dir: string, sourceEnvs: string[]): void => {
+  const quonfigPath = path.join(dir, QUONFIG_JSON_FILENAME)
+  let existing: {environments?: unknown; [k: string]: unknown} = {}
+  if (fs.existsSync(quonfigPath)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(quonfigPath, 'utf8')) as typeof existing
+    } catch {
+      existing = {}
+    }
+  }
+
+  const existingEnvs = Array.isArray(existing.environments) ? (existing.environments as string[]) : []
+  const merged = [...new Set([...existingEnvs, ...sourceEnvs])].sort()
+  if (
+    existingEnvs.length === merged.length &&
+    existingEnvs.every((e, i) => e === merged[i])
+  ) {
+    return
+  }
+
+  fs.writeFileSync(quonfigPath, JSON.stringify({...existing, environments: merged}, null, 2) + '\n', 'utf8')
+}
+
 export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): Promise<PushMigrationToCloudResult> => {
   let droppedOverrides: DroppedOverrideSummary | null = null
   let duplicateResolutions: DuplicateResolutionSummary | null = null
   let skippedConfigs: SkippedConfigSummary | null = null
   const cloneOpts: CloneAndStackPushOptions = {
     applyDelta(dir) {
+      if (opts.environments && opts.environments.length > 0) {
+        mergeEnvironmentsIntoQuonfigJson(dir, opts.environments)
+      }
+
       const resolutionEntries = writeQuonfigFiles(dir, opts.changes, opts.source)
       removeQfFromGitignore(dir)
       writeImportState(dir, opts.importState)

@@ -181,6 +181,7 @@ export default class Migrate extends BaseCommand {
           const result = await pushMigrationToCloud({
             changes: toProcess,
             commitMessage: buildCommitMessage(flags.from, toProcess.length),
+            environments,
             importState,
             localDir: dir,
             remoteUrl: repoUrl,

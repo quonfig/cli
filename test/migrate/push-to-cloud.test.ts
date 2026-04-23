@@ -315,4 +315,44 @@ describe('pushMigrationToCloud', () => {
     // state file landed
     expect(fs.existsSync(path.join(reader, '.qf/import-state.json'))).to.equal(true)
   })
+
+  it('merges source envs into the target quonfig.json without clobbering existing envs (qfg-zfl.22)', async () => {
+    const remote = createBareRemote(root)
+    seedRemote(remote, root)
+    // Target was provisioned with default envs; simulate via a UI commit.
+    addUiCommit(
+      remote,
+      root,
+      'quonfig.json',
+      JSON.stringify({environments: ['development', 'production', 'staging', 'europe-custom']}, null, 2) + '\n',
+      'chore: seed quonfig.json',
+    )
+
+    const localDir = path.join(root, 'workspace')
+
+    await pushMigrationToCloud({
+      changes: [makeChange('flag-a', 1000)],
+      commitMessage: 'migrator: import',
+      environments: ['development', 'production', 'staging1', 'staging2'],
+      importState: {lastProcessedAt: 1000, source: 'fake'},
+      localDir,
+      remoteUrl: remote,
+      reportData: emptyReport(),
+      source: makeFakeSource(new Map([['flag-a', [{contents: '{"v":1}\n', path: 'feature-flags/flag-a.json'}]]])),
+    })
+
+    const reader = cloneForRead(remote, root)
+    const parsed = JSON.parse(fs.readFileSync(path.join(reader, 'quonfig.json'), 'utf8')) as {
+      environments: string[]
+    }
+    // Additive union: pre-existing europe-custom stays, source staging1/staging2 get added.
+    expect(parsed.environments).to.deep.equal([
+      'development',
+      'europe-custom',
+      'production',
+      'staging',
+      'staging1',
+      'staging2',
+    ])
+  })
 })
