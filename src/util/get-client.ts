@@ -37,7 +37,7 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     // API-key (workspace-scoped bearer) path. getValidAccessToken short-circuits
     // when QUONFIG_API_KEY is set, so this never touches disk.
     try {
-      jwt = await getValidAccessToken()
+      jwt = await getValidAccessToken(command.verboseLog)
     } catch (error) {
       command.error(error instanceof Error ? error.message : String(error), {exit: 1})
     }
@@ -107,10 +107,11 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
 
     command.verboseLog('Checking token validity...')
     try {
-      jwt = await getValidAccessToken()
+      jwt = await getValidAccessToken(command.verboseLog)
       command.verboseLog('Token valid (or refreshed)')
-    } catch {
-      command.error('Session expired. Please run `qfg login` to re-authenticate.', {exit: 401})
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      command.error(`Session expired. Please run \`qfg login\` to re-authenticate. (${detail})`, {exit: 401})
     }
 
     // Resolve workspace: --workspace/QUONFIG_WORKSPACE (slug) → QUONFIG_PROFILE (profile name) → default
