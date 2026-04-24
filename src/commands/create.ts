@@ -144,14 +144,7 @@ Or edit the JSON config file directly for complex targeting rules:
         key: args.name,
         valueType: mapValueTypeToString(valueType),
         sendToClientSdk: false,
-        default: {
-          rules: [
-            {
-              criteria: [],
-              value: mapConfigValueToDto(configValue, valueType),
-            },
-          ],
-        },
+        defaultValue: mapConfigValueToDto(configValue, valueType),
       },
     }
 
@@ -205,16 +198,9 @@ Or edit the JSON config file directly for complex targeting rules:
             description: 'Disabled',
           },
         ],
-        default: {
-          rules: [
-            {
-              criteria: [],
-              value: {
-                type: 'bool',
-                value: defaultValue,
-              },
-            },
-          ],
+        defaultValue: {
+          type: 'bool',
+          value: defaultValue,
         },
       },
     }

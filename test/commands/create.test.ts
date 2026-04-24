@@ -240,7 +240,7 @@ describe('create', () => {
       .it('sends the parsed JSON object as the default value (qfg-c0q repro)', () => {
         const input = createResponses.capturedCreateConfigInput
         expect(input, 'request body was captured').to.not.equal(null)
-        const defaultValue = input?.config?.default?.rules?.[0]?.value
+        const defaultValue = input?.config?.defaultValue
         expect(defaultValue).to.deep.equal({
           type: 'json',
           value: {active: false, cap: 0},

@@ -44,7 +44,7 @@ const configsCreateHandler = http.post('https://app.quonfig.com/api/v1/configs/c
   }
 
   // Validate encrypted values have correct structure
-  const defaultValue = input?.config?.default?.rules?.[0]?.value
+  const defaultValue = input?.config?.defaultValue
   if (defaultValue?.confidential && defaultValue?.decryptWith) {
     // Encrypted values must have type and value fields
     if (!defaultValue.type) {
