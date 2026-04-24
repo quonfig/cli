@@ -1,7 +1,7 @@
 import {expect, test} from '@oclif/test'
 
 import {resetClientCache} from '../../src/util/get-client.js'
-import {server} from '../responses/set-default.js'
+import {configsUpdateCapture, server} from '../responses/set-default.js'
 import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 
 describe('set-default', () => {
@@ -12,6 +12,7 @@ describe('set-default', () => {
   afterEach(() => {
     server.resetHandlers()
     resetClientCache()
+    configsUpdateCapture.body = null
   })
   after(() => {
     server.close()
@@ -112,6 +113,38 @@ describe('set-default', () => {
       ])
       .it('can create a secret string', (ctx) => {
         expect(ctx.stdout).to.contain(`Successfully changed default to \`hello\` (encrypted)`)
+      })
+
+    // Regression for qfg-ytw: a --secret write must persist confidential:true
+    // and decryptWith:<keyName> on the rule value. Without these fields the
+    // SDK can't decrypt at runtime and the ciphertext is eligible to leak to
+    // client SDKs / logs.
+    test
+      .env({
+        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
+      })
+      .stdout()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--secret',
+        '--value=hello',
+      ])
+      .it('secret writes include confidential + decryptWith on the emitted rule', () => {
+        const body = configsUpdateCapture.body
+        expect(body, 'configs/update was never called').to.not.be.null
+        const environments = body.json.config.environments as Array<{id: string; rules: Array<{value: any}>}>
+        const stagingEnv = environments.find((e) => e.id === 'Staging')
+        expect(stagingEnv, 'staging env missing from update payload').to.exist
+        const ruleValue = stagingEnv!.rules[0].value
+        expect(ruleValue.type).to.equal('string')
+        expect(ruleValue.value, 'encrypted ciphertext missing').to.match(/--.+--/)
+        expect(ruleValue.confidential, 'confidential:true must be set on secret rules').to.equal(true)
+        expect(ruleValue.decryptWith, 'decryptWith must point at the secret key name').to.equal(
+          'quonfig.secrets.encryption.key',
+        )
       })
 
     test

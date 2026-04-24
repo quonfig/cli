@@ -221,9 +221,16 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
   return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
 })
 
+// Capture the most recent body posted to /api/v1/configs/update so tests can
+// assert on the exact payload the CLI sent (e.g. that a --secret write
+// includes confidential + decryptWith fields — see qfg-ytw).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const configsUpdateCapture: {body: any} = {body: null}
+
 // POST /api/v1/configs/update — update a config via oRPC
 const configsUpdateHandler = http.post('https://app.quonfig.com/api/v1/configs/update', async ({request}) => {
   const body = (await request.json()) as any
+  configsUpdateCapture.body = body
   if (!body?.json?.configKey) {
     return HttpResponse.json({json: {error: 'Missing configKey'}}, {status: 400})
   }
