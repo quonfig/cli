@@ -43,6 +43,7 @@ describe('workspace create', () => {
     .command(['workspace create', 'lt-21-smoke'])
     .catch((error: Error) => {
       expect(error.message).to.contain('already exists')
+      expect(error.message).to.contain('Pick a different slug')
     })
     .it('reports 409 slug collision with a helpful suggestion')
 

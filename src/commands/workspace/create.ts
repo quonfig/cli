@@ -113,9 +113,9 @@ export default class WorkspaceCreate extends BaseCommand {
 
     if (res.status === 409) {
       const detail = await this.extractErrorMessage(res)
-      return this.err(
-        `Workspace "${slug}" already exists. ${detail || 'Pick a different slug (e.g. `' + slug + '-2`).'}`,
-      )
+      // Prefer the server's message when present (already clear); fall
+      // back to a generated hint otherwise.
+      return this.err(detail || `Workspace "${slug}" already exists. Pick a different slug (e.g. ${slug}-2).`)
     }
 
     if (res.status === 400) {
