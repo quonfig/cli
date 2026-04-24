@@ -5,7 +5,6 @@ import type {JsonObj} from '../../result.js'
 import {BaseCommand} from '../../index.js'
 import {getApiUrl} from '../../util/domain-urls.js'
 import {getValidAccessToken} from '../../util/get-valid-token.js'
-import {loadAuthConfig} from '../../util/token-storage.js'
 
 /**
  * Slugify matches the UI's rules exactly (see
@@ -54,7 +53,7 @@ export default class WorkspaceCreate extends BaseCommand {
     }),
     org: Flags.string({
       description:
-        'Local organization UUID. Required when you belong to more than one organization; inferred otherwise.',
+        'Organization UUID or slug. Required when you belong to more than one organization; inferred otherwise.',
       required: false,
     }),
   }
@@ -67,6 +66,10 @@ export default class WorkspaceCreate extends BaseCommand {
       return this.err(`"${args.slug}" does not produce a valid slug. Use letters, numbers, or hyphens.`)
     }
 
+    // Resolve auth via the same path every other command uses. We
+    // don't require an active-workspace profile (AuthConfig) — the
+    // whole point of this command is to create one — but we do need a
+    // valid bearer token / API key.
     let accessToken: string
     try {
       accessToken = await getValidAccessToken()
@@ -74,18 +77,19 @@ export default class WorkspaceCreate extends BaseCommand {
       return this.err('Not logged in. Run `qfg login` first.')
     }
 
-    // Sanity-check that an auth profile exists. We don't require a
-    // workspace to be selected — the whole point of this command is to
-    // create one.
-    const authConfig = await loadAuthConfig()
-    if (!authConfig && !process.env.QUONFIG_API_KEY) {
-      return this.err('Not logged in. Run `qfg login` first.')
-    }
-
     const apiUrl = getApiUrl()
     const body: Record<string, string> = {slug}
     if (flags.name) body.name = flags.name
-    if (flags.org) body.organizationId = flags.org
+    if (flags.org) {
+      // Accept either a UUID (from the API) or a human-readable slug.
+      // The server resolves the slug to the local org UUID.
+      const uuidPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
+      if (uuidPattern.test(flags.org)) {
+        body.organizationId = flags.org
+      } else {
+        body.organizationSlug = flags.org
+      }
+    }
 
     this.verboseLog('WorkspaceCreate', {apiUrl, body})
 

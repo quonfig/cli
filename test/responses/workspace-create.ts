@@ -51,7 +51,7 @@ export const multiOrgHandler = http.post('https://app.quonfig.com/api/v1/workspa
       json: {
         code: 'BAD_REQUEST',
         message:
-          'You belong to more than one organization — specify organizationId (see `qfg workspace` or the app UI for IDs).',
+          'You belong to more than one organization — specify organizationId (UUID) or organizationSlug. Use `qfg workspace` on a workspace you already own to see the slug.',
       },
     },
     {status: 400},
