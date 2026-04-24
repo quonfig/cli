@@ -129,6 +129,82 @@ const newFormatEncryptionKeyResponse = {
   },
 }
 
+// Capture last log-level create + update payloads so tests can assert on the
+// exact request body the CLI sends.
+export let capturedLogLevelCreateInput: any = null
+export let capturedLogLevelUpdateInput: any = null
+
+export function resetCapturedLogLevelInputs(): void {
+  capturedLogLevelCreateInput = null
+  capturedLogLevelUpdateInput = null
+}
+
+// POST /api/v1/logLevels/create — create a log-level config (oRPC wrapped).
+// Matches app-quonfig's createEntity which always initializes default=INFO.
+const logLevelsCreateHandler = http.post('https://app.quonfig.com/api/v1/logLevels/create', async ({request}) => {
+  const body = (await request.json()) as any
+  const input = body?.json
+  capturedLogLevelCreateInput = input
+  const key = input?.logLevel?.key
+
+  if (key === 'log-level.already-exists') {
+    return HttpResponse.json({json: conflictResponse}, {status: 409})
+  }
+
+  return HttpResponse.json({
+    json: {
+      key,
+      type: 'log_level',
+      valueType: 'log_level',
+      sendToClientSdk: false,
+      default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'log_level', value: 'INFO'}}]},
+      environments: [],
+      variants: [],
+      commitSha: 'sha-after-create',
+    },
+  })
+})
+
+// POST /api/v1/logLevels/update — patch an existing log-level config.
+const logLevelsUpdateHandler = http.post('https://app.quonfig.com/api/v1/logLevels/update', async ({request}) => {
+  const body = (await request.json()) as any
+  const input = body?.json
+  capturedLogLevelUpdateInput = input
+  return HttpResponse.json({json: {...input, commitSha: 'sha-after-update'}})
+})
+
+// Canned log-level config responses for --target tests. The body shape matches
+// what the real metadata.getByKey returns for a log_level-type config.
+const buildLogLevelDetail = (key: string, rules: Array<{criteria: unknown[]; value: unknown}>) => ({
+  key,
+  type: 'log_level',
+  valueType: 'log_level',
+  sendToClientSdk: false,
+  default: {rules},
+  environments: [],
+  variants: [],
+  commitSha: 'sha-existing',
+})
+
+const LOG_LEVEL_WITH_NO_RULES = buildLogLevelDetail('log-level.existing', [
+  {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'log_level', value: 'INFO'}},
+])
+
+// Matches the real storage/API shape: valueToMatch is {type: 'string_list', value: [...]}.
+const LOG_LEVEL_WITH_EXISTING_TARGET = buildLogLevelDetail('log-level.existing-with-rule', [
+  {
+    criteria: [
+      {
+        operator: 'PROP_STARTS_WITH_ONE_OF',
+        propertyName: 'quonfig-sdk-logging.key',
+        valueToMatch: {type: 'string_list', value: ['Foo.Bar']},
+      },
+    ],
+    value: {type: 'log_level', value: 'DEBUG'},
+  },
+  {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'log_level', value: 'INFO'}},
+])
+
 // POST /api/v1/metadata/getByKey - get config by key for encryption (oRPC wrapped)
 const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getByKey', async ({request}) => {
   const body = (await request.json()) as any
@@ -146,6 +222,14 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
     return HttpResponse.json({json: newFormatEncryptionKeyResponse})
   }
 
+  if (key === 'log-level.existing') {
+    return HttpResponse.json({json: LOG_LEVEL_WITH_NO_RULES})
+  }
+
+  if (key === 'log-level.existing-with-rule') {
+    return HttpResponse.json({json: LOG_LEVEL_WITH_EXISTING_TARGET})
+  }
+
   if (key === 'missing.secret.key') {
     return HttpResponse.json({json: {error: 'Config not found'}}, {status: 404})
   }
@@ -153,4 +237,11 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
   return HttpResponse.json({json: {error: 'Config not found'}}, {status: 404})
 })
 
-export const server = setupServer(flagsCreateHandler, configsCreateHandler, metadataHandler, getByKeyHandler)
+export const server = setupServer(
+  flagsCreateHandler,
+  configsCreateHandler,
+  logLevelsCreateHandler,
+  logLevelsUpdateHandler,
+  metadataHandler,
+  getByKeyHandler,
+)

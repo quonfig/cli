@@ -14,6 +14,7 @@ describe('create', () => {
     server.resetHandlers()
     resetClientCache()
     createResponses.resetCapturedCreateConfigInput()
+    createResponses.resetCapturedLogLevelInputs()
   })
   after(() => {
     server.close()
@@ -253,6 +254,230 @@ describe('create', () => {
         expect(error.message).to.contain(`Invalid default value for JSON: {not:valid}`)
       })
       .it('returns an error if the value is not JSON', () => {
+        // Error assertion done in catch block
+      })
+  })
+
+  describe('type=log_level', () => {
+    test
+      .stdout()
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=INFO'])
+      .it('can create a log level with the default INFO value (no update call)', (ctx) => {
+        expect(ctx.stdout).to.contain('Created log level: log-level.my-app (default: INFO)')
+        expect(createResponses.capturedLogLevelCreateInput).to.not.equal(null)
+        expect(createResponses.capturedLogLevelCreateInput?.logLevel?.key).to.equal('log-level.my-app')
+        // No update when value matches server default INFO.
+        expect(createResponses.capturedLogLevelUpdateInput).to.equal(null)
+      })
+
+    test
+      .stdout()
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=WARN'])
+      .it('creates and then patches default when value != INFO', (ctx) => {
+        expect(ctx.stdout).to.contain('Created log level: log-level.my-app (default: WARN)')
+        expect(createResponses.capturedLogLevelCreateInput?.logLevel?.key).to.equal('log-level.my-app')
+        const update = createResponses.capturedLogLevelUpdateInput
+        expect(update?.logLevelKey).to.equal('log-level.my-app')
+        expect(update?.expectedCommitSha).to.equal('sha-after-create')
+        expect(update?.logLevel?.default?.rules?.[0]?.value).to.deep.equal({
+          type: 'log_level',
+          value: 'WARN',
+        })
+      })
+
+    test
+      .stdout()
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=warn'])
+      .it('accepts lowercase values and uppercases them', (ctx) => {
+        expect(ctx.stdout).to.contain('Created log level: log-level.my-app (default: WARN)')
+      })
+
+    test
+      .command(['create', 'my-app', '--type=log_level', '--value=WARN'])
+      .catch((error) => {
+        expect(error.message).to.contain(
+          'Log level key "my-app" must start with "log-level.". Try: log-level.my-app',
+        )
+      })
+      .it('rejects keys missing the log-level. prefix with a fix suggestion', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=SPAMMY'])
+      .catch((error) => {
+        expect(error.message).to.contain('Invalid log level "SPAMMY"')
+        expect(error.message).to.contain('TRACE, DEBUG, INFO, WARN, ERROR, FATAL')
+      })
+      .it('rejects invalid levels', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command([
+        'create',
+        'log-level.my-app',
+        '--type=log_level',
+        '--value=WARN',
+        '--env-var=MY_LEVEL',
+      ])
+      .catch((error) => {
+        expect(error.message).to.contain('--env-var is not supported for log_level')
+      })
+      .it('rejects --env-var', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=WARN', '--secret'])
+      .catch((error) => {
+        expect(error.message).to.contain('--secret is not supported for log_level')
+      })
+      .it('rejects --secret', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=WARN', '--confidential'])
+      .catch((error) => {
+        expect(error.message).to.contain('--confidential is not supported for log_level')
+      })
+      .it('rejects --confidential', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command(['create', 'log-level.already-exists', '--type=log_level', '--value=WARN'])
+      .catch((error) => {
+        expect(error.message).to.contain('Failed to create log level: log-level.already-exists already exists')
+      })
+      .it('returns a conflict error when the log level already exists', () => {
+        // Error assertion done in catch block
+      })
+  })
+
+  describe('log-level alias', () => {
+    test
+      .stdout()
+      .command(['log-level', 'log-level.alias-app', '--value=DEBUG'])
+      .it('delegates to create --type=log_level', (ctx) => {
+        expect(ctx.stdout).to.contain('Created log level: log-level.alias-app (default: DEBUG)')
+        expect(createResponses.capturedLogLevelCreateInput?.logLevel?.key).to.equal('log-level.alias-app')
+        const update = createResponses.capturedLogLevelUpdateInput
+        expect(update?.logLevel?.default?.rules?.[0]?.value).to.deep.equal({
+          type: 'log_level',
+          value: 'DEBUG',
+        })
+      })
+
+    test
+      .command(['log-level', 'log-level.alias-app', '--value=SPAMMY'])
+      .catch((error) => {
+        // oclif will reject SPAMMY at flag parse since we constrain options.
+        expect(error.message).to.match(/expected --value=spammy to be one of/i)
+      })
+      .it('rejects invalid levels at the flag layer', () => {
+        // Error assertion done in catch block
+      })
+  })
+
+  describe('log-level --target (per-logger targeting)', () => {
+    test
+      .stdout()
+      .command(['log-level', 'log-level.existing', '--target=MyPackage.Noisy', '--value=ERROR'])
+      .it('prepends a targeting rule to an existing config', (ctx) => {
+        expect(ctx.stdout).to.contain('Set log level ERROR for loggers starting with [MyPackage.Noisy]')
+        const update = createResponses.capturedLogLevelUpdateInput
+        expect(update?.logLevelKey).to.equal('log-level.existing')
+        expect(update?.expectedCommitSha).to.equal('sha-existing')
+        const rules = update?.logLevel?.default?.rules
+        expect(rules).to.have.lengthOf(2)
+        expect(rules?.[0]).to.deep.equal({
+          criteria: [
+            {
+              operator: 'PROP_STARTS_WITH_ONE_OF',
+              propertyName: 'quonfig-sdk-logging.key',
+              valueToMatch: {type: 'string_list', value: ['MyPackage.Noisy']},
+            },
+          ],
+          value: {type: 'log_level', value: 'ERROR'},
+        })
+        // Original catch-all kept after the new rule.
+        expect(rules?.[1]?.criteria?.[0]?.operator).to.equal('ALWAYS_TRUE')
+      })
+
+    test
+      .stdout()
+      .command(['log-level', 'log-level.existing', '--target=A', '--target=B', '--value=WARN'])
+      .it('supports multiple --target values in one OR rule', () => {
+        const update = createResponses.capturedLogLevelUpdateInput
+        expect(update?.logLevel?.default?.rules?.[0]?.criteria?.[0]?.valueToMatch).to.deep.equal({
+          type: 'string_list',
+          value: ['A', 'B'],
+        })
+      })
+
+    test
+      .stdout()
+      .command(['log-level', 'log-level.existing-with-rule', '--target=Foo.Bar', '--value=WARN'])
+      .it('replaces an existing rule when targets match exactly (no duplicate)', () => {
+        const update = createResponses.capturedLogLevelUpdateInput
+        const rules = update?.logLevel?.default?.rules
+        expect(rules).to.have.lengthOf(2) // replaced in place, not prepended
+        expect(rules?.[0]?.value).to.deep.equal({type: 'log_level', value: 'WARN'})
+        expect(rules?.[0]?.criteria?.[0]?.valueToMatch).to.deep.equal({
+          type: 'string_list',
+          value: ['Foo.Bar'],
+        })
+      })
+
+    test
+      .stdout()
+      .command([
+        'log-level',
+        'log-level.existing',
+        '--target=X',
+        '--value=DEBUG',
+        '--environment=production',
+      ])
+      .it('writes the rule to environments[env] when --environment is set', () => {
+        const update = createResponses.capturedLogLevelUpdateInput
+        expect(update?.logLevel?.environments).to.be.an('array')
+        const prodEnv = update?.logLevel?.environments?.find((e: any) => e.id === 'production')
+        expect(prodEnv?.rules?.[0]?.criteria?.[0]?.valueToMatch).to.deep.equal({
+          type: 'string_list',
+          value: ['X'],
+        })
+        // No default block patch when targeting an env.
+        expect(update?.logLevel?.default).to.equal(undefined)
+      })
+
+    test
+      .command(['log-level', 'log-level.does-not-exist', '--target=X', '--value=DEBUG'])
+      .catch((error) => {
+        expect(error.message).to.contain('Log level "log-level.does-not-exist" does not exist')
+        expect(error.message).to.contain('qfg log-level log-level.does-not-exist --value=INFO')
+      })
+      .it('errors with a helpful create-first hint when the config does not exist', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command(['log-level', 'log-level.existing', '--target=X'])
+      .catch((error) => {
+        expect(error.message).to.contain('--value is required with --target')
+      })
+      .it('requires --value when --target is set', () => {
+        // Error assertion done in catch block
+      })
+
+    test
+      .command(['log-level', 'log-level.existing', '--environment=production', '--value=WARN'])
+      .catch((error) => {
+        expect(error.message).to.contain('--environment requires --target')
+        expect(error.message).to.contain('qfg set-default')
+      })
+      .it('rejects --environment without --target (points to set-default)', () => {
         // Error assertion done in catch block
       })
   })

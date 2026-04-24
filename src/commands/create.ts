@@ -9,6 +9,7 @@ import {TYPE_MAPPING, coerceBool, coerceIntoType} from '../util/coerce.js'
 import {checkmark} from '../util/color.js'
 import {mapConfigValueToDto, mapValueTypeToString} from '../util/config-value-dto.js'
 import {makeConfidentialValue} from '../util/encryption.js'
+import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.js'
 import secretFlags, {parsedSecretFlags} from '../util/secret-flags.js'
 
 export default class Create extends APICommand {
@@ -26,6 +27,7 @@ Use --type to specify the kind of item:
   string-list   A comma-separated list of strings
   json          An arbitrary JSON blob
   boolean       A plain boolean (not a feature flag)
+  log_level     A dynamic log level (value must be one of ${LOG_LEVELS.join('/')})
 
 This sets the global default value. Override per-environment with:
   qfg set-default my.flag --environment production --value true
@@ -35,7 +37,14 @@ For a percentage rollout (gradual rollout / A/B test / canary deploy), use:
 
 Or edit the JSON config file directly for complex targeting rules:
   qfg config-schema          # full operator reference + examples
-  qfg pull --dir ./config    # clone workspace, then edit JSON and git push`
+  qfg pull --dir ./config    # clone workspace, then edit JSON and git push
+
+Log levels:
+  qfg create log-level.my-app --type log_level --value WARN
+  # Log-level keys must start with "${LOG_LEVEL_KEY_PREFIX}".
+  # For per-logger targeting, create ONE log-level config per service and add
+  # rules on the "quonfig-sdk-logging.key" context property (e.g.
+  # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.new.flag --type boolean-flag',
@@ -44,6 +53,7 @@ Or edit the JSON config file directly for complex targeting rules:
     '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world" --secret',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --env-var=MY_ENV_VAR_NAME',
     '<%= config.bin %> <%= command.id %> my.new.string --type json --value="{\\"key\\": \\"value\\"}"',
+    '<%= config.bin %> <%= command.id %> log-level.my-app --type log_level --value WARN',
     '# After creating a flag, set a 20% rollout in production:',
     '<%= config.bin %> set-rollout my.new.flag --environment production --true-percent 20',
   ]
@@ -52,7 +62,7 @@ Or edit the JSON config file directly for complex targeting rules:
     confidential: Flags.boolean({default: false, description: 'mark the value as confidential'}),
     'env-var': Flags.string({description: 'environment variable to get value from'}),
     type: Flags.string({
-      options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json'],
+      options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'log_level'],
       required: true,
     }),
     value: Flags.string({description: 'default value for your new item', required: false}),
@@ -64,6 +74,10 @@ Or edit the JSON config file directly for complex targeting rules:
 
     if (flags.type === 'boolean-flag') {
       return this.createBooleanFlag(args, flags.value)
+    }
+
+    if (flags.type === 'log_level') {
+      return this.createLogLevel(args, flags)
     }
 
     const key = args.name
@@ -221,5 +235,127 @@ Or edit the JSON config file directly for complex targeting rules:
     const response = request.json
 
     return this.ok(`${checkmark} Created boolean flag: ${key}`, {key, ...response})
+  }
+
+  private async createLogLevel(
+    args: {name: string},
+    flags: {
+      confidential: boolean
+      'env-var'?: string
+      interactive?: boolean
+      secret: boolean
+      'secret-key-name': string
+      value?: string
+    },
+  ): Promise<JsonObj | void> {
+    const key = args.name
+
+    if (!key.startsWith(LOG_LEVEL_KEY_PREFIX)) {
+      return this.err(
+        `Log level key "${key}" must start with "${LOG_LEVEL_KEY_PREFIX}". Try: ${LOG_LEVEL_KEY_PREFIX}${key}`,
+        {key, phase: 'validation'},
+      )
+    }
+
+    const secret = parsedSecretFlags(flags)
+    if (secret.selected) {
+      return this.err('--secret is not supported for log_level (values are enum, not free-form strings)')
+    }
+
+    if (flags['env-var']) {
+      return this.err('--env-var is not supported for log_level (values must be one of the enum constants)')
+    }
+
+    if (flags.confidential) {
+      return this.err('--confidential is not supported for log_level')
+    }
+
+    const valueInput = await getValue({
+      desiredValue: flags.value,
+      flags,
+      message: `Default log level (${LOG_LEVELS.join('/')})`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      quonfig: undefined as any,
+    })
+
+    if (!valueInput.ok) {
+      if (valueInput.error) {
+        return this.err(valueInput.message, valueInput.json)
+      }
+
+      return
+    }
+
+    const rawValue = valueInput.value.toUpperCase()
+    if (!isLogLevel(rawValue)) {
+      return this.err(`Invalid log level "${valueInput.value}". Must be one of: ${LOG_LEVELS.join(', ')}`, {
+        key,
+        phase: 'validation',
+      })
+    }
+
+    // Step 1: create the log-level config. The server always writes INFO as the
+    // initial default, so we patch it to the requested value below if needed.
+    const createInput = {
+      workspaceId: this.workspaceId,
+      logLevel: {key},
+    }
+
+    this.verboseLog('RPC logLevels/create', createInput)
+
+    const createRequest = await this.apiClient.post('/api/v1/logLevels/create', createInput)
+
+    if (!createRequest.ok) {
+      const errMsg =
+        createRequest.status === 409
+          ? `Failed to create log level: ${key} already exists`
+          : `Failed to create log level: ${createRequest.status} | ${JSON.stringify(createRequest.error)}`
+
+      return this.err(errMsg, {key, phase: 'creation', serverError: createRequest.error})
+    }
+
+    const createResponse = createRequest.json as {commitSha?: string}
+
+    // Step 2: if the requested value isn't the server's default (INFO), update.
+    if (rawValue !== 'INFO') {
+      if (!createResponse.commitSha) {
+        return this.err('Server did not return commitSha after create; cannot patch default value', {
+          key,
+          phase: 'update',
+        })
+      }
+
+      const updateInput = {
+        workspaceId: this.workspaceId,
+        logLevelKey: key,
+        logLevel: {
+          default: {
+            rules: [
+              {
+                criteria: [{operator: 'ALWAYS_TRUE'}],
+                value: {type: 'log_level', value: rawValue},
+              },
+            ],
+          },
+        },
+        expectedCommitSha: createResponse.commitSha,
+      }
+
+      this.verboseLog('RPC logLevels/update', updateInput)
+
+      const updateRequest = await this.apiClient.post('/api/v1/logLevels/update', updateInput)
+
+      if (!updateRequest.ok) {
+        return this.err(
+          `Log level created with default INFO, but failed to set value to ${rawValue}: ${updateRequest.status}. Run \`qfg set-default ${key} --value=${rawValue}\` to retry.`,
+          {key, phase: 'update', serverError: updateRequest.error},
+        )
+      }
+    }
+
+    return this.ok(`${checkmark} Created log level: ${key} (default: ${rawValue})`, {
+      key,
+      value: rawValue,
+    })
   }
 }

@@ -22,6 +22,8 @@
 
 import {z} from 'zod'
 
+import {LOG_LEVELS} from '../util/log-levels.js'
+
 // ── Schemas (subset of app-quonfig config-schemas.ts) ───────────────────
 
 const ConfigTypeSchema = z.enum(['feature_flag', 'config', 'log_level', 'segment', 'schema'])
@@ -53,7 +55,7 @@ const OperatorSchema = z.enum([
   'LOOKUP_KEY_NOT_IN',
 ])
 
-const LogLevelSchema = z.enum(['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'])
+const LogLevelSchema = z.enum(LOG_LEVELS)
 
 const BoolValueSchema = z.object({type: z.literal('bool'), value: z.boolean()})
 const StringValueSchema = z.object({type: z.literal('string'), value: z.string()})
