@@ -6,10 +6,10 @@ import {Flags} from '@oclif/core'
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {getActiveProfile, loadAuthConfig} from '../util/token-storage.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
 import {readWorkspaceSlug, writeWorkspaceSlug} from '../util/quonfig-json.js'
+import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
   getRemoteUrl,
@@ -62,22 +62,10 @@ CLI shortcuts (no JSON editing needed for simple cases):
 
     const resolvedDir = path.resolve(dir)
 
-    // Resolve workspace ID
-    let workspaceId = flags.workspace
-    if (!workspaceId) {
-      const authConfig = await loadAuthConfig()
-      if (!authConfig) {
-        return this.err('Not logged in. Please run `qfg login` first.')
-      }
-
-      const activeProfile = getActiveProfile()
-      const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
-      if (!profile) {
-        return this.err('No active profile found. Please run `qfg login` first.')
-      }
-
-      workspaceId = profile.workspace
-    }
+    // Resolve workspace ID — supports both OAuth and QUONFIG_API_KEY paths,
+    // mirroring what APICommand does via get-client.ts so `qfg pull` behaves
+    // the same in CI as `qfg create` or `qfg push`.
+    const workspaceId = await resolveWorkspaceUuid(this, flags.workspace)
 
     this.verboseLog('Pull', {workspaceId, dir: resolvedDir})
 

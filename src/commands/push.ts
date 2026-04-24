@@ -20,7 +20,7 @@ import {PushIdentity} from '../util/clone-and-stack-push.js'
 import {PushFatalError, runPush, type GitOps} from '../push/run-push.js'
 import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
-import {getActiveProfile, loadAuthConfig} from '../util/token-storage.js'
+import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 
 const execFile = util.promisify(execFileCb)
 
@@ -80,22 +80,10 @@ Enforces three guards before touching the remote:
 
     const resolvedDir = path.resolve(dir)
 
-    // Resolve requested target: --workspace overrides the active profile.
-    let requestedTarget = flags.workspace
-    if (!requestedTarget) {
-      const authConfig = await loadAuthConfig()
-      if (!authConfig) {
-        return this.err('No active profile workspace; pass --workspace or run `qfg login`.')
-      }
-
-      const activeProfile = getActiveProfile()
-      const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
-      if (!profile || !profile.workspace) {
-        return this.err('No active profile workspace; pass --workspace or run `qfg login`.')
-      }
-
-      requestedTarget = profile.workspace
-    }
+    // Resolve requested target. --workspace > QUONFIG_WORKSPACE > active OAuth
+    // profile. Supports API-key mode for headless runs so `qfg push` behaves
+    // the same way `qfg create` does (both resolve via resolve-workspace.ts).
+    const requestedTarget = await resolveWorkspaceUuid(this, flags.workspace)
 
     const {deps, cleanup} = buildRealDeps(this)
     try {
