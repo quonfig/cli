@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.20 - 2026-04-24
+
+- chore: fix stale `'gen' command` string in the autogen header emitted by `qfg generate` (both node-ts and react-ts targets). The command has been named `generate` since the Reforge fork; the comment now matches.
+
+  Note: `qfg generate --targets node-ts` output requires `@quonfig/node` **>=0.0.16**, which widens `ContextValue` to `unknown` so the generated `contexts?: Contexts | ContextObj` signatures compile.
+
 ## 0.0.11 - 2026-04-18
 
 - fix: `qfg get` resolves `providedBy` (ENV_VAR) pointers and decrypts `decryptWith` ciphertext locally against the new raw-match response shape from `/api/v1/evaluations/evaluate` (qfg-c7d.3). Prior 0.0.10 still expected the legacy shape and silently printed nothing for confidential configs.
