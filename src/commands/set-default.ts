@@ -266,7 +266,7 @@ To see all current values and rules for a flag:
 
       if (secret.selected) {
         // Handle encrypted values using shared utility
-        const encryptedValueResult = await makeConfidentialValue(this, value, secret, environment.id)
+        const encryptedValueResult = await makeConfidentialValue(this, value, secret, environment.name)
         if (!encryptedValueResult.ok) {
           return this.err(encryptedValueResult.message || 'Failed to encrypt value')
         }

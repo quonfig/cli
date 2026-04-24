@@ -70,14 +70,17 @@ export function decrypt(encryptedString: string, keyStringHex: string): string {
  * @param command - The APICommand instance for API calls and logging
  * @param value - The plaintext value to encrypt
  * @param secret - Secret configuration containing key name
- * @param environmentId - Environment ID to fetch encryption key for (empty string for default)
+ * @param environmentName - Environment slug to fetch encryption key for (empty string for default).
+ *   Must be the slug stored in config files (e.g. "production"), not the DB UUID — the encryption
+ *   key config's `environments[].id` holds slugs, and matching against UUIDs silently falls back
+ *   to the default key and produces ciphertext that won't decrypt at runtime.
  * @returns Result<ConfigValue> with encrypted value or error
  */
 export async function makeConfidentialValue(
   command: APICommand,
   value: string,
   secret: Secret,
-  environmentId: string,
+  environmentName: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<Result<any>> {
   // First check if the encryption key exists in metadata
@@ -133,10 +136,14 @@ export async function makeConfidentialValue(
   let secretKey: string | undefined
   let envVar: string | undefined
 
-  // Check environment-specific config first
-  if (keyConfig.environments && environmentId) {
+  // Check environment-specific config first. environments[].id is the env slug
+  // (e.g. "production") as stored in the git file — match by slug, not UUID.
+  if (keyConfig.environments && environmentName) {
+    const targetSlug = String(environmentName).toLowerCase()
     /* eslint-disable @typescript-eslint/no-explicit-any */
-    const envConfig = (keyConfig.environments as any[]).find((env: any) => String(env.id) === String(environmentId))
+    const envConfig = (keyConfig.environments as any[]).find(
+      (env: any) => String(env.id).toLowerCase() === targetSlug,
+    )
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const ruleValue = envConfig?.rules?.[0]?.value
 
@@ -191,7 +198,7 @@ export async function makeConfidentialValue(
 
   if (!secretKey) {
     return failure(
-      `Failed to create secret: ${secret.keyName} does not have a value configured for environment ${environmentId || 'default'} or default env`,
+      `Failed to create secret: ${secret.keyName} does not have a value configured for environment ${environmentName || 'default'} or default env`,
       {
         phase: 'finding-secret',
       },

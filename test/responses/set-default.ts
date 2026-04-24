@@ -102,7 +102,7 @@ const encryptionKeyResponse = {
   },
   environments: [
     {
-      id: 6,
+      id: 'staging',
       rules: [
         {
           criteria: [],
@@ -110,6 +110,20 @@ const encryptionKeyResponse = {
             provided: {
               source: 'ENV_VAR',
               lookup: 'QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY',
+            },
+          },
+        },
+      ],
+    },
+    {
+      id: 'production',
+      rules: [
+        {
+          criteria: [],
+          value: {
+            provided: {
+              source: 'ENV_VAR',
+              lookup: 'QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY_PROD',
             },
           },
         },

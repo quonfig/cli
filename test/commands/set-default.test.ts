@@ -124,6 +124,28 @@ describe('set-default', () => {
         expect(ctx.stdout).to.match(/Successfully changed default.*encrypted/)
       })
 
+    // Regression for qfg-o4m: per-env encryption key override must be resolved
+    // by env slug (environments[].id in the stored config), not by DB UUID.
+    test
+      .env({
+        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY_PROD:
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      })
+      .stdout()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Production',
+        '--confirm',
+        '--secret',
+        '--value=hello',
+      ])
+      .it('uses the per-environment encryption key for production secrets', (ctx) => {
+        expect(ctx.stdout).to.contain('Encrypting with key from env var: QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY_PROD')
+        expect(ctx.stdout).to.contain('Successfully changed default to `hello` (encrypted)')
+      })
+
     test
       .stdout()
       .command(['set-default', 'test.json', '--environment=Staging', '--confirm', '--value={"hello":"world"}'])
