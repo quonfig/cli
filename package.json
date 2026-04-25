@@ -54,7 +54,7 @@
     "eslint-plugin-markdown": "^5.1.0",
     "eslint-plugin-only-error": "^1.0.2",
     "mocha": "^10",
-    "msw": "^2.0.6",
+    "msw": "^2.13.6",
     "oclif": "^4.22.29",
     "prettier": "^3.6.2",
     "shx": "^0.3.4",
