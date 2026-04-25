@@ -55,7 +55,7 @@
     "eslint-plugin-only-error": "^1.0.2",
     "mocha": "^10",
     "msw": "^2.0.6",
-    "oclif": "^4.22.29",
+    "oclif": "^4.23.0",
     "prettier": "^3.6.2",
     "shx": "^0.3.4",
     "ts-node": "^10.9.1",
