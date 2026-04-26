@@ -3,9 +3,12 @@ import type {BaseCommand} from '../index.js'
 import {getApiUrl} from './domain-urls.js'
 import {getValidAccessToken} from './get-valid-token.js'
 import {
+  type AuthConfig,
   getActiveProfile,
   loadAuthConfig,
+  loadTokens,
   resolveWorkspaceId as resolveOAuthWorkspaceId,
+  saveAuthConfig,
 } from './token-storage.js'
 
 const UUID_PATTERN = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
@@ -79,9 +82,19 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
   }
 
   // OAuth path.
-  const authConfig = await loadAuthConfig()
+  let authConfig = await loadAuthConfig()
   if (!authConfig) {
-    command.error('Not logged in. Run `qfg login` first (or set QUONFIG_API_KEY for CI).', {exit: 401})
+    // Auth config can be missing while tokens.json still holds a valid
+    // refresh_token — e.g. after the domain-scoped config split (commit
+    // 0f8bee6) or a partial login that wrote tokens but never the config
+    // (qfg-2qj). getValidAccessToken already knows how to refresh, so try
+    // that path before declaring "Not logged in".
+    const tokens = await loadTokens()
+    if (!tokens?.refreshToken) {
+      command.error('Not logged in. Run `qfg login` first (or set QUONFIG_API_KEY for CI).', {exit: 401})
+    }
+
+    authConfig = await recoverAuthConfigFromTokens(command)
   }
 
   if (override) {
@@ -109,4 +122,78 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
   }
 
   return profileData.workspace
+}
+
+/**
+ * Best-effort rebuild of the on-disk auth config from a working refresh_token.
+ * Calls /api/v1/userWorkspaces/list to discover the user's workspaces, persists
+ * the first one as the default profile, and returns the recovered config.
+ *
+ * Bails to command.error on any failure (refresh, network, no workspaces) with
+ * a message that points the user at `qfg login`.
+ */
+async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthConfig> {
+  let jwt: string
+  try {
+    jwt = await getValidAccessToken(command.verboseLog)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    command.error(`Tokens found but refresh failed: ${detail}. Run \`qfg login\` to repopulate.`, {exit: 401})
+  }
+
+  type WorkspaceEntry = {
+    organizationName?: string
+    workosOrgId?: string
+    workspaceId: string
+    workspaceSlug: string
+  }
+
+  let res: Response
+  try {
+    res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
+      method: 'POST',
+      headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({json: {}}),
+    })
+  } catch (error) {
+    command.error(
+      `Tokens found but failed to fetch workspaces: ${error instanceof Error ? error.message : String(error)}. Run \`qfg login\` to repopulate.`,
+      {exit: 401},
+    )
+  }
+
+  if (!res.ok) {
+    command.error(
+      `Tokens found but workspace list returned HTTP ${res.status}. Run \`qfg login\` to repopulate.`,
+      {exit: 401},
+    )
+  }
+
+  const body = (await res.json()) as {json?: WorkspaceEntry[]}
+  const entries = (body.json ?? body) as unknown as WorkspaceEntry[]
+  const candidates = Array.isArray(entries) ? entries : []
+  if (candidates.length === 0) {
+    command.error('Tokens found but no workspace profile on disk. Run `qfg login` to repopulate.', {exit: 401})
+  }
+
+  const match = candidates[0]
+  const recovered: AuthConfig = {
+    defaultProfile: 'default',
+    profiles: {
+      default: {
+        workspace: match.workspaceId,
+        workspaceName: match.workspaceSlug,
+        workspaceSlug: match.workspaceSlug,
+        organizationName: match.organizationName,
+      },
+    },
+  }
+
+  await saveAuthConfig(recovered)
+  command.verboseLog('resolve-workspace: recovered auth config from tokens', {
+    workspaceId: match.workspaceId,
+    workspaceSlug: match.workspaceSlug,
+    candidateCount: candidates.length,
+  })
+  return recovered
 }
