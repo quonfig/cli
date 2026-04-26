@@ -14,7 +14,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.11 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.0.20 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -37,14 +37,17 @@ USAGE
 * [`qfg init [DIRECTORY]`](#qfg-init-directory)
 * [`qfg interactive`](#qfg-interactive)
 * [`qfg list`](#qfg-list)
+* [`qfg log-level NAME`](#qfg-log-level-name)
 * [`qfg login`](#qfg-login)
 * [`qfg logout`](#qfg-logout)
 * [`qfg mcp`](#qfg-mcp)
 * [`qfg migrate`](#qfg-migrate)
 * [`qfg migrate doctor`](#qfg-migrate-doctor)
+* [`qfg migrate my-code`](#qfg-migrate-my-code)
 * [`qfg migrate status`](#qfg-migrate-status)
 * [`qfg override [NAME]`](#qfg-override-name)
 * [`qfg pull`](#qfg-pull)
+* [`qfg push`](#qfg-push)
 * [`qfg schema NAME`](#qfg-schema-name)
 * [`qfg sdk-key`](#qfg-sdk-key)
 * [`qfg sdk-key create`](#qfg-sdk-key-create)
@@ -58,7 +61,8 @@ USAGE
 * [`qfg whoami`](#qfg-whoami)
 * [`qfg workspace`](#qfg-workspace)
 * [`qfg workspace bootstrap`](#qfg-workspace-bootstrap)
-* [`qfg workspace switch`](#qfg-workspace-switch)
+* [`qfg workspace create SLUG`](#qfg-workspace-create-slug)
+* [`qfg workspace switch [SLUG]`](#qfg-workspace-switch-slug)
 
 ## `qfg config-schema`
 
@@ -87,7 +91,7 @@ EXAMPLES
   $ qfg config-schema --json-schema    # full JSON Schema document (copy into your editor)
 ```
 
-_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/config-schema.ts)_
+_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/config-schema.ts)_
 
 ## `qfg create NAME`
 
@@ -95,9 +99,9 @@ Create a new feature flag, config value, or other item.
 
 ```
 USAGE
-  $ qfg create NAME --type boolean-flag|boolean|string|double|int|string-list|json [--json] [--interactive]
-    [--no-color] [--verbose] [-w <value>] [--confidential] [--env-var <value>] [--value <value>] [--secret]
-    [--secret-key-name <value>]
+  $ qfg create NAME --type boolean-flag|boolean|string|double|int|string-list|json|log_level [--json]
+    [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential] [--env-var <value>] [--value <value>]
+    [--secret] [--secret-key-name <value>]
 
 ARGUMENTS
   NAME  name for your new item (e.g. my.new.flag)
@@ -109,7 +113,7 @@ FLAGS
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
   --type=<option>            (required)
-                             <options: boolean-flag|boolean|string|double|int|string-list|json>
+                             <options: boolean-flag|boolean|string|double|int|string-list|json|log_level>
   --value=<value>            default value for your new item
 
 GLOBAL FLAGS
@@ -130,6 +134,7 @@ DESCRIPTION
   string-list   A comma-separated list of strings
   json          An arbitrary JSON blob
   boolean       A plain boolean (not a feature flag)
+  log_level     A dynamic log level (value must be one of TRACE/DEBUG/INFO/WARN/ERROR/FATAL)
 
   This sets the global default value. Override per-environment with:
   qfg set-default my.flag --environment production --value true
@@ -140,6 +145,13 @@ DESCRIPTION
   Or edit the JSON config file directly for complex targeting rules:
   qfg config-schema          # full operator reference + examples
   qfg pull --dir ./config    # clone workspace, then edit JSON and git push
+
+  Log levels:
+  qfg create log-level.my-app --type log_level --value WARN
+  # Log-level keys must start with "log-level.".
+  # For per-logger targeting, create ONE log-level config per service and add
+  # rules on the "quonfig-sdk-logging.key" context property (e.g.
+  # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.
 
 EXAMPLES
   $ qfg create my.new.flag --type boolean-flag
@@ -154,12 +166,14 @@ EXAMPLES
 
   $ qfg create my.new.string --type json --value="{\"key\": \"value\"}"
 
+  $ qfg create log-level.my-app --type log_level --value WARN
+
   # After creating a flag, set a 20% rollout in production:
 
   $ qfg set-rollout my.new.flag --environment production --true-percent 20
 ```
 
-_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/create.ts)_
+_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/create.ts)_
 
 ## `qfg flag info [NAME]`
 
@@ -298,11 +312,14 @@ Generate type definitions for your Quonfig configuration
 ```
 USAGE
   $ qfg generate [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [-o <value>] [--targets
-    <value>]
+    <value>] [-w <value>]
 
 FLAGS
   -o, --output-directory=<value>  Override the output directory for generated files
-      --dir=<value>               Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var)
+  -w, --workspace=<value>         Workspace slug or UUID for the remote-fetch path (defaults to QUONFIG_WORKSPACE env
+                                  var or active profile). Only used when --dir is omitted.
+      --dir=<value>               Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var). When omitted, fetches the
+                                  workspace from the server using your active credentials.
       --targets=<value>           [default: react-ts] Determines for language/framework to generate code for (node-ts,
                                   react-ts)
 
@@ -359,7 +376,7 @@ EXAMPLES
   $ qfg generate --targets node-ts -o ./dist # combine with targets
 ```
 
-_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/generate.ts)_
+_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/generate.ts)_
 
 ## `qfg generate-new-hex-key`
 
@@ -382,7 +399,7 @@ EXAMPLES
   $ qfg generate-new-hex-key
 ```
 
-_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/generate-new-hex-key.ts)_
+_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/generate-new-hex-key.ts)_
 
 ## `qfg get [NAME]`
 
@@ -414,7 +431,7 @@ EXAMPLES
   $ qfg get my.config.name --environment=production
 ```
 
-_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/get.ts)_
+_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/get.ts)_
 
 ## `qfg info [NAME]`
 
@@ -462,7 +479,7 @@ EXAMPLES
   $ qfg info my.config.name --exclude-evaluations   # skip 24h stats
 ```
 
-_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/info.ts)_
+_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/info.ts)_
 
 ## `qfg init [DIRECTORY]`
 
@@ -471,13 +488,15 @@ Initialize or update a Quonfig workspace
 ```
 USAGE
   $ qfg init [DIRECTORY] [--json] [--interactive] [--no-color] [--verbose] [--dry-run] [--samples]
+    [--workspace <value>]
 
 ARGUMENTS
   DIRECTORY  [default: .] Target directory (default: current directory)
 
 FLAGS
-  --dry-run       Show what would be done without writing anything
-  --[no-]samples  Include sample configs (default: yes on first init, no on update)
+  --dry-run            Show what would be done without writing anything
+  --[no-]samples       Include sample configs (default: yes on first init, no on update)
+  --workspace=<value>  Workspace slug to pin in quonfig.json (Guard 1). If omitted, no pin is written.
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -500,9 +519,11 @@ EXAMPLES
   $ qfg init --dry-run
 ```
 
-_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/init.ts)_
+_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/init.ts)_
 
 ## `qfg interactive`
+
+Launch an interactive menu to browse and manage your workspace.
 
 ```
 USAGE
@@ -514,11 +535,21 @@ GLOBAL FLAGS
   --no-color          Do not colorize output
   --verbose           Verbose output
 
+DESCRIPTION
+  Launch an interactive menu to browse and manage your workspace.
+
+  Common shortcuts:
+  qfg set-default my.flag --environment production --value false   # catch-all fallback
+  qfg set-rollout my.flag --environment production --true-percent 20   # % rollout
+
+  For arbitrary targeting rules (e.g. user.email, plan, segment, custom property),
+  run 'qfg config-schema' then 'qfg pull' and edit the JSON config directly.
+
 EXAMPLES
   $ qfg
 ```
 
-_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/interactive.ts)_
+_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/interactive.ts)_
 
 ## `qfg list`
 
@@ -558,7 +589,72 @@ EXAMPLES
   $ qfg list --feature-flags
 ```
 
-_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/list.ts)_
+_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/list.ts)_
+
+## `qfg log-level NAME`
+
+Create or add targeting rules to a log-level config.
+
+```
+USAGE
+  $ qfg log-level NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--environment <value>]
+    [--target <value>...] [--value TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
+
+ARGUMENTS
+  NAME  log-level key (must start with "log-level.", e.g. log-level.my-app)
+
+FLAGS
+  --environment=<value>  when used with --target, scope the rule to this environment instead of the default
+  --target=<value>...    logger path prefix (matched via PROP_STARTS_WITH_ONE_OF on "quonfig-sdk-logging.key");
+                         repeatable
+  --value=<option>       log level — either the new default (create mode) or the level for the targeted loggers
+                         <options: TRACE|DEBUG|INFO|WARN|ERROR|FATAL>
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Create or add targeting rules to a log-level config.
+
+  Log-level keys must start with "log-level." (e.g. log-level.my-app). The
+  default value applies to every logger in that service unless a targeting
+  rule matches first.
+
+  Two modes:
+
+  1. Create a new log-level config with a default value:
+  qfg log-level log-level.my-app --value=WARN
+
+  2. Add a per-logger targeting rule to an existing config. SDKs populate
+  the "quonfig-sdk-logging.key" context automatically from the logger path,
+  so this rule fires for any logger whose name starts with --target:
+  qfg log-level log-level.my-app --target=MyPackage.Noisy --value=ERROR
+
+  Pass --target multiple times to match any of several prefixes (OR).
+  Pass --environment=<env> to scope the rule to a single environment.
+
+  To update the catch-all default for an existing log level, use set-default:
+  qfg set-default log-level.my-app --value=DEBUG --environment=production
+
+  For more complex rules (regex, multi-criterion, exact match) edit the JSON:
+  qfg pull && $EDITOR log-levels/log-level.my-app.json
+  qfg config-schema            # full operator reference
+
+EXAMPLES
+  $ qfg log-level log-level.my-app --value=WARN
+
+  $ qfg log-level log-level.my-app --target=MyPackage.Noisy --value=ERROR
+
+  $ qfg log-level log-level.my-app --target=A --target=B --value=DEBUG
+
+  $ qfg log-level log-level.my-app --target=Chatty --value=INFO --environment=production
+```
+
+_See code: [src/commands/log-level.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/log-level.ts)_
 
 ## `qfg login`
 
@@ -583,7 +679,7 @@ EXAMPLES
   $ qfg login --profile myprofile
 ```
 
-_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/login.ts)_
+_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/login.ts)_
 
 ## `qfg logout`
 
@@ -606,7 +702,7 @@ EXAMPLES
   $ qfg logout
 ```
 
-_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/logout.ts)_
+_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/logout.ts)_
 
 ## `qfg mcp`
 
@@ -639,7 +735,7 @@ EXAMPLES
   $ qfg mcp --url http://local-app.quonfig-staging.com:3003/api/v1/mcp
 ```
 
-_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/mcp.ts)_
+_See code: [src/commands/mcp.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/mcp.ts)_
 
 ## `qfg migrate`
 
@@ -693,7 +789,7 @@ EXAMPLES
   $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --staging
 ```
 
-_See code: [src/commands/migrate.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/migrate.ts)_
+_See code: [src/commands/migrate.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/migrate.ts)_
 
 ## `qfg migrate doctor`
 
@@ -731,7 +827,39 @@ EXAMPLES
   $ qfg migrate doctor --json
 ```
 
-_See code: [src/commands/migrate/doctor.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/migrate/doctor.ts)_
+_See code: [src/commands/migrate/doctor.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/migrate/doctor.ts)_
+
+## `qfg migrate my-code`
+
+Migrate Launch SDK call sites in your codebase to Quonfig SDK call sites (invokes the qfg-migrate-code Claude skill)
+
+```
+USAGE
+  $ qfg migrate my-code [--json] [--interactive] [--no-color] [--verbose] [--dry-run] [--from launch]
+
+FLAGS
+  --dry-run        Show what would be migrated without editing any files
+  --from=<option>  [default: launch] Legacy SDK to migrate from
+                   <options: launch>
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Migrate Launch SDK call sites in your codebase to Quonfig SDK call sites (invokes the qfg-migrate-code Claude skill)
+
+EXAMPLES
+  $ qfg migrate my-code
+
+  $ qfg migrate my-code --from launch
+
+  $ qfg migrate my-code --dry-run
+```
+
+_See code: [src/commands/migrate/my-code.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/migrate/my-code.ts)_
 
 ## `qfg migrate status`
 
@@ -762,46 +890,37 @@ EXAMPLES
   $ qfg migrate status --json
 ```
 
-_See code: [src/commands/migrate/status.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/migrate/status.ts)_
+_See code: [src/commands/migrate/status.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/migrate/status.ts)_
 
 ## `qfg override [NAME]`
 
-Override the value of an item for your user/SDK key combo
+Override a flag value for your dev user (not yet implemented).
 
 ```
 USAGE
-  $ qfg override [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--environment <value>]
-    [--remove] [--value <value>]
+  $ qfg override [NAME] [--json] [--interactive] [--no-color] [--verbose]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
 
-FLAGS
-  --environment=<value>  environment to override in
-  --remove               remove your override (if present)
-  --value=<value>        value to use for your override
-
 GLOBAL FLAGS
-  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
-      --[no-]interactive   Force interactive mode
-      --json               Format output as json.
-      --no-color           Do not colorize output
-      --verbose            Verbose output
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
 
 DESCRIPTION
-  Override the value of an item for your user/SDK key combo
+  Override a flag value for your dev user (not yet implemented).
+
+  The Quonfig replacement writes a top-priority rule keyed on the dev-only
+  quonfig-user.email attribute. See project/plans/dev-overrides.md for design
+  and bead qfg-pj0.6 for delivery status.
 
 EXAMPLES
-  $ qfg override # will prompt for name and value
-
-  $ qfg override my.flag.name --value=true
-
-  $ qfg override my.flag.name --remove
-
-  $ qfg override my.double.config --value=3.14159
+  $ qfg override  # currently exits non-zero with a not-yet-implemented message
 ```
 
-_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/override.ts)_
+_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/override.ts)_
 
 ## `qfg pull`
 
@@ -845,7 +964,55 @@ EXAMPLES
   $ qfg pull  # uses QUONFIG_DIR env var
 ```
 
-_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/pull.ts)_
+_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/pull.ts)_
+
+## `qfg push`
+
+Push local config changes up to your workspace on Quonfig cloud.
+
+```
+USAGE
+  $ qfg push [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [--workspace <value>]
+    [--yes] [--skip-validate] [--no-pin-write] [-m <value>]
+
+FLAGS
+  -m, --message=<value>    Commit message for bare-path pushes (ignored on clone-path; push what is already committed)
+      --dir=<value>        Local directory to push (defaults to QUONFIG_DIR env var)
+      --no-pin-write       Do not offer to write workspace slug into quonfig.json on success
+      --skip-validate      Skip `qfg validate` preflight
+      --workspace=<value>  Workspace slug or UUID (defaults to active profile)
+      --yes                Skip the standard Y/N confirm. Never skips typed-slug prompts.
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Push local config changes up to your workspace on Quonfig cloud.
+
+  Enforces three guards before touching the remote:
+  1. The dir's quonfig.json "workspace" pin must match the backend (if set).
+  2. The dir's git origin must match the backend repo URL (if set).
+  3. A diff summary is shown; destructive changes (10+ deletes, >=25% of
+  files, or an unpinned dir) require typing the workspace slug to confirm.
+
+  qfg push                                 # uses QUONFIG_DIR + profile workspace
+  qfg push --dir ./our-config
+  qfg push --dir ./our-config --workspace acme-prod
+  qfg push --dir ./our-config --yes        # skip normal Y/N (never skips typed-slug)
+  qfg push --dir ./our-config --skip-validate
+
+EXAMPLES
+  $ qfg push --dir ./our-config
+
+  $ qfg push --workspace acme-prod --dir ./our-config
+
+  $ qfg push --dir ./our-config --yes
+```
+
+_See code: [src/commands/push.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/push.ts)_
 
 ## `qfg schema NAME`
 
@@ -883,7 +1050,7 @@ EXAMPLES
   $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
 ```
 
-_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/schema.ts)_
+_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/schema.ts)_
 
 ## `qfg sdk-key`
 
@@ -910,7 +1077,7 @@ EXAMPLES
   $ qfg sdk-key revoke <key-id>
 ```
 
-_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key.ts)_
+_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/sdk-key.ts)_
 
 ## `qfg sdk-key create`
 
@@ -942,7 +1109,7 @@ EXAMPLES
   $ qfg sdk-key create --environment staging --type browser
 ```
 
-_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key/create.ts)_
+_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/sdk-key/create.ts)_
 
 ## `qfg sdk-key list`
 
@@ -971,7 +1138,7 @@ EXAMPLES
   $ qfg sdk-key list --environment production
 ```
 
-_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key/list.ts)_
+_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/sdk-key/list.ts)_
 
 ## `qfg sdk-key revoke KEYID`
 
@@ -998,7 +1165,7 @@ EXAMPLES
   $ qfg sdk-key revoke a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
-_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sdk-key/revoke.ts)_
+_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/sdk-key/revoke.ts)_
 
 ## `qfg set-default [NAME]`
 
@@ -1063,9 +1230,13 @@ EXAMPLES
   # For a percentage rollout, use set-rollout instead:
 
   $ qfg set-rollout my.flag.name --environment production --true-percent 20
+
+  # For per-user / per-property targeting (e.g. user.email == X), edit JSON directly:
+
+  $ qfg pull && qfg config-schema
 ```
 
-_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/set-default.ts)_
+_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/set-default.ts)_
 
 ## `qfg set-rollout [NAME]`
 
@@ -1142,7 +1313,7 @@ EXAMPLES
   $ qfg set-rollout my.variant.flag --environment production --weights "a:33,b:33,c:34" --hash-by user.id
 ```
 
-_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/set-rollout.ts)_
+_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/set-rollout.ts)_
 
 ## `qfg sync`
 
@@ -1174,7 +1345,7 @@ EXAMPLES
   $ qfg sync --watch --dir ./our-config --interval 30
 ```
 
-_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/sync.ts)_
+_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/sync.ts)_
 
 ## `qfg toggle [NAME]`
 
@@ -1239,6 +1410,10 @@ EXAMPLES
   # For a percentage rollout, use set-rollout instead:
 
   $ qfg set-rollout my.flag.name --environment production --true-percent 20
+
+  # For per-user / per-property targeting (e.g. user.email == X), edit JSON directly:
+
+  $ qfg pull && qfg config-schema
 ```
 
 ## `qfg verify [PATH]`
@@ -1272,7 +1447,7 @@ EXAMPLES
   $ qfg verify --json
 ```
 
-_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/verify.ts)_
+_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/verify.ts)_
 
 ## `qfg whoami`
 
@@ -1295,7 +1470,7 @@ EXAMPLES
   $ qfg whoami
 ```
 
-_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/whoami.ts)_
+_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/whoami.ts)_
 
 ## `qfg workspace`
 
@@ -1318,7 +1493,7 @@ EXAMPLES
   $ qfg workspace
 ```
 
-_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/workspace.ts)_
+_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/workspace.ts)_
 
 ## `qfg workspace bootstrap`
 
@@ -1351,15 +1526,52 @@ EXAMPLES
   $ qfg workspace bootstrap --dir ./our-config --skip-validate
 ```
 
-_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/workspace/bootstrap.ts)_
+_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/workspace/bootstrap.ts)_
 
-## `qfg workspace switch`
+## `qfg workspace create SLUG`
+
+Create a new workspace. Provisions the Gitea repo and default environments, identical to the app's New Workspace UI.
+
+```
+USAGE
+  $ qfg workspace create SLUG [--json] [--interactive] [--no-color] [--verbose] [--name <value>] [--org <value>]
+
+ARGUMENTS
+  SLUG  Workspace slug (lowercase letters, numbers, hyphens)
+
+FLAGS
+  --name=<value>  Human-readable display name (defaults to the slug)
+  --org=<value>   Organization UUID or slug. Required when you belong to more than one organization; inferred otherwise.
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Create a new workspace. Provisions the Gitea repo and default environments, identical to the app's New Workspace UI.
+
+EXAMPLES
+  $ qfg workspace create my-team
+
+  $ qfg workspace create lt-21-smoke --name "Load Test 21"
+
+  $ qfg workspace create my-team --org 11111111-1111-1111-1111-111111111111
+```
+
+_See code: [src/commands/workspace/create.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/workspace/create.ts)_
+
+## `qfg workspace switch [SLUG]`
 
 Switch to a different workspace
 
 ```
 USAGE
-  $ qfg workspace switch [--json] [--interactive] [--no-color] [--verbose]
+  $ qfg workspace switch [SLUG] [--json] [--interactive] [--no-color] [--verbose]
+
+ARGUMENTS
+  SLUG  Workspace slug (or UUID) to switch to. Omit for an interactive picker.
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -1372,9 +1584,11 @@ DESCRIPTION
 
 EXAMPLES
   $ qfg workspace switch
+
+  $ qfg workspace switch my-workspace-slug
 ```
 
-_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.0.11/src/commands/workspace/switch.ts)_
+_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/workspace/switch.ts)_
 <!-- commandsstop -->
 
 ## Local Development
