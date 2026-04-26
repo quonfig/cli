@@ -53,15 +53,49 @@ describe('generate', () => {
       // Error assertion done in catch block
     })
 
-  test
-    .command(['generate'])
-    .catch((error) => {
-      expect(error.message).to.include('No directory specified')
-      expect(error.message).to.include('qfg pull')
+  describe('without --dir flag (qfg-0mj)', () => {
+    let originalApiKey: string | undefined
+    let originalWorkspace: string | undefined
+    let originalDir: string | undefined
+
+    beforeEach(() => {
+      originalApiKey = process.env.QUONFIG_API_KEY
+      originalWorkspace = process.env.QUONFIG_WORKSPACE
+      originalDir = process.env.QUONFIG_DIR
+      // Force the API-key auth branch so the test never touches stored OAuth
+      // tokens or the network. resolveWorkspaceUuid short-circuits with a
+      // specific error when QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is
+      // not — that error is the proof that generate now goes through auth
+      // resolution instead of bailing out with "No directory specified".
+      process.env.QUONFIG_API_KEY = 'qf_uk_test_only_do_not_use'
+      delete process.env.QUONFIG_WORKSPACE
+      delete process.env.QUONFIG_DIR
     })
-    .it('errors when no --dir flag and no QUONFIG_DIR env var', () => {
-      // Error assertion done in catch block
+
+    afterEach(() => {
+      if (originalApiKey === undefined) delete process.env.QUONFIG_API_KEY
+      else process.env.QUONFIG_API_KEY = originalApiKey
+      if (originalWorkspace === undefined) delete process.env.QUONFIG_WORKSPACE
+      else process.env.QUONFIG_WORKSPACE = originalWorkspace
+      if (originalDir === undefined) delete process.env.QUONFIG_DIR
+      else process.env.QUONFIG_DIR = originalDir
     })
+
+    test
+      .command(['generate'])
+      .catch((error) => {
+        // Specific mechanism: generate must invoke resolveWorkspaceUuid when
+        // no dir is provided. With API key set + workspace unset, that helper
+        // emits this specific error before any network/git call. If you delete
+        // the fix and restore the early `No directory specified` bailout,
+        // this assertion fails.
+        expect(error.message).to.include('QUONFIG_WORKSPACE')
+        expect(error.message).to.not.include('No directory specified')
+      })
+      .it('attempts workspace resolution instead of erroring early when no --dir', () => {
+        // Error assertion done in catch block
+      })
+  })
 
   test
     .command(['generate', '--dir', '/nonexistent/path/to/nowhere'])

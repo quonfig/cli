@@ -9,6 +9,7 @@ import {BaseGenerator} from '../codegen/code-generators/base-generator.js'
 import {BaseTypescriptGenerator} from '../codegen/code-generators/base-typescript-generator.js'
 import {NodeTypeScriptGenerator} from '../codegen/code-generators/node-typescript-generator.js'
 import {ReactTypeScriptGenerator} from '../codegen/code-generators/react-typescript-generator.js'
+import {fetchWorkspaceSnapshot, type WorkspaceSnapshot} from '../codegen/fetch-workspace-snapshot.js'
 import {LocalConfigReader} from '../codegen/local-config-reader.js'
 import {type ConfigFile, SupportedLanguage} from '../codegen/types.js'
 import {BaseCommand} from '../index.js'
@@ -125,7 +126,8 @@ Example quonfig.config.json:
 
   static flags = {
     dir: Flags.string({
-      description: 'Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var)',
+      description:
+        'Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var). When omitted, fetches the workspace from the server using your active credentials.',
       env: 'QUONFIG_DIR',
     }),
     'output-directory': Flags.string({
@@ -136,6 +138,11 @@ Example quonfig.config.json:
       default: SupportedLanguage.React,
       description: `Determines for language/framework to generate code for (${Object.values(SupportedLanguage).join(', ')})`,
     }),
+    workspace: Flags.string({
+      char: 'w',
+      description:
+        'Workspace slug or UUID for the remote-fetch path (defaults to QUONFIG_WORKSPACE env var or active profile). Only used when --dir is omitted.',
+    }),
   }
 
   static summary = 'Generate type definitions for your Quonfig configuration'
@@ -145,11 +152,17 @@ Example quonfig.config.json:
 
     this.verboseLog('=== GENERATE COMMAND START ===')
 
+    let snapshot: WorkspaceSnapshot | undefined
+
     try {
-      // Resolve workspace directory
-      const dir = flags.dir
+      // When --dir/QUONFIG_DIR is set, read the local checkout (so users
+      // who edit flag JSON in place keep that workflow). Otherwise clone
+      // the workspace into a tmp dir for codegen-only callers.
+      let dir = flags.dir
       if (!dir) {
-        this.error('No directory specified. Run `qfg pull` first or pass --dir <path>.')
+        this.verboseLog('No --dir/QUONFIG_DIR set; fetching workspace snapshot from server...')
+        snapshot = await fetchWorkspaceSnapshot(this, {workspace: flags.workspace})
+        dir = snapshot.dir
       }
 
       // Look for and read local quonfig.config.json file
@@ -204,6 +217,14 @@ Example quonfig.config.json:
     } catch (error) {
       console.error('ERROR:', error)
       this.error(error as Error)
+    } finally {
+      if (snapshot) {
+        try {
+          await snapshot.cleanup()
+        } catch (cleanupError) {
+          this.verboseLog('Generate', `Snapshot cleanup failed: ${String(cleanupError)}`)
+        }
+      }
     }
 
     this.verboseLog('=== GENERATE COMMAND END ===')
