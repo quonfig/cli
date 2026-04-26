@@ -1,8 +1,20 @@
 import type {ConfigValue} from '@quonfig/node'
-import {ConfigValueType} from '@quonfig/node'
+import {ConfigValueType, durationToMilliseconds} from '@quonfig/node'
 
 const TRUE_VALUES = new Set(['true', '1', 't'])
 const BOOLEAN_VALUES = new Set([...TRUE_VALUES, 'false', '0', 'f'])
+
+// Strict ISO 8601 duration: at least one of D/H/M/S must be present (i.e. bare "P"
+// or "PT" alone are rejected). Mirrors the lenient pattern in @quonfig/node but
+// adds anchors and a non-empty check.
+const ISO_DURATION_PATTERN =
+  /^P(?:\d+(?:\.\d+)?D)?(?:T(?:\d+(?:\.\d+)?H)?(?:\d+(?:\.\d+)?M)?(?:\d+(?:\.\d+)?S)?)?$/
+
+const isValidIsoDuration = (value: string): boolean => {
+  if (!ISO_DURATION_PATTERN.test(value)) return false
+  // Reject "P", "PT" — pattern allows them but they have no components.
+  return value !== 'P' && value !== 'PT'
+}
 
 type ConfigValueWithConfigValueType = [ConfigValue, ConfigValueType]
 
@@ -10,6 +22,7 @@ export const TYPE_MAPPING: Record<string, ConfigValueType> = {
   bool: ConfigValueType.Bool,
   boolean: ConfigValueType.Bool,
   double: ConfigValueType.Double,
+  duration: ConfigValueType.Duration,
   int: ConfigValueType.Int,
   string: ConfigValueType.String,
   'string-list': ConfigValueType.StringList,
@@ -61,6 +74,19 @@ export const coerceIntoType = (type: string, value: string): ConfigValueWithConf
       } catch {
         throw new TypeError(`Invalid default value for JSON: ${value}`)
       }
+    }
+
+    case 'duration': {
+      // durationToMilliseconds() returns 0 on no-match instead of throwing, so
+      // we anchor-check the format ourselves before delegating.
+      if (!isValidIsoDuration(value)) {
+        throw new TypeError(
+          `Invalid default value for duration: ${value}. Expected ISO 8601 duration like PT30S, PT5M, PT1H30M.`,
+        )
+      }
+
+      const millis = durationToMilliseconds(value)
+      return [{duration: {definition: value, millis}}, ConfigValueType.Duration]
     }
 
     default: {

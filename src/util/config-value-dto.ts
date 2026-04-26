@@ -53,7 +53,9 @@ export function mapConfigValueToDto(configValue: ConfigValue, valueType: ConfigV
       value = rawJson ?? configValue.json
     }
   } else if (configValue.duration !== undefined) {
-    value = configValue.duration
+    // Storage / API expects {type: 'duration', value: '<ISO 8601 string>'} — not the
+    // internal {definition, millis} envelope used by the SDK's ConfigValue type.
+    value = configValue.duration.definition
   } else if (configValue.intRange !== undefined) {
     value = configValue.intRange
   } else if ((configValue as Record<string, unknown>).value !== undefined) {

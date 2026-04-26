@@ -258,6 +258,31 @@ describe('create', () => {
       })
   })
 
+  describe('type=duration', () => {
+    test
+      .stdout()
+      .command(['create', 'my.timeout', '--type=duration', '--value=PT90S'])
+      .it('can create a duration config and sends ISO 8601 string as value', (ctx) => {
+        expect(ctx.stdout).to.contain(`Created config: my.timeout`)
+        const input = createResponses.capturedCreateConfigInput
+        expect(input, 'request body was captured').to.not.equal(null)
+        expect(input?.config?.valueType).to.equal('duration')
+        expect(input?.config?.defaultValue).to.deep.equal({
+          type: 'duration',
+          value: 'PT90S',
+        })
+      })
+
+    test
+      .command(['create', 'my.timeout', '--type=duration', '--value=ninety-seconds'])
+      .catch((error) => {
+        expect(error.message).to.contain(`Invalid default value for duration: ninety-seconds`)
+      })
+      .it('returns an error if the value is not an ISO 8601 duration', () => {
+        // Error assertion done in catch block
+      })
+  })
+
   describe('type=log_level', () => {
     test
       .stdout()

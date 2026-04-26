@@ -27,6 +27,7 @@ Use --type to specify the kind of item:
   string-list   A comma-separated list of strings
   json          An arbitrary JSON blob
   boolean       A plain boolean (not a feature flag)
+  duration      An ISO 8601 duration string, e.g. PT30S, PT5M, PT1H30M (SDK returns milliseconds)
   log_level     A dynamic log level (value must be one of ${LOG_LEVELS.join('/')})
 
 This sets the global default value. Override per-environment with:
@@ -53,6 +54,7 @@ Log levels:
     '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world" --secret',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --env-var=MY_ENV_VAR_NAME',
     '<%= config.bin %> <%= command.id %> my.new.string --type json --value="{\\"key\\": \\"value\\"}"',
+    '<%= config.bin %> <%= command.id %> my.timeout --type duration --value PT90S',
     '<%= config.bin %> <%= command.id %> log-level.my-app --type log_level --value WARN',
     '# After creating a flag, set a 20% rollout in production:',
     '<%= config.bin %> set-rollout my.new.flag --environment production --true-percent 20',
@@ -62,7 +64,7 @@ Log levels:
     confidential: Flags.boolean({default: false, description: 'mark the value as confidential'}),
     'env-var': Flags.string({description: 'environment variable to get value from'}),
     type: Flags.string({
-      options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'log_level'],
+      options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'duration', 'log_level'],
       required: true,
     }),
     value: Flags.string({description: 'default value for your new item', required: false}),
