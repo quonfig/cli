@@ -1,0 +1,18 @@
+{
+  "key": "my.json-config-object-form",
+  "type": "config",
+  "valueType": "json",
+  "sendToClientSdk": false,
+  "default": {
+    "rules": [
+      {
+        "criteria": [],
+        "value": {
+          "type": "json",
+          "value": { "name": "example", "count": 42 }
+        }
+      }
+    ]
+  },
+  "environments": []
+}

@@ -46,7 +46,12 @@ function mapGitValue(gitValue: GitValue): ConfigValue {
     }
 
     case 'json': {
-      return {value: {json: {json: value as string}}}
+      // Git-native value may be a parsed JS value (canonical, what `qfg
+      // pull` and our-config produce) or a pre-stringified JSON string
+      // (legacy). Downstream codegen JSON.parses this string, so emit a
+      // string either way.
+      const jsonString = typeof value === 'string' ? value : JSON.stringify(value)
+      return {value: {json: {json: jsonString}}}
     }
 
     case 'log_level': {

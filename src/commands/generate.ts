@@ -181,6 +181,7 @@ Example quonfig.config.json:
       this.verboseLog(`Config read complete. Found ${configFile.configs.length} configs.`)
 
       const fileCreationPromises = []
+      let needsMustache = false
 
       for (const target of targets) {
         // Resolve the language input
@@ -199,6 +200,10 @@ Example quonfig.config.json:
         const generatedCode = generator.generate()
         this.verboseLog(`Code generation complete. Size: ${generatedCode.length}`)
 
+        if (generatedCode.includes("from 'mustache'")) {
+          needsMustache = true
+        }
+
         const fileManager = createFileManager({outputDirectory: outputDir, verboseLog: this.verboseLog.bind(this)})
 
         fileCreationPromises.push(fileManager.writeFile({data: generatedCode, filename: targetConfig.clientFileName}))
@@ -214,6 +219,14 @@ Example quonfig.config.json:
       }
 
       await Promise.all(fileCreationPromises)
+
+      if (needsMustache) {
+        console.log(
+          '\nNote: generated code imports `mustache` for templated config values.\n' +
+            '      Add it to your project: `npm install mustache @types/mustache`\n' +
+            '      (or pnpm/yarn equivalent).',
+        )
+      }
     } catch (error) {
       console.error('ERROR:', error)
       this.error(error as Error)

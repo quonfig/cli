@@ -109,13 +109,26 @@ describe('LocalConfigReader', () => {
       expect(firstValue.value.int).to.equal(42)
     })
 
-    it('maps json values correctly', async () => {
+    it('maps json values correctly when stored as a stringified JSON string', async () => {
       const reader = new LocalConfigReader(FIXTURE_DIR)
       const result = await reader.read()
 
       const jsonConfig = result.configs.find((c) => c.key === 'my.json-config')
       const firstValue = jsonConfig!.rows[0].values[0]
       expect(firstValue.value.json).to.deep.equal({json: '{"name":"example","count":42}'})
+    })
+
+    it('maps json values correctly when stored as an inline object (canonical git-native form)', async () => {
+      // Regression: pre-fix, the parsed object was cast to string and
+      // downstream JSON.parse would throw "[object Object]" is not valid JSON,
+      // silently broadening JSON-config types to Array<any> | Record<string, any>.
+      const reader = new LocalConfigReader(FIXTURE_DIR)
+      const result = await reader.read()
+
+      const jsonConfig = result.configs.find((c) => c.key === 'my.json-config-object-form')
+      const firstValue = jsonConfig!.rows[0].values[0]
+      expect(firstValue.value.json).to.have.property('json').that.is.a('string')
+      expect(JSON.parse(firstValue.value.json!.json)).to.deep.equal({name: 'example', count: 42})
     })
 
     it('reads schemas directory', async () => {
