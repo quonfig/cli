@@ -45,7 +45,7 @@ USAGE
 * [`qfg migrate doctor`](#qfg-migrate-doctor)
 * [`qfg migrate my-code`](#qfg-migrate-my-code)
 * [`qfg migrate status`](#qfg-migrate-status)
-* [`qfg override [NAME]`](#qfg-override-name)
+* [`qfg override [NAME] [VALUE]`](#qfg-override-name-value)
 * [`qfg pull`](#qfg-pull)
 * [`qfg push`](#qfg-push)
 * [`qfg schema NAME`](#qfg-schema-name)
@@ -892,32 +892,57 @@ EXAMPLES
 
 _See code: [src/commands/migrate/status.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/migrate/status.ts)_
 
-## `qfg override [NAME]`
+## `qfg override [NAME] [VALUE]`
 
-Override a flag value for your dev user (not yet implemented).
+Override a flag value for your dev user.
 
 ```
 USAGE
-  $ qfg override [NAME] [--json] [--interactive] [--no-color] [--verbose]
+  $ qfg override [NAME] [VALUE] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--clear]
+    [--env <value>] [--remove]
 
 ARGUMENTS
-  NAME  config/feature-flag/etc. name
+  NAME   flag/config key to override
+  VALUE  new value (type inferred: bool/int/double/json/string)
+
+FLAGS
+  --clear        remove ALL of your overrides in this env
+  --env=<value>  environment to operate in (default: $QUONFIG_ENVIRONMENT)
+  --remove       remove your override on this key
 
 GLOBAL FLAGS
-  --[no-]interactive  Force interactive mode
-  --json              Format output as json.
-  --no-color          Do not colorize output
-  --verbose           Verbose output
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
 
 DESCRIPTION
-  Override a flag value for your dev user (not yet implemented).
+  Override a flag value for your dev user.
 
-  The Quonfig replacement writes a top-priority rule keyed on the dev-only
-  quonfig-user.email attribute. See project/plans/dev-overrides.md for design
-  and bead qfg-pj0.6 for delivery status.
+  Writes a top-priority rule keyed on the dev-only quonfig-user.email property,
+  so the override only fires for SDK clients that set quonfig-user.email in
+  their context. Production SDKs typically don't set this property, which makes
+  overrides effectively inert in production.
+
+  Examples
+  qfg override                                # list flags where you have an override
+  qfg override my.flag true                   # set bool override
+  qfg override my.flag 42                     # set int override
+  qfg override my.flag '{"a":1}'              # set json override
+  qfg override my.flag --remove               # remove your override on my.flag
+  qfg override --clear                        # remove ALL of your overrides in this env
 
 EXAMPLES
-  $ qfg override  # currently exits non-zero with a not-yet-implemented message
+  $ qfg override
+
+  $ qfg override my.flag true
+
+  $ qfg override my.flag --remove
+
+  $ qfg override --clear
+
+  $ qfg override my.flag true --env=staging
 ```
 
 _See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/override.ts)_
