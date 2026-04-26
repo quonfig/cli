@@ -9,6 +9,8 @@ import {
   getActiveProfile,
   loadAuthConfig,
   saveAuthConfig,
+  saveTokens,
+  type TokenData,
   type TokenStorageOptions,
 } from '../../src/util/token-storage.js'
 
@@ -165,6 +167,89 @@ workspace = workspace-work # Work Org - Work Workspace
       process.env.QUONFIG_DOMAIN = 'quonfig-staging.com'
       const stagingLoaded = await loadAuthConfig(options)
       expect(stagingLoaded?.profiles.default.workspace).to.equal('staging-ws')
+    })
+  })
+
+  describe('post-write verification', () => {
+    const sampleTokens: TokenData = {
+      accessToken: 'access',
+      expiresAt: Date.now() + 60_000,
+      refreshToken: 'refresh',
+      userEmail: 'a@b.com',
+      userId: 'u1',
+    }
+
+    it('saveTokens throws if the target file is missing after rename', async () => {
+      const originalRename = fs.promises.rename
+      // Simulate a wedged/clobbered rename: the call returns success but the
+      // target file never appears on disk (e.g. concurrent npm install -g).
+      ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = (async (
+        src: fs.PathLike,
+      ) => {
+        // Clean up the tmp file but leave the target absent.
+        try {
+          await originalRename.call(fs.promises, src, src)
+          await fs.promises.unlink(src)
+        } catch {
+          // ignore
+        }
+      }) as typeof fs.promises.rename
+
+      try {
+        let caught: Error | undefined
+        try {
+          await saveTokens(sampleTokens, options)
+        } catch (error) {
+          caught = error as Error
+        }
+
+        expect(caught, 'expected saveTokens to throw when target file is missing').to.exist
+        expect(caught!.message).to.match(/token|verif|persist/i)
+      } finally {
+        ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = originalRename
+      }
+    })
+
+    it('saveAuthConfig throws if the target file is missing after rename', async () => {
+      const config: AuthConfig = {
+        defaultProfile: 'default',
+        profiles: {default: {workspace: 'ws-1'}},
+      }
+
+      const originalRename = fs.promises.rename
+      ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = (async (
+        src: fs.PathLike,
+      ) => {
+        try {
+          await originalRename.call(fs.promises, src, src)
+          await fs.promises.unlink(src)
+        } catch {
+          // ignore
+        }
+      }) as typeof fs.promises.rename
+
+      try {
+        let caught: Error | undefined
+        try {
+          await saveAuthConfig(config, options)
+        } catch (error) {
+          caught = error as Error
+        }
+
+        expect(caught, 'expected saveAuthConfig to throw when target file is missing').to.exist
+        expect(caught!.message).to.match(/config|verif|persist/i)
+      } finally {
+        ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = originalRename
+      }
+    })
+
+    it('saveTokens succeeds and the file round-trips on a normal write', async () => {
+      await saveTokens(sampleTokens, options)
+      // Round-trip via the existing loader path
+      const tokenFile = path.join(quonfigDir, 'tokens.json')
+      const content = fs.readFileSync(tokenFile, 'utf8')
+      const parsed = JSON.parse(content) as TokenData
+      expect(parsed.accessToken).to.equal('access')
     })
   })
 

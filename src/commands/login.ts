@@ -6,7 +6,13 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {decodeJWT, pollForToken, requestDeviceCode} from '../util/oauth-client.js'
 import {getApiUrl} from '../util/domain-urls.js'
-import {loadAuthConfig, saveAuthConfig, saveTokens} from '../util/token-storage.js'
+import {
+  getAuthConfigFilePath,
+  getTokenFilePath,
+  loadAuthConfig,
+  saveAuthConfig,
+  saveTokens,
+} from '../util/token-storage.js'
 
 export default class Login extends BaseCommand {
   static description = 'Log in to Quonfig via WorkOS device authorization'
@@ -68,14 +74,22 @@ export default class Login extends BaseCommand {
       expiresAt = (jwtPayload.exp as number) * 1000
     }
 
-    // Save tokens
-    await saveTokens({
-      accessToken: tokenResponse.access_token,
-      expiresAt,
-      refreshToken: tokenResponse.refresh_token,
-      userEmail,
-      userId: user.id,
-    })
+    // Save tokens — verifies the file actually persisted before returning.
+    this.verboseLog('Saving tokens to', getTokenFilePath())
+    let tokensPath: string
+    try {
+      tokensPath = await saveTokens({
+        accessToken: tokenResponse.access_token,
+        expiresAt,
+        refreshToken: tokenResponse.refresh_token,
+        userEmail,
+        userId: user.id,
+      })
+    } catch (error) {
+      return this.err(`Login failed: could not save tokens. ${(error as Error).message}`)
+    }
+
+    this.verboseLog('Tokens saved at', tokensPath)
 
     // Resolve org_id → workspace UUID via the API
     let workspaceId: string | undefined
@@ -144,18 +158,26 @@ export default class Login extends BaseCommand {
     const isFirstProfile = !existingConfig || Object.keys(existingConfig.profiles).length === 0
     const shouldSetDefault = isFirstProfile || profileName === 'default' || !existingConfig?.defaultProfile
 
-    await saveAuthConfig({
-      defaultProfile: shouldSetDefault ? profileName : existingConfig?.defaultProfile,
-      profiles: {
-        ...existingConfig?.profiles,
-        [profileName]: {
-          workspace: workspaceId || orgId || 'unknown',
-          workspaceName: workspaceName || (orgId ? `org:${orgId}` : undefined),
-          workspaceSlug,
-          organizationName,
+    this.verboseLog('Saving auth config to', getAuthConfigFilePath())
+    let configPath: string
+    try {
+      configPath = await saveAuthConfig({
+        defaultProfile: shouldSetDefault ? profileName : existingConfig?.defaultProfile,
+        profiles: {
+          ...existingConfig?.profiles,
+          [profileName]: {
+            workspace: workspaceId || orgId || 'unknown',
+            workspaceName: workspaceName || (orgId ? `org:${orgId}` : undefined),
+            workspaceSlug,
+            organizationName,
+          },
         },
-      },
-    })
+      })
+    } catch (error) {
+      return this.err(`Login failed: could not save auth config. ${(error as Error).message}`)
+    }
+
+    this.verboseLog('Auth config saved at', configPath)
 
     this.log('\nSuccessfully logged in!')
     if (userEmail) {

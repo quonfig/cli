@@ -63,12 +63,41 @@ const ensureQuonfigDir = async (options?: TokenStorageOptions) => {
   }
 }
 
-export const saveTokens = async (tokens: TokenData, options?: TokenStorageOptions): Promise<void> => {
+export const getTokenFilePath = (options?: TokenStorageOptions): string => getTokenFile(options)
+export const getAuthConfigFilePath = (options?: TokenStorageOptions): string => getConfigFile(options)
+
+const verifyWritten = async (filePath: string, label: string): Promise<void> => {
+  let stat
+  try {
+    stat = await fs.promises.stat(filePath)
+  } catch (error) {
+    throw new Error(
+      `Failed to persist ${label} to ${filePath}: file is missing after write (${(error as Error).message}). ` +
+        `This can happen if a concurrent process (e.g. npm install -g) clobbered the install. Re-run after it finishes.`,
+    )
+  }
+
+  if (!stat.isFile() || stat.size === 0) {
+    throw new Error(`Failed to persist ${label} to ${filePath}: file is empty or not a regular file after write.`)
+  }
+}
+
+export const saveTokens = async (tokens: TokenData, options?: TokenStorageOptions): Promise<string> => {
   await ensureQuonfigDir(options)
   const targetFile = getTokenFile(options)
   const tmpFile = `${targetFile}.tmp`
   await fs.promises.writeFile(tmpFile, JSON.stringify(tokens, null, 2), {encoding: 'utf8', mode: 0o600})
   await fs.promises.rename(tmpFile, targetFile)
+  await verifyWritten(targetFile, 'tokens')
+  // Round-trip parse to confirm the file on disk is the JSON we just wrote.
+  try {
+    const onDisk = await fs.promises.readFile(targetFile, 'utf8')
+    JSON.parse(onDisk)
+  } catch (error) {
+    throw new Error(`Failed to verify tokens at ${targetFile}: ${(error as Error).message}`)
+  }
+
+  return targetFile
 }
 
 export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenData | null> => {
@@ -80,7 +109,7 @@ export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenDa
   }
 }
 
-export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageOptions): Promise<void> => {
+export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageOptions): Promise<string> => {
   await ensureQuonfigDir(options)
 
   let configContent = ''
@@ -114,6 +143,8 @@ export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageO
   const configTmp = `${configTarget}.tmp`
   await fs.promises.writeFile(configTmp, configContent, {encoding: 'utf8', mode: 0o600})
   await fs.promises.rename(configTmp, configTarget)
+  await verifyWritten(configTarget, 'auth config')
+  return configTarget
 }
 
 export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<AuthConfig | null> => {
