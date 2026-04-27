@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.22 - 2026-04-27
+
+- feat: `qfg delete <key>` — server-mediated delete that resolves the key's type via `metadata.list` and dispatches to the existing flags/configs/logLevels delete oRPC endpoints. Confirmation required: `--yes` for scripts, otherwise an interactive type-back prompt; refuses to proceed when stdin is not a TTY without `--yes` (qfg-88a).
+- feat: `qfg delete` threads `expectedCommitSha` from `metadata.list` and retries once on a 409 conflict by parsing the fresh SHA from the server message — matches the override pattern (qfg-o2s).
+- fix: SDK-key eval path no longer defaults to the dead `api.quonfig.com` hostname. The CLI now resolves the delivery URL via a new `getDeliveryUrl()` helper that returns `QUONFIG_API_URL` if set, else `https://primary.${QUONFIG_DOMAIN || 'quonfig.com'}`. Staging users with `QUONFIG_DOMAIN=quonfig-staging.com` automatically pick up `primary.quonfig-staging.com` with no extra env var.
+
 ## 0.0.21 - 2026-04-26
 
 - feat: `qfg override <flag> <value>` rewritten against the new oRPC `flags/findOrCreateOverride` endpoint. Previous releases pointed at the dead Prefab `/internal/ops/v1/assign-variant` endpoint and failed with `Unexpected token <` (qfg-pj0.6, qfg-pj0.1).
