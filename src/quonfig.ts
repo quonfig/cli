@@ -2,6 +2,7 @@ import {Quonfig} from '@quonfig/node'
 import type {ConfigResponse, Value, Rule} from '@quonfig/node'
 
 import {CommandLike} from './ui/get-key.js'
+import {getDeliveryUrl} from './util/domain-urls.js'
 
 type Flags = {
   ['sdk-key']?: string
@@ -28,7 +29,7 @@ export const initQuonfig = async (_ctx: CommandLike, flagsOrDatafile: FlagsOrDat
     sdkKey = flagsOrDatafile['sdk-key']
   }
 
-  const apiUrl = process.env.QUONFIG_API_URL || 'https://api.quonfig.com'
+  const apiUrl = getDeliveryUrl()
 
   quonfig = new Quonfig({
     sdkKey,

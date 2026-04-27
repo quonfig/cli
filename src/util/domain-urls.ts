@@ -21,3 +21,12 @@ export const getAppUrl = (domain?: string): string => {
   const actualDomain = domain || getDomain()
   return `https://app.${actualDomain}`
 }
+
+export const getDeliveryUrl = (domain?: string): string => {
+  if (process.env.QUONFIG_API_URL) {
+    return process.env.QUONFIG_API_URL
+  }
+
+  const actualDomain = domain || getDomain()
+  return `https://primary.${actualDomain}`
+}

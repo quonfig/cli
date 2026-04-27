@@ -79,26 +79,21 @@ The CLI authenticates via OAuth against `id.quonfig.com`:
 
 ### 5. API Endpoints
 
-The CLI talks to the Quonfig API via `api.quonfig.com`. All API paths match the current Reforge/Launch API:
+The CLI talks to two services:
 
-- `/all-config-types/v1/*` — list, get configs
-- `/feature-flags/v1/*` — CRUD flags
-- `/configs/v1/*` — CRUD configs
-- `/schemas/v1/*` — CRUD schemas
-- `/environments/v1/*` — list environments
+- **Mutation API** (`app-quonfig`) at `https://app.${QUONFIG_DOMAIN}` — resolved via `getApiUrl()` in `src/util/domain-urls.ts`. All API paths match the current Reforge/Launch API:
+  - `/all-config-types/v1/*` — list, get configs
+  - `/feature-flags/v1/*` — CRUD flags
+  - `/configs/v1/*` — CRUD configs
+  - `/schemas/v1/*` — CRUD schemas
+  - `/environments/v1/*` — list environments
+- **Delivery API** (`api-delivery`) at `https://primary.${QUONFIG_DOMAIN}` — resolved via `getDeliveryUrl()`. Used by SDK-key-based eval (`qfg get`).
 
-**These endpoints must be implemented in the Quonfig Node backend** (Epic 1) before the CLI is functional.
+`QUONFIG_DOMAIN` defaults to `quonfig.com`. Set it to `quonfig-staging.com` for staging.
 
 ### 6. SDK default source URL
 
-`src/quonfig.ts` line 41 still defaults to `https://api.prefab.cloud` for the SDK source. This should become the Quonfig delivery service URL once available.
-
-```typescript
-// Current:
-options.sources = process.env.QUONFIG_API_URL ? [process.env.QUONFIG_API_URL] : ['https://api.prefab.cloud']
-// Should become:
-options.sources = process.env.QUONFIG_API_URL ? [process.env.QUONFIG_API_URL] : ['https://api.quonfig.com']
-```
+Resolved: `src/quonfig.ts` now uses `getDeliveryUrl()`, which returns `process.env.QUONFIG_API_URL` if set, otherwise `https://primary.${QUONFIG_DOMAIN}`.
 
 ### 7. Context namespace
 
