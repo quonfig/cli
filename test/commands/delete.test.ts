@@ -90,6 +90,25 @@ describe('delete', () => {
       })
   })
 
+  describe('expectedCommitSha (acceptance #8)', () => {
+    test
+      .stdout()
+      .command(['delete', 'feature.flag.to-delete', '--yes'])
+      .it('threads expectedCommitSha from metadata.list version into delete payload', () => {
+        const sent = deleteResponses.lastFlagDeleteInput
+        expect(sent.expectedCommitSha).to.equal('sha-flag-current')
+      })
+
+    test
+      .stdout()
+      .do(() => deleteResponses.armStaleRetry())
+      .command(['delete', 'feature.flag.to-delete', '--yes'])
+      .it('retries once with a fresh SHA after a 409 conflict', () => {
+        expect(deleteResponses.flagDeleteCallCount).to.equal(2)
+        expect(deleteResponses.lastFlagDeleteInput.expectedCommitSha).to.equal('sha-fresh')
+      })
+  })
+
   describe('not logged in (acceptance #5)', () => {
     let restored = false
     before(() => {

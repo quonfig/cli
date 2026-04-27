@@ -19,6 +19,12 @@ export let flagDeleteCallCount = 0
 export let configDeleteCallCount = 0
 export let logLevelDeleteCallCount = 0
 
+// Track stale-SHA retry behavior: first call rejects, second accepts.
+let staleRetryArmed = false
+export function armStaleRetry() {
+  staleRetryArmed = true
+}
+
 export function resetCaptured() {
   lastFlagDeleteInput = null
   lastConfigDeleteInput = null
@@ -26,6 +32,7 @@ export function resetCaptured() {
   flagDeleteCallCount = 0
   configDeleteCallCount = 0
   logLevelDeleteCallCount = 0
+  staleRetryArmed = false
 }
 
 const metadataResponse = {
@@ -59,6 +66,19 @@ const flagsDeleteHandler = http.post('https://app.quonfig.com/api/v1/flags/delet
   const body = (await request.json()) as any
   lastFlagDeleteInput = body?.json
   flagDeleteCallCount += 1
+
+  if (staleRetryArmed) {
+    staleRetryArmed = false
+    return HttpResponse.json(
+      {
+        json: {
+          message: 'feature-flags/feature.flag.to-delete.json was modified (expected sha-flag-current, got sha-fresh)',
+        },
+      },
+      {status: 409},
+    )
+  }
+
   return HttpResponse.json({json: {ok: true, commitSha: 'sha-after-delete'}})
 })
 

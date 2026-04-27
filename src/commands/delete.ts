@@ -26,6 +26,16 @@ const DELETE_ROUTES: Record<string, {endpoint: string; keyField: string}> = {
   log_level: {endpoint: '/api/v1/logLevels/delete', keyField: 'logLevelKey'},
 }
 
+/**
+ * Parse the fresh SHA out of a 409 conflict message of the form
+ *   "<path> was modified (expected <oldSha>, got <newSha>)"
+ */
+function parseFreshShaFromConflict(message: string | undefined): string | undefined {
+  if (!message) return undefined
+  const match = message.match(/got\s+([\w.-]+)\)/)
+  return match?.[1]
+}
+
 export default class Delete extends APICommand {
   static args = {
     name: Args.string({description: 'flag/config/log-level key to delete', required: true}),
@@ -95,28 +105,45 @@ Examples
       }
     }
 
-    const payload = {
-      workspaceId: this.workspaceId,
-      [route.keyField]: key,
-    }
+    let expectedCommitSha = item.version
+    let attempt = 0
 
-    this.verboseLog(`RPC ${route.endpoint}`, payload)
+    while (attempt < 2) {
+      attempt += 1
+      const payload = {
+        workspaceId: this.workspaceId,
+        [route.keyField]: key,
+        ...(expectedCommitSha ? {expectedCommitSha} : {}),
+      }
 
-    const res = await this.apiClient.post(route.endpoint, payload)
-    if (!res.ok) {
+      this.verboseLog(`RPC ${route.endpoint}`, payload)
+
+      // eslint-disable-next-line no-await-in-loop
+      const res = await this.apiClient.post(route.endpoint, payload)
+      if (res.ok) {
+        const commitSha = (res.json as {commitSha?: string})?.commitSha
+        const shaSuffix = commitSha ? ` (commit ${commitSha})` : ''
+        return this.ok(`${checkmark} Deleted ${item.type.replaceAll('_', ' ')}: ${key}${shaSuffix}`, {
+          key,
+          type: item.type,
+          ...(commitSha ? {commitSha} : {}),
+        })
+      }
+
       if (res.status === 404) {
         return this.err(`${key} not found on the server (it may have been deleted by someone else).`)
       }
 
+      if (res.status === 409 && attempt === 1) {
+        const fresh = parseFreshShaFromConflict((res.error as {message?: string} | undefined)?.message)
+        if (fresh) {
+          this.verboseLog(`Stale SHA — retrying delete with fresh SHA ${fresh}`)
+          expectedCommitSha = fresh
+          continue
+        }
+      }
+
       return this.err(`Failed to delete ${key}: ${res.status} ${JSON.stringify(res.error)}`)
     }
-
-    const commitSha = (res.json as {commitSha?: string})?.commitSha
-    const shaSuffix = commitSha ? ` (commit ${commitSha})` : ''
-    return this.ok(`${checkmark} Deleted ${item.type.replaceAll('_', ' ')}: ${key}${shaSuffix}`, {
-      key,
-      type: item.type,
-      ...(commitSha ? {commitSha} : {}),
-    })
   }
 }
