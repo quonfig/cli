@@ -16,6 +16,17 @@
 /** A single file-level change between the local working tree and remote HEAD. */
 export interface FileDelta {
   /**
+   * Local content for `added`/`modified`. Absent for `deleted`. Required by
+   * the `configs.push` server endpoint when sending the delta over the wire.
+   */
+  afterJson?: string
+  /**
+   * Remote content for `modified`/`deleted`. Absent for `added`. Required by
+   * the `configs.push` server endpoint to deep-diff per-environment rule
+   * changes for authorization.
+   */
+  beforeJson?: string
+  /**
    * `added`    — present locally, absent on remote
    * `modified` — present in both, content differs
    * `deleted`  — absent locally, present on remote
@@ -51,14 +62,7 @@ export interface DiffSummary {
  * Top-level directories we present as named rows. Anything else funnels into
  * `other`. Keeping this closed-set avoids one-off typos silently looking fine.
  */
-const KNOWN_GROUPS = [
-  'configs',
-  'feature-flags',
-  'segments',
-  'schemas',
-  'schemas-protected',
-  'log-levels',
-] as const
+const KNOWN_GROUPS = ['configs', 'feature-flags', 'segments', 'schemas', 'schemas-protected', 'log-levels'] as const
 
 const DESTRUCTIVE_DELETE_COUNT = 10
 const DESTRUCTIVE_DELETE_RATIO = 0.25
@@ -125,7 +129,14 @@ export function summarizeDiff(
     const localDir = renderOpts?.localDir ?? '.'
 
     const lines: string[] = []
-    lines.push(`Pushing to workspace:  ${slug}`, `  Git repo:            ${repo}`, `  Branch:              ${branch}`, `  Local dir:           ${localDir}`, '', 'Changes vs. remote HEAD:')
+    lines.push(
+      `Pushing to workspace:  ${slug}`,
+      `  Git repo:            ${repo}`,
+      `  Branch:              ${branch}`,
+      `  Local dir:           ${localDir}`,
+      '',
+      'Changes vs. remote HEAD:',
+    )
 
     // Render groups in a stable order: known groups first (in declared order),
     // then `other` if present. Skip rows with zero total activity.

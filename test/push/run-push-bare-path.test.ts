@@ -6,7 +6,13 @@ import * as path from 'node:path'
 import {PassThrough} from 'node:stream'
 
 import {computeBarePathDiff} from '../../src/push/bare-path-diff.js'
-import {runPush, type GitOps, type GiteaTokenMintResult, type RunPushDeps} from '../../src/push/run-push.js'
+import {
+  runPush,
+  type ConfigPushInput,
+  type GitOps,
+  type GiteaTokenMintResult,
+  type RunPushDeps,
+} from '../../src/push/run-push.js'
 
 /**
  * Integration-lite test that stands up a real bare git repo and drives
@@ -65,14 +71,17 @@ function writeLocal(dir: string, files: Record<string, string>): void {
  * push() as a no-op since we only want to drive runPush far enough to
  * verify the diff summary + dispatch.
  */
-function buildBarePathDepsForTest(remoteUrl: string, io: {input: PassThrough; output: PassThrough}): {
+function buildBarePathDepsForTest(
+  remoteUrl: string,
+  io: {input: PassThrough; output: PassThrough},
+): {
   deps: RunPushDeps
   cleanup: () => void
-  calls: {push: string[]; copyDirMirror: Array<[string, string]>}
+  calls: {pushToServer: ConfigPushInput[]}
 } {
   let authenticatedRepoUrl: string | undefined
-  let probe: {deltas: {kind: string; path: string}[]; scratchDir: string; totalRemoteFiles: number} | undefined
-  const calls = {push: [] as string[], copyDirMirror: [] as Array<[string, string]>}
+  let probe: Awaited<ReturnType<typeof computeBarePathDiff>> | undefined
+  const calls = {pushToServer: [] as ConfigPushInput[]}
 
   const ensureProbe = async (dir: string) => {
     if (probe) return probe
@@ -87,12 +96,8 @@ function buildBarePathDepsForTest(remoteUrl: string, io: {input: PassThrough; ou
     async fetch() {},
     async diffHeadVsOrigin(dir) {
       const p = await ensureProbe(dir)
-      return p.deltas as {kind: 'added' | 'deleted' | 'modified'; path: string}[]
+      return p.deltas
     },
-    async push(dir) {
-      calls.push.push(dir)
-    },
-    getLocalAuthor: async () => ({name: 'Test', email: 'test@example.com'}),
     async countFilesInRemote(dir) {
       const p = await ensureProbe(dir)
       return p.totalRemoteFiles
@@ -114,8 +119,9 @@ function buildBarePathDepsForTest(remoteUrl: string, io: {input: PassThrough; ou
     },
     validate: async () => ({errors: []}),
     gitOps,
-    async copyDirMirror(source, dest) {
-      calls.copyDirMirror.push([source, dest])
+    async pushToServer(input) {
+      calls.pushToServer.push(input)
+      return {kind: 'success', commitSha: 'fake-sha-1234'}
     },
     confirmIO: io,
     log() {},
@@ -176,7 +182,7 @@ describe('runPush: bare-path with real computeBarePathDiff', () => {
         deps,
       )
       expect(result.kind).to.equal('no-op')
-      expect(calls.push).to.deep.equal([])
+      expect(calls.pushToServer).to.deep.equal([])
     } finally {
       cleanup()
     }
@@ -205,13 +211,13 @@ describe('runPush: bare-path with real computeBarePathDiff', () => {
 
     const {deps, cleanup, calls} = buildBarePathDepsForTest(remote, io)
     try {
-      // The bare dispatch ends up invoking cloneAndStackPush against the real
-      // remote — this will actually push! We want that end-to-end coverage.
+      // bare-path dispatch now sends FileDelta[] to pushToServer; the fake
+      // returns success and runPush propagates the commit SHA.
       const result = await runPush(
         {
           dir: local,
           requestedTarget: 'test-ws',
-          yes: true, // non-destructive — --yes skips Y/N
+          yes: true,
           skipValidate: true,
           noPinWrite: true,
         },
@@ -222,10 +228,11 @@ describe('runPush: bare-path with real computeBarePathDiff', () => {
         expect(result.dispatchedAs).to.equal('bare-path')
       }
 
-      // Our `push` GitOps was not called — cloneAndStackPush does its own push.
-      expect(calls.push).to.deep.equal([])
-      // The copyDirMirror dep should have been called once (localDir -> scratchDir).
-      expect(calls.copyDirMirror).to.have.length(1)
+      expect(calls.pushToServer).to.have.length(1)
+      const sent = calls.pushToServer[0]
+      const add = sent.files.find((f) => f.path === 'configs/new.json')!
+      expect(add.kind).to.equal('add')
+      expect(add.afterJson).to.equal('{"k":2}\n')
     } finally {
       cleanup()
     }

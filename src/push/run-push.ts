@@ -20,9 +20,7 @@
  */
 
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 
-import {MIGRATOR_IDENTITY, PushIdentity, cloneAndStackPush} from '../util/clone-and-stack-push.js'
 import {readWorkspaceSlug, writeWorkspaceSlug} from '../util/quonfig-json.js'
 import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
@@ -41,22 +39,48 @@ export interface GitOps {
   countFilesInRemote(dir: string): Promise<number>
   /**
    * Produce the list of file deltas to render in the Guard 3 summary and
-   * (for the bare path) commit. For the clone path this is HEAD vs origin/main.
-   * For the bare path the caller hands us the deltas itself.
+   * send to the server. Each delta carries before/after JSON content per
+   * the `configs.push` wire shape (qfg-azk.13). For the clone path this is
+   * HEAD vs origin/main; for the bare path it's local vs probe-clone.
    */
   diffHeadVsOrigin(dir: string): Promise<FileDelta[]>
   /** `git fetch origin` in the given dir. */
   fetch(dir: string): Promise<void>
-  /** Read local git config for author identity (used for bare-path commits). */
-  getLocalAuthor(dir: string): Promise<PushIdentity | undefined>
   /** Returns the `remote.origin.url` for the repo, or undefined if unset / not a repo. */
   getRemoteOriginUrl(dir: string): Promise<string | undefined>
   /** Returns true if the dir has a `.git/` (worktree or repo). */
   isGitRepo(dir: string): Promise<boolean>
-  /** `git push origin main`. Throws with a PushConflict-ish message on non-ff. */
-  push(dir: string): Promise<void>
   /** Set origin to `url` (add if missing, set-url if present). */
   setRemoteOrigin(dir: string, url: string): Promise<void>
+}
+
+/** Server-side `kind` enum (matches `FileDeltaSchema` in app-quonfig). */
+export type ServerFileKind = 'add' | 'delete' | 'modify'
+
+export interface ServerFileDelta {
+  afterJson?: string
+  beforeJson?: string
+  kind: ServerFileKind
+  path: string
+}
+
+export interface ConfigPushInput {
+  expectedSha?: string
+  files: ServerFileDelta[]
+  message?: string
+  workspaceId: string
+}
+
+export type ConfigPushResult =
+  | {kind: 'bad-request'; message: string}
+  | {kind: 'conflict'; message: string}
+  | {commitSha: string; kind: 'success'}
+  | {denials: PushDenial[]; kind: 'denied'}
+
+export interface PushDenial {
+  path: string
+  reason: string
+  requiredPermission: string
 }
 
 export type ConfirmIO = {
@@ -82,18 +106,30 @@ export interface RunPushInput {
 export interface RunPushDeps {
   /** Optional io streams for confirmation prompts. Defaults to process stdin/stdout. */
   confirmIO?: ConfirmIO
-  /**
-   * Copy files from `sourceDir` into `destDir`, skipping `.git/`. Used by the
-   * bare path as the `applyDelta` callback handed to `cloneAndStackPush`.
-   */
-  copyDirMirror(sourceDir: string, destDir: string): Promise<void>
   /** Error logger; defaults to console.error. */
   errLog?: (line: string) => void
   gitOps: GitOps
   /** Logger; defaults to console.log. */
   log?: (line: string) => void
-  /** Mint a write token via the backend. */
+  /**
+   * Resolve the backend's identity for this workspace. Returns repoUrl,
+   * workspaceSlug, workspaceId — used by the identity check and (for
+   * read-only auth) by the bare-path probe-clone and clone-path fetch.
+   *
+   * Named `mintWriteToken` for historical reasons; as of qfg-azk.13 the
+   * push code path no longer mints a write-scoped Gitea token (server-side
+   * commit via `configs.push`), so the real implementation now mints a
+   * read-scope token. The name is preserved to keep the test harness shape
+   * stable across the qfg-azk.13 transition.
+   */
   mintWriteToken(requestedTarget: string): Promise<GiteaTokenMintResult>
+  /**
+   * Call the server-side `configs.push` oRPC procedure. Returns a tagged
+   * union so callers can distinguish success / per-file denials / a stale
+   * expectedSha conflict / a path allow-list violation without parsing
+   * HTTP status codes.
+   */
+  pushToServer(input: ConfigPushInput): Promise<ConfigPushResult>
   /** Run `qfg validate` semantics. Should throw on error. */
   validate(dir: string): Promise<{errors: string[]}>
 }
@@ -211,149 +247,20 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   // repo into a scratch dir inside `.quonfig-push-clone/` and stack a commit
   // that mirrors the local dir's contents on top.
   const isClonePath = hasGit && remoteOriginUrl !== undefined && sameRepo(remoteOriginUrl, backend.repoUrl)
+  const dispatchedAs: 'bare-path' | 'clone-path' = isClonePath ? 'clone-path' : 'bare-path'
 
+  // Clone path: align origin with the backend so the gitOps.fetch + diff
+  // walk authenticates against the read URL we minted. The bare path's
+  // probe-clone path bypasses local origin entirely.
   if (isClonePath) {
-    return doClonePath(input, deps, backend, requiresTypedSlug, repoPinSlug === undefined, log)
+    await deps.gitOps.setRemoteOrigin(input.dir, backend.repoUrl)
+    log('Fetching from remote...')
+    await deps.gitOps.fetch(input.dir)
   }
-
-  return doBarePath(input, deps, backend, requiresTypedSlug, repoPinSlug === undefined, log)
-}
-
-async function doClonePath(
-  input: RunPushInput,
-  deps: RunPushDeps,
-  backend: GiteaTokenMintResult,
-  requiresTypedSlug: boolean,
-  unpinned: boolean,
-  log: (line: string) => void,
-): Promise<RunPushResult> {
-  // Point origin at the authenticated URL so `git fetch` / `git push` work
-  // without touching global credential helpers.
-  await deps.gitOps.setRemoteOrigin(input.dir, backend.repoUrl)
-
-  log('Fetching from remote...')
-  await deps.gitOps.fetch(input.dir)
 
   const deltas = await deps.gitOps.diffHeadVsOrigin(input.dir)
   const totalFilesInRemote = await deps.gitOps.countFilesInRemote(input.dir)
-  const summary = summarizeDiff(deltas, {totalFilesInRemote, unpinned})
-
-  log('')
-  log(
-    summary.renderText({
-      workspaceSlug: backend.workspaceSlug,
-      repoUrl: stripAuth(backend.repoUrl),
-      branch: 'main',
-      localDir: input.dir,
-    }),
-  )
-  log('')
-
-  // Short-circuit: literally nothing to push.
-  if (summary.totals.filesTouched === 0) {
-    return {kind: 'no-op', reason: 'Local tree matches remote HEAD. Nothing to push.'}
-  }
-
-  const ok = await decideConfirm({
-    destructive: summary.isDestructive,
-    requiresTypedSlug,
-    yes: input.yes,
-    workspaceSlug: backend.workspaceSlug,
-    confirmIO: deps.confirmIO,
-  })
-  if (!ok) {
-    log('Aborted, nothing pushed.')
-    return {kind: 'aborted', reason: 'user declined at confirm prompt'}
-  }
-
-  log('Pushing to origin/main...')
-  try {
-    await deps.gitOps.push(input.dir)
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error)
-    if (/non-fast-forward|fetch first|rejected/i.test(msg)) {
-      throw new PushFatalError(
-        'Remote has changes not in local — run `qfg pull` first, then re-run `qfg push`.',
-        'NON_FAST_FORWARD',
-      )
-    }
-
-    throw new PushFatalError(`Push failed: ${msg}`, 'PUSH_FAILED')
-  }
-
-  // Offer to pin the workspace slug in quonfig.json if missing. Non-fatal.
-  if (unpinned && !input.noPinWrite) {
-    try {
-      await writeWorkspaceSlug(input.dir, backend.workspaceSlug)
-      log(`Wrote workspace = "${backend.workspaceSlug}" into quonfig.json`)
-    } catch {
-      // non-fatal; pin is advisory
-    }
-  }
-
-  return {kind: 'pushed', dispatchedAs: 'clone-path'}
-}
-
-async function doBarePath(
-  input: RunPushInput,
-  deps: RunPushDeps,
-  backend: GiteaTokenMintResult,
-  requiresTypedSlug: boolean,
-  unpinned: boolean,
-  log: (line: string) => void,
-): Promise<RunPushResult> {
-  // Scratch clone location: sibling `.quonfig-push-clone-<timestamp>` so we
-  // don't clobber or re-use anything from a previous run.
-  const scratchDir = path.join(
-    path.dirname(path.resolve(input.dir)),
-    `.quonfig-push-clone-${Date.now()}`,
-  )
-
-  // Local author for the migrated commit. Prefer the local git config in
-  // `input.dir` so attribution matches what the user has set. If it is not
-  // available, fall back to the migrator identity but tell the user — the plan
-  // requires this be loud.
-  let author: PushIdentity = MIGRATOR_IDENTITY
-  try {
-    const local = await deps.gitOps.getLocalAuthor(input.dir)
-    if (local && local.name && local.email) {
-      author = local
-    } else {
-      log(
-        `Warning: no local git user.name/user.email in ${input.dir}; commits will be attributed to ${MIGRATOR_IDENTITY.name} <${MIGRATOR_IDENTITY.email}>.`,
-      )
-    }
-  } catch {
-    log(
-      `Warning: could not read local git user identity; commits will be attributed to ${MIGRATOR_IDENTITY.name} <${MIGRATOR_IDENTITY.email}>.`,
-    )
-  }
-
-  // We need the deltas for the Guard 3 summary BEFORE we decide to commit and
-  // push. To produce them we need the scratch clone in hand (so we can compare
-  // file-by-file). We clone into the scratch dir, take the diff, show the
-  // summary, confirm, then apply the delta via `cloneAndStackPush`.
-  //
-  // Rather than re-implement cloneAndStackPush's clone step here, we let it
-  // own the clone-commit-push pipeline and pass a deltas callback that runs
-  // AFTER the clone (it receives the localDir/scratchDir) but BEFORE the
-  // commit. `cloneAndStackPush` only exposes an `applyDelta` hook (write files
-  // then return), so we split the flow: first a probe clone to take the
-  // diff, then the real clone-and-stack-push. This is simpler than rewiring
-  // cloneAndStackPush's API.
-
-  // Probe clone.
-  await deps.gitOps.fetch(input.dir) // no-op for bare path if not a repo; deps.gitOps may short-circuit
-    .catch(() => {
-      // bare-path doesn't require a local fetch — swallow the error
-    })
-
-  // We don't have a probe clone helper; instead, ask the deps for a bare-path
-  // delta computation. The test double will produce this from a fixture; the
-  // real implementation walks both trees after ensuring a scratch clone exists.
-  // This is provided by the command glue layer.
-  const deltas = await deps.gitOps.diffHeadVsOrigin(input.dir)
-  const totalFilesInRemote = await deps.gitOps.countFilesInRemote(input.dir)
+  const unpinned = repoPinSlug === undefined
   const summary = summarizeDiff(deltas, {totalFilesInRemote, unpinned})
 
   log('')
@@ -386,48 +293,67 @@ async function doBarePath(
   const baseMessage = input.message ?? `qfg push: ${summary.totals.filesTouched} file change(s)`
   const commitMessage = withPushedViaTrailer(baseMessage)
 
-  log('Pushing via clone-and-stack...')
-  try {
-    const result = await cloneAndStackPush({
-      remoteUrl: backend.repoUrl,
-      localDir: scratchDir,
-      author,
-      commitMessage,
-      async applyDelta(clonedDir) {
-        // The caller promised deps.copyDirMirror copies `input.dir` into
-        // `clonedDir`, skipping `.git/`. cloneAndStackPush will `git add --all`
-        // after this returns.
-        await deps.copyDirMirror(input.dir, clonedDir)
-      },
-    })
+  const serverFiles: ServerFileDelta[] = deltas.map((d) => ({
+    path: d.path,
+    kind: toServerKind(d.kind),
+    ...(d.beforeJson === undefined ? {} : {beforeJson: d.beforeJson}),
+    ...(d.afterJson === undefined ? {} : {afterJson: d.afterJson}),
+  }))
 
-    if (unpinned && !input.noPinWrite) {
-      try {
-        await writeWorkspaceSlug(input.dir, backend.workspaceSlug)
-        log(`Wrote workspace = "${backend.workspaceSlug}" into quonfig.json`)
-      } catch {
-        // non-fatal
-      }
+  log('Sending push to Quonfig cloud...')
+  const result = await deps.pushToServer({
+    workspaceId: backend.workspaceId,
+    files: serverFiles,
+    message: commitMessage,
+  })
+
+  if (result.kind === 'denied') {
+    errLog(`Push denied for ${result.denials.length} file(s):`)
+    for (const d of result.denials) {
+      errLog(`  ${d.path}: missing permission ${d.requiredPermission}`)
     }
 
-    return {kind: 'pushed', dispatchedAs: 'bare-path', commitSha: result.commitSha}
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error)
-    if (/non-fast-forward|fetch first|rejected/i.test(msg)) {
-      throw new PushFatalError(
-        'Remote has changes not in local — run `qfg pull` first, then re-run `qfg push`.',
-        'NON_FAST_FORWARD',
-      )
-    }
+    throw new PushFatalError(
+      `Push denied for ${result.denials.length} file(s). See errors above.`,
+      'PUSH_DENIED',
+    )
+  }
 
-    throw new PushFatalError(`Push failed: ${msg}`, 'PUSH_FAILED')
-  } finally {
-    // Best-effort cleanup of the scratch clone. Ignore failures so a cleanup
-    // problem doesn't mask a real error.
+  if (result.kind === 'conflict') {
+    throw new PushFatalError(
+      `Remote moved while preparing this push (${result.message}). Run \`qfg pull\` and retry.`,
+      'CONFLICT',
+    )
+  }
+
+  if (result.kind === 'bad-request') {
+    throw new PushFatalError(`Push rejected by server: ${result.message}`, 'BAD_REQUEST')
+  }
+
+  if (unpinned && !input.noPinWrite) {
     try {
-      fs.rmSync(scratchDir, {recursive: true, force: true})
+      await writeWorkspaceSlug(input.dir, backend.workspaceSlug)
+      log(`Wrote workspace = "${backend.workspaceSlug}" into quonfig.json`)
     } catch {
-      /* ignore */
+      /* non-fatal; pin is advisory */
+    }
+  }
+
+  return {kind: 'pushed', dispatchedAs, commitSha: result.commitSha}
+}
+
+const toServerKind = (kind: FileDelta['kind']): ServerFileKind => {
+  switch (kind) {
+    case 'added': {
+      return 'add'
+    }
+
+    case 'deleted': {
+      return 'delete'
+    }
+
+    case 'modified': {
+      return 'modify'
     }
   }
 }
@@ -449,7 +375,11 @@ interface ConfirmArgs {
 async function decideConfirm(args: ConfirmArgs): Promise<boolean> {
   const needsTyped = args.requiresTypedSlug || args.destructive
   if (needsTyped) {
-    return confirmTypedSlug(args.workspaceSlug, `Type the workspace slug "${args.workspaceSlug}" to confirm: `, args.confirmIO ?? {})
+    return confirmTypedSlug(
+      args.workspaceSlug,
+      `Type the workspace slug "${args.workspaceSlug}" to confirm: `,
+      args.confirmIO ?? {},
+    )
   }
 
   if (args.yes) return true

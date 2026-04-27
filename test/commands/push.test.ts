@@ -8,6 +8,8 @@ import {
   PushFatalError,
   runPush,
   withPushedViaTrailer,
+  type ConfigPushInput,
+  type ConfigPushResult,
   type GitOps,
   type GiteaTokenMintResult,
   type RunPushDeps,
@@ -43,25 +45,26 @@ type MintCall = {requestedTarget: string}
 type CapturedCalls = {
   mint: MintCall[]
   validate: string[]
-  push: string[]
+  pushToServer: ConfigPushInput[]
   setRemoteOrigin: Array<[string, string]>
-  copyDirMirror: Array<[string, string]>
 }
 
-function makeDeps(opts: {
-  gitOps?: Partial<GitOps>
-  token?: GiteaTokenMintResult
-  mintThrows?: Error
-  validateErrors?: string[]
-  userInput?: string
-  captureLog?: boolean
-} = {}): {deps: RunPushDeps; calls: CapturedCalls; logs: string[]; errs: string[]} {
+function makeDeps(
+  opts: {
+    gitOps?: Partial<GitOps>
+    token?: GiteaTokenMintResult
+    mintThrows?: Error
+    validateErrors?: string[]
+    userInput?: string
+    pushResult?: ConfigPushResult
+    pushThrows?: Error
+  } = {},
+): {deps: RunPushDeps; calls: CapturedCalls; logs: string[]; errs: string[]} {
   const calls: CapturedCalls = {
     mint: [],
     validate: [],
-    push: [],
+    pushToServer: [],
     setRemoteOrigin: [],
-    copyDirMirror: [],
   }
   const logs: string[] = []
   const errs: string[] = []
@@ -92,10 +95,6 @@ function makeDeps(opts: {
     },
     async fetch() {},
     diffHeadVsOrigin: async () => [],
-    async push(dir) {
-      calls.push.push(dir)
-    },
-    getLocalAuthor: async () => ({name: 'Local User', email: 'user@example.com'}),
     countFilesInRemote: async () => 0,
     ...opts.gitOps,
   }
@@ -111,8 +110,10 @@ function makeDeps(opts: {
       return {errors: opts.validateErrors ?? []}
     },
     gitOps,
-    async copyDirMirror(source, dest) {
-      calls.copyDirMirror.push([source, dest])
+    async pushToServer(input) {
+      calls.pushToServer.push(input)
+      if (opts.pushThrows) throw opts.pushThrows
+      return opts.pushResult ?? {kind: 'success', commitSha: 'abc1234567890def'}
     },
     confirmIO: io,
     log: (s) => logs.push(s),
@@ -189,8 +190,8 @@ describe('runPush (core)', () => {
           expect((error as PushFatalError).code).to.equal('IDENTITY_ABORT')
         }
 
-        // Should not have reached push or validate.
-        expect(calls.push).to.deep.equal([])
+        // Should not have reached pushToServer or validate.
+        expect(calls.pushToServer).to.deep.equal([])
         expect(calls.validate).to.deep.equal([])
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
@@ -220,7 +221,7 @@ describe('runPush (core)', () => {
         }
 
         expect(calls.validate).to.deep.equal([dir])
-        expect(calls.push).to.deep.equal([])
+        expect(calls.pushToServer).to.deep.equal([])
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -283,14 +284,13 @@ describe('runPush (core)', () => {
           expect(result.dispatchedAs).to.equal('clone-path')
         }
 
-        expect(calls.push).to.have.length(1)
-        expect(calls.copyDirMirror).to.deep.equal([])
+        expect(calls.pushToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
     })
 
-    it('takes the bare path when .git is absent (even with a matching backend)', async () => {
+    it('takes the bare path when .git is absent (no setRemoteOrigin call), and still calls pushToServer', async () => {
       const dir = tmpDir()
       try {
         // Pre-pin so identity passes without typed-slug.
@@ -298,7 +298,9 @@ describe('runPush (core)', () => {
         const {deps, calls} = makeDeps({
           gitOps: {
             isGitRepo: async () => false,
-            diffHeadVsOrigin: async () => [{kind: 'added', path: 'configs/new.json'}],
+            diffHeadVsOrigin: async () => [
+              {kind: 'added', path: 'configs/new.json', afterJson: '{"k":1}'},
+            ],
             countFilesInRemote: async () => 4,
           },
           userInput: 'y\n',
@@ -310,28 +312,15 @@ describe('runPush (core)', () => {
           skipValidate: true,
           noPinWrite: true,
         }
-        // Under the bare-path we invoke cloneAndStackPush which will try to
-        // shell out to real git. We don't want that in a unit test, so we
-        // detect the error and verify we at least reached copyDirMirror /
-        // confirm pathway.
-        let threw: unknown
-        try {
-          await runPush(input, deps)
-        } catch (error) {
-          threw = error
+        const result = await runPush(input, deps)
+        expect(result.kind).to.equal('pushed')
+        if (result.kind === 'pushed') {
+          expect(result.dispatchedAs).to.equal('bare-path')
         }
 
-        // Either we got a PushFatalError wrapping the git failure (expected
-        // since there's no real clone), or we managed to exit cleanly. Either
-        // way the key signal is: we took the bare path (no calls.push, no
-        // setRemoteOrigin).
-        expect(calls.push).to.deep.equal([])
+        // Bare path never sets origin.
         expect(calls.setRemoteOrigin).to.deep.equal([])
-
-        // If it did throw, it should be PushFatalError.
-        if (threw) {
-          expect(threw).to.be.instanceOf(PushFatalError)
-        }
+        expect(calls.pushToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -363,7 +352,7 @@ describe('runPush (core)', () => {
         }
         const result = await runPush(input, deps)
         expect(result.kind).to.equal('pushed')
-        expect(calls.push).to.have.length(1)
+        expect(calls.pushToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -395,7 +384,7 @@ describe('runPush (core)', () => {
         }
         const result = await runPush(input, deps)
         expect(result.kind).to.equal('aborted')
-        expect(calls.push).to.deep.equal([])
+        expect(calls.pushToServer).to.deep.equal([])
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -425,15 +414,15 @@ describe('runPush (core)', () => {
         }
         const result = await runPush(input, deps)
         expect(result.kind).to.equal('pushed')
-        expect(calls.push).to.have.length(1)
+        expect(calls.pushToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
     })
   })
 
-  describe('non-fast-forward handling', () => {
-    it('maps a git non-ff rejection to PushFatalError(NON_FAST_FORWARD) on the clone path', async () => {
+  describe('conflict handling', () => {
+    it('maps a server CONFLICT to PushFatalError(CONFLICT) with a `qfg pull` hint', async () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
@@ -441,11 +430,14 @@ describe('runPush (core)', () => {
           gitOps: {
             isGitRepo: async () => true,
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
-            diffHeadVsOrigin: async () => [{kind: 'modified', path: 'configs/one.json'}],
+            diffHeadVsOrigin: async () => [
+              {kind: 'modified', path: 'configs/one.json', beforeJson: '{}', afterJson: '{"v":1}'},
+            ],
             countFilesInRemote: async () => 10,
-            async push() {
-              throw new Error('remote: non-fast-forward update to refs/heads/main')
-            },
+          },
+          pushResult: {
+            kind: 'conflict',
+            message: 'configs/one.json was modified (expected ..., got ...)',
           },
         })
         const input: RunPushInput = {
@@ -460,7 +452,9 @@ describe('runPush (core)', () => {
           expect.fail('expected throw')
         } catch (error) {
           expect(error).to.be.instanceOf(PushFatalError)
-          expect((error as PushFatalError).code).to.equal('NON_FAST_FORWARD')
+          const pe = error as PushFatalError
+          expect(pe.code).to.equal('CONFLICT')
+          expect(pe.message.toLowerCase()).to.include('qfg pull')
         }
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})

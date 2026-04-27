@@ -67,40 +67,47 @@ export async function computeBarePathDiff(localDir: string, remoteUrl: string): 
     throw error
   }
 
-  const localFiles = collectFilesWithHash(localDir)
-  const remoteFiles = collectFilesWithHash(scratchDir)
+  const localFiles = collectFiles(localDir)
+  const remoteFiles = collectFiles(scratchDir)
 
   const deltas: FileDelta[] = []
 
-  for (const [rel, localHash] of localFiles) {
-    const remoteHash = remoteFiles.get(rel)
-    if (remoteHash === undefined) {
-      deltas.push({kind: 'added', path: rel})
-    } else if (remoteHash !== localHash) {
-      deltas.push({kind: 'modified', path: rel})
+  for (const [rel, local] of localFiles) {
+    const remote = remoteFiles.get(rel)
+    if (remote === undefined) {
+      deltas.push({kind: 'added', path: rel, afterJson: local.content})
+    } else if (remote.hash !== local.hash) {
+      deltas.push({kind: 'modified', path: rel, beforeJson: remote.content, afterJson: local.content})
     }
   }
 
-  for (const rel of remoteFiles.keys()) {
+  for (const [rel, remote] of remoteFiles) {
     if (!localFiles.has(rel)) {
-      deltas.push({kind: 'deleted', path: rel})
+      deltas.push({kind: 'deleted', path: rel, beforeJson: remote.content})
     }
   }
 
   return {deltas, scratchDir, totalRemoteFiles: remoteFiles.size}
 }
 
+interface FileEntry {
+  content: string
+  hash: string
+}
+
 /**
- * Walk `root` and return a map of relative-path -> content-hash for every
- * non-dotfile file under it.
+ * Walk `root` and return a map of relative-path -> {content, hash} for every
+ * non-dotfile file under it. The content string is needed by qfg-azk.13's
+ * `configs.push` wire shape; the hash is used to short-circuit the
+ * unchanged-file case without comparing full bodies.
  *
  * We skip any entry whose name starts with a `.`, which covers `.git/`,
  * `.DS_Store`, and the transient `.quonfig-push-clone-*` scratch dirs that
  * `run-push.ts` creates next to the local workspace. Keeping the rule simple
  * and symmetric on both sides prevents one-off false positives.
  */
-function collectFilesWithHash(root: string): Map<string, string> {
-  const out = new Map<string, string>()
+function collectFiles(root: string): Map<string, FileEntry> {
+  const out = new Map<string, FileEntry>()
   if (!fs.existsSync(root)) return out
 
   const walk = (dir: string, prefix: string) => {
@@ -119,8 +126,8 @@ function collectFilesWithHash(root: string): Map<string, string> {
         walk(full, rel)
       } else if (entry.isFile() || entry.isSymbolicLink()) {
         try {
-          const buf = fs.readFileSync(full)
-          out.set(rel, hashBytes(buf))
+          const content = fs.readFileSync(full, 'utf8')
+          out.set(rel, {content, hash: hashString(content)})
         } catch {
           /* ignore unreadable files — they won't appear on either side */
         }
@@ -137,6 +144,6 @@ function collectFilesWithHash(root: string): Map<string, string> {
  * fingerprint so we can say "file A on local matches file A on remote". The
  * contents are small JSON in practice, so sha1 is plenty fast.
  */
-function hashBytes(buf: Buffer): string {
-  return createHash('sha1').update(buf).digest('hex')
+function hashString(s: string): string {
+  return createHash('sha1').update(s).digest('hex')
 }

@@ -9,17 +9,16 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
-import type {GiteaTokenMintResult} from '../push/run-push.js'
+import {getRemoteUrl, gitFetch, gitSetRemote, isGitRepo} from '../util/git-ops.js'
 import {
-  getRemoteUrl,
-  gitFetch,
-  gitSetRemote,
-  isGitRepo,
-} from '../util/git-ops.js'
-import {PushIdentity} from '../util/clone-and-stack-push.js'
-import {PushFatalError, runPush, type GitOps} from '../push/run-push.js'
+  PushFatalError,
+  runPush,
+  type GiteaTokenMintResult,
+  type GitOps,
+} from '../push/run-push.js'
 import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
+import {callConfigsPush} from '../push/config-push-client.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 
 const execFile = util.promisify(execFileCb)
@@ -155,6 +154,11 @@ export function giteaResponseToMintResult(resp: GiteaTokenResponse): GiteaTokenM
  *
  * Returns a `{deps, cleanup}` pair. The caller MUST call `cleanup()` in a
  * finally block so the bare-path probe clone is removed even on errors.
+ *
+ * As of qfg-azk.13 the push code path no longer mints a write-scoped Gitea
+ * token; the actual commit is performed server-side by the `configs.push`
+ * oRPC procedure. We still mint a READ token to authenticate the bare-path
+ * probe-clone and the clone-path `git fetch`.
  */
 export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; cleanup: () => Promise<void>} {
   const log = (line: string) => cmd.log(line)
@@ -219,12 +223,6 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
       const probe = await ensureBarePathProbe(dir)
       return probe.deltas
     },
-    async push(dir) {
-      await execFile('git', ['-C', dir, 'push', 'origin', 'main'])
-    },
-    async getLocalAuthor(dir) {
-      return readLocalAuthor(dir)
-    },
     async countFilesInRemote(dir) {
       if (await isGitRepo(dir)) {
         const fromGit = await countTrackedFilesAtRef(dir, 'origin/main')
@@ -240,9 +238,11 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
 
   const deps = {
     async mintWriteToken(requestedTarget: string) {
-      const resp = await mintGiteaToken(requestedTarget, 'write', 'push')
-      // Stash the authenticated URL so the bare-path gitOps methods can
-      // probe-clone it without a second mint.
+      // Read scope: this token authenticates probe-clone and clone-path
+      // fetch. The actual commit goes through the server via configs.push,
+      // which is authorized off the user's WorkOS session — no write PAT
+      // needed in the push code path (qfg-azk.13).
+      const resp = await mintGiteaToken(requestedTarget, 'read', 'pull')
       authenticatedRepoUrl = resp.repoUrl
       return giteaResponseToMintResult(resp)
     },
@@ -253,7 +253,7 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
       return {errors}
     },
     gitOps,
-    copyDirMirror,
+    pushToServer: callConfigsPush,
     log,
     errLog,
   }
@@ -271,26 +271,20 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
 }
 
 /**
- * Diff the working tree (what we are about to push) against origin/main. We
- * use `git diff --name-status HEAD..origin/main` with inverted semantics:
- *   Added here  = present locally (in HEAD), absent in origin/main.
- *   Deleted     = absent locally, present in origin/main.
- *   Modified    = content differs.
+ * Diff the working tree (what we are about to push) against origin/main and
+ * fill in before/after JSON content for each delta as required by the
+ * `configs.push` wire shape (qfg-azk.13).
+ *
+ *   Added    — afterJson = working tree
+ *   Modified — beforeJson = `git show origin/main:<path>`, afterJson = working tree
+ *   Deleted  — beforeJson = `git show origin/main:<path>`
  *
  * `git diff A..B` reports B relative to A. So `HEAD..origin/main` tells us
  * what origin has that we don't. We want "local vs remote" with local as the
  * baseline — i.e. origin/main..HEAD.
  */
 async function diffHeadVsOrigin(dir: string): Promise<FileDelta[]> {
-  // origin/main..HEAD reports changes HEAD has relative to origin/main.
-  // 'A' -> added locally, 'D' -> deleted locally, 'M' -> modified locally.
-  const {stdout} = await execFile('git', [
-    '-C',
-    dir,
-    'diff',
-    '--name-status',
-    'origin/main..HEAD',
-  ])
+  const {stdout} = await execFile('git', ['-C', dir, 'diff', '--name-status', 'origin/main..HEAD'])
   const deltas: FileDelta[] = []
   for (const raw of stdout.split('\n')) {
     const line = raw.trim()
@@ -298,15 +292,46 @@ async function diffHeadVsOrigin(dir: string): Promise<FileDelta[]> {
     const [status, ...rest] = line.split(/\s+/)
     const pathStr = rest.join(' ')
     if (!pathStr) continue
-    if (status.startsWith('A')) deltas.push({kind: 'added', path: pathStr})
-    else if (status.startsWith('D')) deltas.push({kind: 'deleted', path: pathStr})
-    else if (status.startsWith('M') || status.startsWith('R') || status.startsWith('C')) {
-      // Treat renames / copies as modifications for diff-summary purposes.
-      deltas.push({kind: 'modified', path: pathStr})
+    if (status.startsWith('A')) {
+      // eslint-disable-next-line no-await-in-loop
+      const afterJson = await readWorkingTreeFile(dir, pathStr)
+      deltas.push({kind: 'added', path: pathStr, ...(afterJson === undefined ? {} : {afterJson})})
+    } else if (status.startsWith('D')) {
+      // eslint-disable-next-line no-await-in-loop
+      const beforeJson = await showAtRef(dir, 'origin/main', pathStr)
+      deltas.push({kind: 'deleted', path: pathStr, ...(beforeJson === undefined ? {} : {beforeJson})})
+    } else if (status.startsWith('M') || status.startsWith('R') || status.startsWith('C')) {
+      // eslint-disable-next-line no-await-in-loop
+      const beforeJson = await showAtRef(dir, 'origin/main', pathStr)
+      // eslint-disable-next-line no-await-in-loop
+      const afterJson = await readWorkingTreeFile(dir, pathStr)
+      deltas.push({
+        kind: 'modified',
+        path: pathStr,
+        ...(beforeJson === undefined ? {} : {beforeJson}),
+        ...(afterJson === undefined ? {} : {afterJson}),
+      })
     }
   }
 
   return deltas
+}
+
+async function showAtRef(dir: string, ref: string, relPath: string): Promise<string | undefined> {
+  try {
+    const {stdout} = await execFile('git', ['-C', dir, 'show', `${ref}:${relPath}`])
+    return stdout
+  } catch {
+    return undefined
+  }
+}
+
+async function readWorkingTreeFile(dir: string, relPath: string): Promise<string | undefined> {
+  try {
+    return await fs.promises.readFile(path.join(dir, relPath), 'utf8')
+  } catch {
+    return undefined
+  }
 }
 
 async function countTrackedFilesAtRef(dir: string, ref: string): Promise<number> {
@@ -316,75 +341,4 @@ async function countTrackedFilesAtRef(dir: string, ref: string): Promise<number>
   } catch {
     return 0
   }
-}
-
-async function readLocalAuthor(dir: string): Promise<PushIdentity | undefined> {
-  try {
-    const {stdout: name} = await execFile('git', ['-C', dir, 'config', 'user.name'])
-    const {stdout: email} = await execFile('git', ['-C', dir, 'config', 'user.email'])
-    const n = name.trim()
-    const e = email.trim()
-    if (!n || !e) return undefined
-    return {name: n, email: e}
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Copy the contents of `sourceDir` into `destDir`, skipping `.git/` and any
- * temp push-clone scratch directories. Used as the `applyDelta` callback for
- * bare-path pushes — we mirror local files into a fresh clone so that
- * `cloneAndStackPush`'s `git add --all` + diff will reflect the union of
- * (deletes, modifies, adds) we intend.
- *
- * IMPORTANT: this deletes files in destDir that are not in sourceDir so that
- * deletions make it into the push. Without this the clone-and-stack produces
- * an "adds-only" delta and destructive heuristics would never fire in the UI.
- */
-export async function copyDirMirror(sourceDir: string, destDir: string): Promise<void> {
-  // Collect source entries (except .git, .quonfig-push-clone-*)
-  const sourceRel = collectRelPaths(sourceDir)
-  const destRel = collectRelPaths(destDir)
-
-  // Delete anything in dest that isn't in source
-  for (const rel of destRel) {
-    if (!sourceRel.has(rel)) {
-      const full = path.join(destDir, rel)
-      try {
-        fs.rmSync(full, {force: true})
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  // Copy / overwrite everything from source into dest
-  for (const rel of sourceRel) {
-    const src = path.join(sourceDir, rel)
-    const dst = path.join(destDir, rel)
-    fs.mkdirSync(path.dirname(dst), {recursive: true})
-    fs.copyFileSync(src, dst)
-  }
-}
-
-function collectRelPaths(root: string): Set<string> {
-  const out = new Set<string>()
-  if (!fs.existsSync(root)) return out
-  const walk = (dir: string, prefix: string) => {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-      if (entry.name === '.git') continue
-      if (entry.name.startsWith('.quonfig-push-clone-')) continue
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name
-      const full = path.join(dir, entry.name)
-      if (entry.isDirectory()) {
-        walk(full, rel)
-      } else if (entry.isFile() || entry.isSymbolicLink()) {
-        out.add(rel)
-      }
-    }
-  }
-
-  walk(root, '')
-  return out
 }
