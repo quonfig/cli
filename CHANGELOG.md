@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.21 - 2026-04-26
+
+- feat: `qfg override <flag> <value>` rewritten against the new oRPC `flags/findOrCreateOverride` endpoint. Previous releases pointed at the dead Prefab `/internal/ops/v1/assign-variant` endpoint and failed with `Unexpected token <` (qfg-pj0.6, qfg-pj0.1).
+- feat: `qfg create --type duration` for ISO-8601 duration configs (qfg-n53).
+- feat: `qfg generate` works without `--dir` by cloning the workspace into a tmp dir (qfg-0mj).
+- fix: `qfg login` verifies token and config writes actually persisted before reporting success (qfg-2qj).
+- fix: recover auth config from existing tokens before declaring `Not logged in` (qfg-ogr).
+- fix: codegen `JSON.stringify`s object-form JSON default values; surfaces a clearer hint when `mustache` isn't installed.
+
 ## 0.0.20 - 2026-04-24
 
 - chore: fix stale `'gen' command` string in the autogen header emitted by `qfg generate` (both node-ts and react-ts targets). The command has been named `generate` since the Reforge fork; the comment now matches.
