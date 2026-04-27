@@ -327,8 +327,10 @@ export function storedConfigJsonSchema(): object {
         type: 'string',
         description: 'References a schema in schemas/ or schemas-protected/. The referenced file must exist.',
       },
-      accessLevel: {type: 'string'},
-      protection: {type: 'string'},
+      access: {
+        enum: ['support', 'standard', 'protected-env', 'protected-all-envs'],
+        description: 'Edit-access tier for this config. Defaults to "standard" when absent. See protecting-access.md.',
+      },
       tags: {
         type: 'array',
         items: {type: 'string'},

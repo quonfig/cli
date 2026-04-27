@@ -643,4 +643,82 @@ describe('validate', () => {
       }
     })
   })
+
+  describe('access enum validation (qfg-azk.1)', () => {
+    function configWithAccess(access: unknown): Map<string, string> {
+      const config: Record<string, unknown> = {
+        key: 'my-config',
+        type: 'config',
+        valueType: 'string',
+        default: {
+          rules: [
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {type: 'string', value: 'alpha'},
+            },
+          ],
+        },
+        environments: [],
+        variants: [],
+      }
+      if (access !== undefined) config.access = access
+      return new Map<string, string>([['configs/my-config.json', JSON.stringify(config)]])
+    }
+
+    it('rejects access with an unknown enum value', () => {
+      const result = validateFileMap(configWithAccess('banana'))
+
+      expect(result.valid).to.be.false
+      const accessIssues = result.issues.filter((i) => i.message.includes('access'))
+      expect(accessIssues, JSON.stringify(result.issues)).to.have.length.greaterThan(0)
+      expect(accessIssues[0].severity).to.equal('error')
+    })
+
+    for (const value of ['support', 'standard', 'protected-env', 'protected-all-envs']) {
+      it(`accepts access="${value}"`, () => {
+        const result = validateFileMap(configWithAccess(value))
+        expect(result.valid, JSON.stringify(result.issues)).to.be.true
+        expect(result.issues).to.be.empty
+      })
+    }
+
+    it('accepts a config with no access field (defaults apply)', () => {
+      const result = validateFileMap(configWithAccess(undefined))
+      expect(result.valid, JSON.stringify(result.issues)).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('parses a fixture config with access="standard" via validateWorkspace (rename works)', () => {
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-access-'))
+      try {
+        fs.mkdirSync(path.join(workspace, 'configs'), {recursive: true})
+        fs.writeFileSync(path.join(workspace, 'quonfig.json'), JSON.stringify({environments: []}, null, 2))
+        fs.writeFileSync(
+          path.join(workspace, 'configs', 'my-config.json'),
+          JSON.stringify({
+            key: 'my-config',
+            type: 'config',
+            valueType: 'string',
+            access: 'standard',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {type: 'string', value: 'alpha'},
+                },
+              ],
+            },
+            environments: [],
+            variants: [],
+          }),
+        )
+
+        const result = validateWorkspace(workspace)
+        expect(result.valid, JSON.stringify(result.issues)).to.be.true
+        expect(result.issues).to.be.empty
+      } finally {
+        fs.rmSync(workspace, {recursive: true, force: true})
+      }
+    })
+  })
 })

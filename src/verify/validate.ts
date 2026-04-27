@@ -138,6 +138,8 @@ const VariantSchema = z.object({
   description: z.string().optional(),
 })
 
+const AccessSchema = z.enum(['support', 'standard', 'protected-env', 'protected-all-envs'])
+
 const StoredConfigSchema = z
   .object({
     id: z.string().optional(),
@@ -149,8 +151,7 @@ const StoredConfigSchema = z
     description: z.string().optional(),
     sendToClientSdk: z.boolean().optional(),
     schemaKey: z.string().optional(),
-    accessLevel: z.string().optional(),
-    protection: z.string().optional(),
+    access: AccessSchema.optional(),
     default: z.object({
       rules: z.array(ConfigRuleSchema),
     }),
