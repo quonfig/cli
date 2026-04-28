@@ -177,7 +177,11 @@ CLI shortcuts (no JSON editing needed for simple cases):
    *
    * This never throws — a broken `quonfig.json` shouldn't fail `qfg pull`.
    */
-  private async backfillWorkspacePin(dir: string, tokenEntry: {workspaceSlug?: string}, workspaceId: string): Promise<void> {
+  private async backfillWorkspacePin(
+    dir: string,
+    tokenEntry: {workspaceSlug?: string},
+    workspaceId: string,
+  ): Promise<void> {
     let backendSlug = tokenEntry.workspaceSlug
     if (!backendSlug) {
       // Older cached entries lack the slug. Mint a fresh one solely to learn the
@@ -225,9 +229,9 @@ CLI shortcuts (no JSON editing needed for simple cases):
   private async maybeWriteQuonfigDir(dir: string): Promise<void> {
     if (process.env.QUONFIG_DIR) return // already set via env
 
-    const os = await import('node:os')
     const pathMod = await import('node:path')
-    const configFilePath = pathMod.join(os.homedir(), '.quonfig', 'config')
+    const {getQuonfigConfigHome} = await import('../util/quonfig-home.js')
+    const configFilePath = pathMod.join(getQuonfigConfigHome(), 'config')
 
     try {
       const existing = await fs.promises.readFile(configFilePath, 'utf8').catch(() => '')

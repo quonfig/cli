@@ -1,12 +1,12 @@
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import {getDomain} from './domain-urls.js'
+import {getQuonfigConfigHome} from './quonfig-home.js'
 
 const BUFFER_MS = 5 * 60 * 1000 // 5 minutes
 
-const getQuonfigDir = () => path.join(os.homedir(), '.quonfig')
+const getQuonfigDir = () => getQuonfigConfigHome()
 
 const getGiteaTokenFile = () => {
   const domain = getDomain()
