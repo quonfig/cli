@@ -6,6 +6,7 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {decodeJWT, pollForToken, requestDeviceCode} from '../util/oauth-client.js'
 import {getApiUrl} from '../util/domain-urls.js'
+import {openBrowser} from '../util/open-browser.js'
 import {
   getAuthConfigFilePath,
   getTokenFilePath,
@@ -43,15 +44,42 @@ export default class Login extends BaseCommand {
     this.log(`\nTo authenticate, visit:\n`)
     this.log(`  ${deviceAuth.verification_uri_complete}\n`)
     this.log(`Or go to ${deviceAuth.verification_uri} and enter code: ${deviceAuth.user_code}\n`)
+
+    // Listen for Enter to open the URL in the user's browser.
+    // Runs concurrently with token polling so the user can also authenticate
+    // by pasting the URL manually without having to press Enter first.
+    const stdinIsTTY = Boolean(process.stdin.isTTY)
+    let browserOpened = false
+    const onEnter = (chunk: Buffer): void => {
+      if (browserOpened) return
+      if (!chunk.toString().match(/[\r\n]/)) return
+      browserOpened = true
+      openBrowser(deviceAuth.verification_uri_complete)
+      this.log('Opening browser...')
+    }
+
+    if (stdinIsTTY) {
+      this.log('Press Enter to open the URL in your browser, or open it manually.')
+      process.stdin.on('data', onEnter)
+      process.stdin.resume()
+    }
     this.log('Waiting for authentication...')
 
     // Step 3: Poll for token
-    const tokenResponse = await pollForToken(
-      deviceAuth.device_code,
-      deviceAuth.interval,
-      deviceAuth.expires_in,
-      this.isVerbose,
-    )
+    let tokenResponse
+    try {
+      tokenResponse = await pollForToken(
+        deviceAuth.device_code,
+        deviceAuth.interval,
+        deviceAuth.expires_in,
+        this.isVerbose,
+      )
+    } finally {
+      if (stdinIsTTY) {
+        process.stdin.off('data', onEnter)
+        process.stdin.pause()
+      }
+    }
 
     const user = tokenResponse.user
     const userEmail = user.email
