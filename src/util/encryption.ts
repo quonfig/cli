@@ -141,9 +141,7 @@ export async function makeConfidentialValue(
   if (keyConfig.environments && environmentName) {
     const targetSlug = String(environmentName).toLowerCase()
     /* eslint-disable @typescript-eslint/no-explicit-any */
-    const envConfig = (keyConfig.environments as any[]).find(
-      (env: any) => String(env.id).toLowerCase() === targetSlug,
-    )
+    const envConfig = (keyConfig.environments as any[]).find((env: any) => String(env.id).toLowerCase() === targetSlug)
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const ruleValue = envConfig?.rules?.[0]?.value
 

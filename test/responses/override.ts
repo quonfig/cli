@@ -42,7 +42,9 @@ function buildFlag(opts: {
     valueType: opts.valueType,
     sendToClientSdk: true,
     tags: [],
-    default: {rules: opts.rules ?? [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: opts.valueType, value: false}}]},
+    default: {
+      rules: opts.rules ?? [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: opts.valueType, value: false}}],
+    },
     environments,
     variants: [],
     environmentCount: environments.length,
@@ -100,16 +102,13 @@ const flagsListHandler = http.post('https://app.quonfig.com/api/v1/flags/list', 
   HttpResponse.json({json: Object.values(FLAGS)}),
 )
 
-const flagsGetByKeyHandler = http.post(
-  'https://app.quonfig.com/api/v1/flags/getByKey',
-  async ({request}) => {
-    const body = (await request.json()) as any
-    const key = body?.json?.flagKey
-    const flag = FLAGS[key]
-    if (!flag) return HttpResponse.json({json: {message: `Flag ${key} not found`}}, {status: 404})
-    return HttpResponse.json({json: flag})
-  },
-)
+const flagsGetByKeyHandler = http.post('https://app.quonfig.com/api/v1/flags/getByKey', async ({request}) => {
+  const body = (await request.json()) as any
+  const key = body?.json?.flagKey
+  const flag = FLAGS[key]
+  if (!flag) return HttpResponse.json({json: {message: `Flag ${key} not found`}}, {status: 404})
+  return HttpResponse.json({json: flag})
+})
 
 const findOrCreateHandler = http.post(
   'https://app.quonfig.com/api/v1/flags/findOrCreateOverride',
@@ -135,19 +134,11 @@ const findOrCreateHandler = http.post(
   },
 )
 
-const removeHandler = http.post(
-  'https://app.quonfig.com/api/v1/flags/removeOverride',
-  async ({request}) => {
-    const body = (await request.json()) as any
-    lastRemoveInput = body?.json
-    removeCallCount += 1
-    return HttpResponse.json({json: {commitSha: 'sha-after-remove'}})
-  },
-)
+const removeHandler = http.post('https://app.quonfig.com/api/v1/flags/removeOverride', async ({request}) => {
+  const body = (await request.json()) as any
+  lastRemoveInput = body?.json
+  removeCallCount += 1
+  return HttpResponse.json({json: {commitSha: 'sha-after-remove'}})
+})
 
-export const server = setupServer(
-  flagsListHandler,
-  flagsGetByKeyHandler,
-  findOrCreateHandler,
-  removeHandler,
-)
+export const server = setupServer(flagsListHandler, flagsGetByKeyHandler, findOrCreateHandler, removeHandler)

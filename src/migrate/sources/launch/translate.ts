@@ -189,9 +189,7 @@ export function transformConfig(
     const firstRule = defaultSection?.rules?.[0]
     const innerValue = firstRule?.value?.value
     if (!innerValue || innerValue.schemaType !== 'ZOD' || typeof innerValue.schema !== 'string') {
-      throw new Error(
-        `Unsupported schema payload for ${String((out as Record<string, unknown>).key ?? 'unknown')}`,
-      )
+      throw new Error(`Unsupported schema payload for ${String((out as Record<string, unknown>).key ?? 'unknown')}`)
     }
 
     const key = String((out as Record<string, unknown>).key ?? 'unknown')
@@ -313,9 +311,7 @@ const TYPE_TO_DIR: Record<string, string> = Object.fromEntries(
  * not observed in production data), we still throw so the case surfaces for
  * review rather than silently picking a tiebreak.
  */
-export function detectDuplicateKeys(
-  files: Array<{path: string}>,
-): import('../../source.js').DuplicateResolution[] {
+export function detectDuplicateKeys(files: Array<{path: string}>): import('../../source.js').DuplicateResolution[] {
   const keyToTypes = new Map<string, Set<string>>()
   for (const {path} of files) {
     const firstSlash = path.indexOf('/')

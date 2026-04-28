@@ -140,9 +140,7 @@ const renderDroppedOverrides = (dropped: DroppedOverrideSummary | null | undefin
   return lines.join('\n')
 }
 
-const renderDuplicateResolutions = (
-  resolved: DuplicateResolutionSummary | null | undefined,
-): null | string => {
+const renderDuplicateResolutions = (resolved: DuplicateResolutionSummary | null | undefined): null | string => {
   if (!resolved || resolved.total === 0) return null
   const lines: string[] = [
     '## Resolved cross-type duplicates',

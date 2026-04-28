@@ -81,11 +81,7 @@ function inferValue(raw: string): RuleValue {
  * Find the existing override rule for a user in a specific env. Returns the
  * value the user is currently overridden to, or undefined.
  */
-function findExistingOverride(
-  flag: FlagSummary,
-  env: string,
-  userEmail: string,
-): RuleValue | undefined {
+function findExistingOverride(flag: FlagSummary, env: string, userEmail: string): RuleValue | undefined {
   const envEntry = flag.environments?.find((e) => e.id === env)
   for (const rule of envEntry?.rules ?? []) {
     if (!rule.criteria || rule.criteria.length !== 1) continue
@@ -222,12 +218,7 @@ Examples
     }
   }
 
-  private async callRemove(opts: {
-    env: string
-    flag: FlagSummary
-    key: string
-    userEmail: string
-  }): Promise<boolean> {
+  private async callRemove(opts: {env: string; flag: FlagSummary; key: string; userEmail: string}): Promise<boolean> {
     let sha = opts.flag.commitSha ?? ''
     let attempt = 0
 
@@ -334,12 +325,7 @@ Examples
     return removed ? this.ok(`${checkmark} Removed override on ${opts.key} in env=${opts.env}.`) : undefined
   }
 
-  private async runSet(opts: {
-    env: string
-    key: string
-    rawValue: string
-    userEmail: string
-  }): Promise<JsonObj | void> {
+  private async runSet(opts: {env: string; key: string; rawValue: string; userEmail: string}): Promise<JsonObj | void> {
     const value = inferValue(opts.rawValue)
     const flag = await this.fetchFlag(opts.key)
     if (!flag) {

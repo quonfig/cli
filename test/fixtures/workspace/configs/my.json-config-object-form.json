@@ -9,7 +9,7 @@
         "criteria": [],
         "value": {
           "type": "json",
-          "value": { "name": "example", "count": 42 }
+          "value": {"name": "example", "count": 42}
         }
       }
     ]

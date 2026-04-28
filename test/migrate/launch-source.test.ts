@@ -244,10 +244,7 @@ describe('migrate/sources/launch — MigrationSource wiring', () => {
             projectId: 'p',
             type: 'config',
             valueType: 'double',
-            variants: [
-              {value: {type: 'string', value: '44'}},
-              {value: {type: 'double', value: '23.0'}},
-            ],
+            variants: [{value: {type: 'string', value: '44'}}, {value: {type: 'double', value: '23.0'}}],
           },
           newConfigId: 1,
           type: 'CONFIG',

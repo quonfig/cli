@@ -20,10 +20,7 @@ export default class WorkspaceSwitch extends BaseCommand {
 
   static description = 'Switch to a different workspace'
 
-  static examples = [
-    '<%= config.bin %> <%= command.id %>',
-    '<%= config.bin %> <%= command.id %> my-workspace-slug',
-  ]
+  static examples = ['<%= config.bin %> <%= command.id %>', '<%= config.bin %> <%= command.id %> my-workspace-slug']
 
   public async run(): Promise<JsonObj | void> {
     const {args} = await this.parse(WorkspaceSwitch)

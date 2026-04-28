@@ -4,7 +4,11 @@ import * as path from 'node:path'
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
-import {type CloneAndStackPushOptions, type CloneAndStackPushResult, cloneAndStackPush} from '../util/clone-and-stack-push.js'
+import {
+  type CloneAndStackPushOptions,
+  type CloneAndStackPushResult,
+  cloneAndStackPush,
+} from '../util/clone-and-stack-push.js'
 import type {
   DroppedOverrideSummary,
   DuplicateResolution,
@@ -37,11 +41,7 @@ export interface PushMigrationToCloudResult extends CloneAndStackPushResult {
   skippedConfigs: SkippedConfigSummary | null
 }
 
-const writeQuonfigFiles = (
-  dir: string,
-  changes: LegacyChange[],
-  source: MigrationSource,
-): DuplicateResolution[] => {
+const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): DuplicateResolution[] => {
   const livePaths = new Map<string, true>()
   for (const change of changes) {
     const files = source.translate(change)
@@ -98,10 +98,7 @@ const mergeEnvironmentsIntoQuonfigJson = (dir: string, sourceEnvs: string[]): vo
 
   const existingEnvs = Array.isArray(existing.environments) ? (existing.environments as string[]) : []
   const merged = [...new Set([...existingEnvs, ...sourceEnvs])].sort()
-  if (
-    existingEnvs.length === merged.length &&
-    existingEnvs.every((e, i) => e === merged[i])
-  ) {
+  if (existingEnvs.length === merged.length && existingEnvs.every((e, i) => e === merged[i])) {
     return
   }
 
@@ -125,9 +122,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
       droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
       skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
       duplicateResolutions =
-        resolutionEntries.length > 0
-          ? {entries: resolutionEntries, total: resolutionEntries.length}
-          : null
+        resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
       const reportData: MigrationReportData = {
         ...opts.reportData,
         ...(droppedOverrides ? {droppedOverrides} : {}),

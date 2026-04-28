@@ -137,9 +137,7 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
 
     if (!detailRequest.ok) {
       if (detailRequest.status === 404) {
-        return this.err(
-          `Log level "${key}" does not exist. Create it first:\n  qfg log-level ${key} --value=INFO`,
-        )
+        return this.err(`Log level "${key}" does not exist. Create it first:\n  qfg log-level ${key} --value=INFO`)
       }
 
       return this.err(`Failed to fetch log level: ${detailRequest.status}`, {serverError: detailRequest.error})
@@ -163,9 +161,7 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
     // Merge semantics: if an existing rule has the same exact targeting
     // criterion (same propertyName, same valueToMatch set), replace its value.
     // Otherwise insert the new rule before the catch-all so it takes priority.
-    const existingRules = environment
-      ? findEnvRules(current, environment)
-      : current.default?.rules ?? []
+    const existingRules = environment ? findEnvRules(current, environment) : (current.default?.rules ?? [])
 
     const mergedRules = mergeTargetingRule(existingRules, newRule)
 

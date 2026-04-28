@@ -17,9 +17,7 @@ describe('zodToJsonSchema (inline)', () => {
   })
 
   it('handles meta({description}) and records ignored meta fields', () => {
-    const result = zodToJsonSchema(
-      'z.object({\n  count: z.number().meta({ description: "Count", custom: 1 })\n})',
-    )
+    const result = zodToJsonSchema('z.object({\n  count: z.number().meta({ description: "Count", custom: 1 })\n})')
     expect(result.warnings).to.deep.equal(['Ignored unsupported meta field "custom"'])
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,

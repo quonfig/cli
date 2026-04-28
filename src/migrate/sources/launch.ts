@@ -7,7 +7,13 @@ import {
   type SkippedConfigSummary,
 } from '../source.js'
 import {fetchAllChangeHistory, fetchEnvironments} from './launch/api.js'
-import {InvalidSourceConfigError, getOutputPath, isLegacyLogLevel, slugify, transformConfig} from './launch/translate.js'
+import {
+  InvalidSourceConfigError,
+  getOutputPath,
+  isLegacyLogLevel,
+  slugify,
+  transformConfig,
+} from './launch/translate.js'
 import type {LaunchChangeEntry} from './launch/types.js'
 
 const SOURCE_NAME = 'launch'

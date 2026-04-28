@@ -71,10 +71,9 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     const match = entries.find((w) => w.workspaceSlug === override)
     if (!match) {
       const available = entries.map((w) => w.workspaceSlug).join(', ') || '(none)'
-      command.error(
-        `No workspace with slug "${override}" is accessible with this API key. Available: ${available}.`,
-        {exit: 1},
-      )
+      command.error(`No workspace with slug "${override}" is accessible with this API key. Available: ${available}.`, {
+        exit: 1,
+      })
     }
 
     command.verboseLog('ApiKey auth', {source: 'slug', slug: override, workspaceId: match.workspaceId})
@@ -105,15 +104,11 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     const profileData = authConfig.profiles[override]
     if (profileData?.workspace) return profileData.workspace
 
-    command.error(
-      `Workspace "${override}" not found. Run \`qfg workspace switch\` to pick one.`,
-      {exit: 1},
-    )
+    command.error(`Workspace "${override}" not found. Run \`qfg workspace switch\` to pick one.`, {exit: 1})
   }
 
   const activeProfile = getActiveProfile()
-  const profileData =
-    authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
+  const profileData = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
   if (!profileData?.workspace) {
     command.error(
       'No active workspace. Run `qfg login` / `qfg workspace switch`, or set QUONFIG_API_KEY + QUONFIG_WORKSPACE.',
@@ -163,10 +158,9 @@ async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthCo
   }
 
   if (!res.ok) {
-    command.error(
-      `Tokens found but workspace list returned HTTP ${res.status}. Run \`qfg login\` to repopulate.`,
-      {exit: 401},
-    )
+    command.error(`Tokens found but workspace list returned HTTP ${res.status}. Run \`qfg login\` to repopulate.`, {
+      exit: 401,
+    })
   }
 
   const body = (await res.json()) as {json?: WorkspaceEntry[]}

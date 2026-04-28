@@ -89,19 +89,11 @@ const configsDeleteHandler = http.post('https://app.quonfig.com/api/v1/configs/d
   return HttpResponse.json({json: {ok: true, commitSha: 'sha-after-delete'}})
 })
 
-const logLevelsDeleteHandler = http.post(
-  'https://app.quonfig.com/api/v1/logLevels/delete',
-  async ({request}) => {
-    const body = (await request.json()) as any
-    lastLogLevelDeleteInput = body?.json
-    logLevelDeleteCallCount += 1
-    return HttpResponse.json({json: {ok: true, commitSha: 'sha-after-delete'}})
-  },
-)
+const logLevelsDeleteHandler = http.post('https://app.quonfig.com/api/v1/logLevels/delete', async ({request}) => {
+  const body = (await request.json()) as any
+  lastLogLevelDeleteInput = body?.json
+  logLevelDeleteCallCount += 1
+  return HttpResponse.json({json: {ok: true, commitSha: 'sha-after-delete'}})
+})
 
-export const server = setupServer(
-  metadataListHandler,
-  flagsDeleteHandler,
-  configsDeleteHandler,
-  logLevelsDeleteHandler,
-)
+export const server = setupServer(metadataListHandler, flagsDeleteHandler, configsDeleteHandler, logLevelsDeleteHandler)

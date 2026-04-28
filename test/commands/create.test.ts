@@ -320,9 +320,7 @@ describe('create', () => {
     test
       .command(['create', 'my-app', '--type=log_level', '--value=WARN'])
       .catch((error) => {
-        expect(error.message).to.contain(
-          'Log level key "my-app" must start with "log-level.". Try: log-level.my-app',
-        )
+        expect(error.message).to.contain('Log level key "my-app" must start with "log-level.". Try: log-level.my-app')
       })
       .it('rejects keys missing the log-level. prefix with a fix suggestion', () => {
         // Error assertion done in catch block
@@ -339,13 +337,7 @@ describe('create', () => {
       })
 
     test
-      .command([
-        'create',
-        'log-level.my-app',
-        '--type=log_level',
-        '--value=WARN',
-        '--env-var=MY_LEVEL',
-      ])
+      .command(['create', 'log-level.my-app', '--type=log_level', '--value=WARN', '--env-var=MY_LEVEL'])
       .catch((error) => {
         expect(error.message).to.contain('--env-var is not supported for log_level')
       })
@@ -458,13 +450,7 @@ describe('create', () => {
 
     test
       .stdout()
-      .command([
-        'log-level',
-        'log-level.existing',
-        '--target=X',
-        '--value=DEBUG',
-        '--environment=production',
-      ])
+      .command(['log-level', 'log-level.existing', '--target=X', '--value=DEBUG', '--environment=production'])
       .it('writes the rule to environments[env] when --environment is set', () => {
         const update = createResponses.capturedLogLevelUpdateInput
         expect(update?.logLevel?.environments).to.be.an('array')

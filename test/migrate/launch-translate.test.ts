@@ -64,9 +64,7 @@ describe('migrate/sources/launch/translate', () => {
     })
 
     it('routes LOG_LEVEL_V2 without double-prefixing an already-prefixed key (qfg-0cz.2)', () => {
-      expect(getOutputPath('LOG_LEVEL_V2', 'log-level.api-server')).to.equal(
-        'log-levels/log-level.api-server.json',
-      )
+      expect(getOutputPath('LOG_LEVEL_V2', 'log-level.api-server')).to.equal('log-levels/log-level.api-server.json')
     })
   })
 
@@ -245,10 +243,7 @@ describe('migrate/sources/launch/translate', () => {
         projectId: 'p',
         type: 'config',
         valueType: 'double',
-        variants: [
-          {value: {type: 'string', value: '44'}},
-          {value: {type: 'double', value: '23.0'}},
-        ],
+        variants: [{value: {type: 'string', value: '44'}}, {value: {type: 'double', value: '23.0'}}],
       } as unknown as LaunchConfig
       expect(() => transformConfig(input, envMap)).to.throw(/config-with-variants/)
       expect(() => transformConfig(input, envMap)).to.throw(/variants\[0]/)
@@ -280,18 +275,12 @@ describe('migrate/sources/launch/translate', () => {
   describe('detectDuplicateKeys (qfg-0cz.4 + qfg-zfl.20)', () => {
     it('returns [] when all keys are unique across types', () => {
       expect(
-        detectDuplicateKeys([
-          {path: 'configs/a.json'},
-          {path: 'feature-flags/b.json'},
-          {path: 'segments/c.json'},
-        ]),
+        detectDuplicateKeys([{path: 'configs/a.json'}, {path: 'feature-flags/b.json'}, {path: 'segments/c.json'}]),
       ).to.deep.equal([])
     })
 
     it('returns [] when the same key appears twice in the same type (no collision)', () => {
-      expect(
-        detectDuplicateKeys([{path: 'configs/a.json'}, {path: 'configs/a.json'}]),
-      ).to.deep.equal([])
+      expect(detectDuplicateKeys([{path: 'configs/a.json'}, {path: 'configs/a.json'}])).to.deep.equal([])
     })
 
     it('resolves config + feature_flag collision by keeping the config (qfg-zfl.20)', () => {
@@ -323,12 +312,7 @@ describe('migrate/sources/launch/translate', () => {
     })
 
     it('still throws on a collision that does NOT include config (unexpected pattern)', () => {
-      expect(() =>
-        detectDuplicateKeys([
-          {path: 'segments/foo.json'},
-          {path: 'feature-flags/foo.json'},
-        ]),
-      ).to.throw(/foo/)
+      expect(() => detectDuplicateKeys([{path: 'segments/foo.json'}, {path: 'feature-flags/foo.json'}])).to.throw(/foo/)
     })
   })
 

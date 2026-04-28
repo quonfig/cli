@@ -183,9 +183,7 @@ workspace = workspace-work # Work Org - Work Workspace
       const originalRename = fs.promises.rename
       // Simulate a wedged/clobbered rename: the call returns success but the
       // target file never appears on disk (e.g. concurrent npm install -g).
-      ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = (async (
-        src: fs.PathLike,
-      ) => {
+      ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = (async (src: fs.PathLike) => {
         // Clean up the tmp file but leave the target absent.
         try {
           await originalRename.call(fs.promises, src, src)
@@ -217,9 +215,7 @@ workspace = workspace-work # Work Org - Work Workspace
       }
 
       const originalRename = fs.promises.rename
-      ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = (async (
-        src: fs.PathLike,
-      ) => {
+      ;(fs.promises as unknown as {rename: typeof fs.promises.rename}).rename = (async (src: fs.PathLike) => {
         try {
           await originalRename.call(fs.promises, src, src)
           await fs.promises.unlink(src)

@@ -90,11 +90,7 @@ const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initi
   return 'initialized'
 }
 
-const writeQuonfigFiles = (
-  dir: string,
-  changes: LegacyChange[],
-  source: MigrationSource,
-): DuplicateResolution[] => {
+const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): DuplicateResolution[] => {
   const livePaths = new Map<string, true>()
   for (const change of changes) {
     const files = source.translate(change)

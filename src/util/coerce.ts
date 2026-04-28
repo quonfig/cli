@@ -7,8 +7,7 @@ const BOOLEAN_VALUES = new Set([...TRUE_VALUES, 'false', '0', 'f'])
 // Strict ISO 8601 duration: at least one of D/H/M/S must be present (i.e. bare "P"
 // or "PT" alone are rejected). Mirrors the lenient pattern in @quonfig/node but
 // adds anchors and a non-empty check.
-const ISO_DURATION_PATTERN =
-  /^P(?:\d+(?:\.\d+)?D)?(?:T(?:\d+(?:\.\d+)?H)?(?:\d+(?:\.\d+)?M)?(?:\d+(?:\.\d+)?S)?)?$/
+const ISO_DURATION_PATTERN = /^P(?:\d+(?:\.\d+)?D)?(?:T(?:\d+(?:\.\d+)?H)?(?:\d+(?:\.\d+)?M)?(?:\d+(?:\.\d+)?S)?)?$/
 
 const isValidIsoDuration = (value: string): boolean => {
   if (!ISO_DURATION_PATTERN.test(value)) return false
