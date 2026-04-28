@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.23 - 2026-04-28
+
+- feat: `qfg push` now produces a JSON diff and POSTs it to the new server-side `configs.push` oRPC procedure instead of running `git push` against Gitea with a user-held write token. Surfaces per-file permission denials and conflict→pull-and-retry hints. The bootstrap and migrate carve-outs still mint a write-PAT (qfg-azk.13).
+- feat: `qfg verify` validates the renamed `access` enum (`support`, `standard`, `protected-env`, `protected-all-envs`) on configs. Drops the unused `protection` field. JSON Schema generator emits the new enum (qfg-azk.1).
+- fix: test-auth-helper now redirects `~/.quonfig/` to a per-test tmp dir via a new `QUONFIG_CONFIG_HOME` env var. Previously `setupTestAuth`/`cleanupTestAuth` overwrote and unlinked the user's real `~/.quonfig/tokens.json` and `~/.quonfig/config` on every CLI test run.
+
 ## 0.0.22 - 2026-04-27
 
 - feat: `qfg delete <key>` — server-mediated delete that resolves the key's type via `metadata.list` and dispatches to the existing flags/configs/logLevels delete oRPC endpoints. Confirmation required: `--yes` for scripts, otherwise an interactive type-back prompt; refuses to proceed when stdin is not a TTY without `--yes` (qfg-88a).
