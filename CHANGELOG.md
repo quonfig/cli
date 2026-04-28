@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.24 - 2026-04-28
+
+- feat: `qfg login` now opens the WorkOS verification URL in the browser when the user presses Enter. Polling for the device-code token continues regardless, so manual paste still works exactly as before.
+- style: prettier --write across the codebase — 20 files reformatted with no semantic changes.
+
 ## 0.0.23 - 2026-04-28
 
 - feat: `qfg push` now produces a JSON diff and POSTs it to the new server-side `configs.push` oRPC procedure instead of running `git push` against Gitea with a user-held write token. Surfaces per-file permission denials and conflict→pull-and-retry hints. The bootstrap and migrate carve-outs still mint a write-PAT (qfg-azk.13).
