@@ -22,7 +22,11 @@
 
 import {z} from 'zod'
 
-import {LOG_LEVELS} from '../util/log-levels.js'
+// Inlined to keep this directory self-contained for the standalone bun-compile
+// build that runs as the qfg-verify pre-receive hook in app-gitea — that build
+// only copies cli/src/verify/, so any out-of-tree imports break it. Source of
+// truth: cli/src/util/log-levels.ts.
+const LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'] as const
 
 // ── Schemas (subset of app-quonfig config-schemas.ts) ───────────────────
 
