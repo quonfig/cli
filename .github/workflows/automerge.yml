@@ -6,5 +6,8 @@ on:
 
 jobs:
   automerge:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: oclif/github-workflows/.github/workflows/automerge.yml@main
     secrets: inherit
