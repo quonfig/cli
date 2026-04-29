@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import {readWorkspaceSlug, writeWorkspaceSlug} from '../../src/util/quonfig-json.js'
+import {readWorkspaceSlug, upsertWorkspaceKey, writeWorkspaceSlug} from '../../src/util/quonfig-json.js'
 
 describe('quonfig-json utils', () => {
   let tmpDir: string
@@ -120,6 +120,84 @@ describe('quonfig-json utils', () => {
       await writeWorkspaceSlug(tmpDir, 'round-trip')
       const slug = await readWorkspaceSlug(tmpDir)
       expect(slug).to.equal('round-trip')
+    })
+
+    it('preserves single-line array formatting when inserting the pin', async () => {
+      // This is the our-config shape — environments rendered on one line.
+      // Format-stable insert should leave that line untouched.
+      const original = `{
+  "environments": ["production", "staging", "development"]
+}
+`
+      fs.writeFileSync(path.join(tmpDir, 'quonfig.json'), original)
+
+      await writeWorkspaceSlug(tmpDir, 'our-config')
+
+      const raw = fs.readFileSync(path.join(tmpDir, 'quonfig.json'), 'utf8')
+      expect(raw).to.equal(`{
+  "environments": ["production", "staging", "development"],
+  "workspace": "our-config"
+}
+`)
+    })
+
+    it('replaces an existing pin in place without reformatting other fields', async () => {
+      const original = `{
+  "environments": ["production", "staging"],
+  "workspace": "old-slug"
+}
+`
+      fs.writeFileSync(path.join(tmpDir, 'quonfig.json'), original)
+
+      await writeWorkspaceSlug(tmpDir, 'new-slug')
+
+      const raw = fs.readFileSync(path.join(tmpDir, 'quonfig.json'), 'utf8')
+      expect(raw).to.equal(`{
+  "environments": ["production", "staging"],
+  "workspace": "new-slug"
+}
+`)
+    })
+
+    it('falls back to canonical JSON when the file is unparseable', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'quonfig.json'), '{ this is not json')
+
+      await writeWorkspaceSlug(tmpDir, 'fallback')
+
+      const raw = fs.readFileSync(path.join(tmpDir, 'quonfig.json'), 'utf8')
+      const written = JSON.parse(raw)
+      expect(written).to.deep.equal({workspace: 'fallback'})
+      expect(raw.endsWith('\n')).to.equal(true)
+    })
+  })
+
+  describe('upsertWorkspaceKey', () => {
+    it('inserts the pin into a single-line object without reformatting', () => {
+      const out = upsertWorkspaceKey('{"environments":["a"]}', 'slug')
+      expect(out).to.equal('{"environments":["a"], "workspace": "slug"}')
+    })
+
+    it('inserts the pin into an empty multi-line object', () => {
+      const out = upsertWorkspaceKey('{\n}\n', 'slug')
+      expect(out).to.equal('{\n  "workspace": "slug"\n}\n')
+    })
+
+    it('inserts the pin into an empty single-line object', () => {
+      const out = upsertWorkspaceKey('{}', 'slug')
+      expect(out).to.equal('{"workspace": "slug"}')
+    })
+
+    it('replaces an existing pin value in place', () => {
+      const out = upsertWorkspaceKey('{\n  "workspace": "old"\n}\n', 'new')
+      expect(out).to.equal('{\n  "workspace": "new"\n}\n')
+    })
+
+    it('returns undefined for malformed JSON so callers can fall back', () => {
+      expect(upsertWorkspaceKey('{ broken', 'x')).to.equal(undefined)
+    })
+
+    it('returns undefined for a non-object root', () => {
+      expect(upsertWorkspaceKey('[1,2,3]', 'x')).to.equal(undefined)
     })
   })
 })

@@ -20,6 +20,8 @@ import {
   gitMergeFfOnly,
   gitClone,
   displayUrl,
+  addAndCommitFile,
+  dirtyTrackedFiles,
 } from '../util/git-ops.js'
 
 export default class Pull extends BaseCommand {
@@ -119,20 +121,20 @@ CLI shortcuts (no JSON editing needed for simple cases):
         return this.err('Local commits diverge from remote — resolve manually.')
       }
 
-      if (!ff) {
-        this.log('Already up to date.')
-        return {dir: resolvedDir, newCommits: [], workspaceId}
-      }
-
-      // Merge
-      const newCommits = await gitMergeFfOnly(resolvedDir)
-      if (newCommits.length > 0) {
-        this.log(`Pulled ${newCommits.length} new commit(s):`)
-        for (const msg of newCommits) {
-          this.log(`  - ${msg}`)
+      if (ff) {
+        const newCommits = await gitMergeFfOnly(resolvedDir)
+        if (newCommits.length > 0) {
+          this.log(`Pulled ${newCommits.length} new commit(s):`)
+          for (const msg of newCommits) {
+            this.log(`  - ${msg}`)
+          }
+        } else {
+          this.log('Updated successfully.')
         }
       } else {
-        this.log('Updated successfully.')
+        this.log('Already up to date.')
+        // Don't early-return: we still want to run the post-pull work
+        // below (QUONFIG_DIR write, workspace pin backfill+commit).
       }
     } else {
       // Clone fresh
@@ -157,9 +159,10 @@ CLI shortcuts (no JSON editing needed for simple cases):
     await this.maybeWriteQuonfigDir(resolvedDir)
 
     // Backfill the `workspace` pin in `quonfig.json` if missing
-    // (Guard 1 in project/plans/cli-git-sync.md). Local-only write — we
-    // intentionally do NOT commit or push here; the user's next `qfg push`
-    // will sweep it up naturally.
+    // (Guard 1 in project/plans/cli-git-sync.md). When the workspace dir
+    // is a git repo, we also commit the new pin so it's included in the
+    // user's next `qfg push` delta — push diffs HEAD vs origin, so a
+    // working-tree-only write would never reach the server (qfg-0fn).
     await this.backfillWorkspacePin(resolvedDir, tokenEntry, workspaceId)
 
     return {dir: resolvedDir, workspaceId}
@@ -205,6 +208,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
       if (!existingPin) {
         await writeWorkspaceSlug(dir, backendSlug)
         this.verboseLog('Pull', `Backfilled workspace pin "${backendSlug}" into quonfig.json.`)
+        await this.commitPinIfRepo(dir, backendSlug)
         return
       }
 
@@ -218,6 +222,36 @@ CLI shortcuts (no JSON editing needed for simple cases):
     } catch (error: unknown) {
       // Non-fatal — pull itself already succeeded.
       this.verboseLog('Pull', `Could not backfill workspace pin: ${String(error)}`)
+    }
+  }
+
+  /**
+   * Commit the freshly-written pin if `dir` is a git repo. Only commits
+   * when `quonfig.json` is the only thing dirty in the working tree —
+   * we don't want to sweep up the user's unrelated work-in-progress
+   * (untracked files are fine; tracked modifications are not).
+   *
+   * Skips silently when not in a git repo, when other tracked files are
+   * dirty, or when git itself errors. Pull already succeeded; this is
+   * cleanup that the next push can also do (qfg-0fn).
+   */
+  private async commitPinIfRepo(dir: string, slug: string): Promise<void> {
+    try {
+      if (!(await isGitRepo(dir))) return
+
+      const dirty = await dirtyTrackedFiles(dir)
+      const otherDirty = dirty.filter((p) => p !== 'quonfig.json')
+      if (otherDirty.length > 0) {
+        this.verboseLog('Pull', `Other tracked files dirty (${otherDirty.join(', ')}); skipping pin commit.`)
+        return
+      }
+
+      const committed = await addAndCommitFile(dir, 'quonfig.json', `qfg: pin workspace = ${slug}`)
+      if (committed) {
+        this.log(`Committed workspace pin "${slug}" to quonfig.json.`)
+      }
+    } catch (error: unknown) {
+      this.verboseLog('Pull', `Could not commit workspace pin: ${String(error)}`)
     }
   }
 

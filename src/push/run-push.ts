@@ -21,6 +21,7 @@
 
 import * as fs from 'node:fs'
 
+import {commitPinFixIfPinOnly} from '../util/git-ops.js'
 import {readWorkspaceSlug, writeWorkspaceSlug} from '../util/quonfig-json.js'
 import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
@@ -256,6 +257,22 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     await deps.gitOps.setRemoteOrigin(input.dir, backend.repoUrl)
     log('Fetching from remote...')
     await deps.gitOps.fetch(input.dir)
+
+    // Migration cleanup (qfg-0fn): older `qfg pull` runs wrote the
+    // workspace pin to the working tree without committing. The next
+    // diff would miss it. Sweep up that legacy state IF the only dirty
+    // change to quonfig.json is the matching workspace pin — never
+    // silently commit other uncommitted edits the user has in flight.
+    try {
+      const pinFix = await commitPinFixIfPinOnly(input.dir, 'quonfig.json', backend.workspaceSlug)
+      if (pinFix.kind === 'committed') {
+        log(`Committed workspace pin "${pinFix.slug}" to quonfig.json (legacy backfill from prior qfg pull).`)
+      } else if (pinFix.kind === 'skipped') {
+        log(`Note: quonfig.json has uncommitted changes (${pinFix.reason}). They will not be included in this push.`)
+      }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   const deltas = await deps.gitOps.diffHeadVsOrigin(input.dir)
