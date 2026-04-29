@@ -721,4 +721,46 @@ describe('validate', () => {
       }
     })
   })
+
+  describe('segment access tier validation (qfg-0wo)', () => {
+    function segmentWithAccess(access: string): Map<string, string> {
+      const segment: Record<string, unknown> = {
+        key: 'beta-users',
+        type: 'segment',
+        valueType: 'bool',
+        sendToClientSdk: false,
+        access,
+        default: {
+          rules: [
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {type: 'bool', value: false},
+            },
+          ],
+        },
+        environments: [],
+        variants: [],
+      }
+      return new Map<string, string>([['segments/beta-users.json', JSON.stringify(segment)]])
+    }
+
+    it('rejects access="protected-env" on a segment (cross-env, no per-env protection)', () => {
+      const result = validateFileMap(segmentWithAccess('protected-env'))
+
+      expect(result.valid).to.be.false
+      const segmentAccessIssues = result.issues.filter((i) =>
+        i.message.includes('Segment cannot have access "protected-env"'),
+      )
+      expect(segmentAccessIssues, JSON.stringify(result.issues)).to.have.length(1)
+      expect(segmentAccessIssues[0].severity).to.equal('error')
+    })
+
+    for (const value of ['support', 'standard', 'protected-all-envs']) {
+      it(`accepts segment access="${value}"`, () => {
+        const result = validateFileMap(segmentWithAccess(value))
+        expect(result.valid, JSON.stringify(result.issues)).to.be.true
+        expect(result.issues).to.be.empty
+      })
+    }
+  })
 })

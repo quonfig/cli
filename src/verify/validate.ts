@@ -487,6 +487,17 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
             severity: 'error',
           })
         }
+        // Segments are cross-environment (no per-env values), so `protected-env`
+        // has no meaning — there is no environment to protect. Allow only
+        // support / standard / protected-all-envs. See protecting-access.md §11.
+        if (config.access === 'protected-env') {
+          issues.push({
+            file: relPath,
+            message: `Segment cannot have access "protected-env" — segments are cross-environment. Use "standard" or "protected-all-envs".`,
+            severity: 'error',
+            suggestion: `Change access to "standard" or "protected-all-envs"`,
+          })
+        }
         segmentKeys.add(config.key)
       }
 
@@ -814,6 +825,15 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
       }
       if (config.sendToClientSdk) {
         issues.push({file: relPath, message: `Segment must have sendToClientSdk=false`, severity: 'error'})
+      }
+      // Segments are cross-environment — `protected-env` has no meaning. See protecting-access.md §11.
+      if (config.access === 'protected-env') {
+        issues.push({
+          file: relPath,
+          message: `Segment cannot have access "protected-env" — segments are cross-environment. Use "standard" or "protected-all-envs".`,
+          severity: 'error',
+          suggestion: `Change access to "standard" or "protected-all-envs"`,
+        })
       }
       segmentKeys.add(config.key)
     }
