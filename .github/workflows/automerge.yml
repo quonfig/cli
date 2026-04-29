@@ -9,5 +9,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      statuses: read
+      checks: read
     uses: oclif/github-workflows/.github/workflows/automerge.yml@main
     secrets: inherit
