@@ -95,6 +95,9 @@ export default class Login extends BaseCommand {
     // Extract org_id from JWT (WorkOS scopes the token to the selected org)
     const jwtPayload = decodeJWT(tokenResponse.access_token)
     const orgId = (jwtPayload.org_id as string) || user.organization_id
+    if (!orgId) {
+      return this.err('Login failed: token did not include an organization_id. Re-run `qfg login`.')
+    }
 
     // Use the JWT's actual exp claim for expiry
     let expiresAt = Date.now() + 300 * 1000 // fallback: 5 minutes
@@ -106,12 +109,19 @@ export default class Login extends BaseCommand {
     this.verboseLog('Saving tokens to', getTokenFilePath())
     let tokensPath: string
     try {
+      // TODO(qfg-kr7-mol): rewrite for multi-org token minting. For now, store the single
+      // user-scoped token under its org_id so the new TokenStore shape round-trips.
       tokensPath = await saveTokens({
-        accessToken: tokenResponse.access_token,
-        expiresAt,
-        refreshToken: tokenResponse.refresh_token,
-        userEmail,
-        userId: user.id,
+        defaultOrgId: orgId,
+        tokensByOrg: {
+          [orgId]: {
+            access_token: tokenResponse.access_token,
+            expires_at: expiresAt,
+            refresh_token: tokenResponse.refresh_token,
+            user_email: userEmail,
+            user_id: user.id,
+          },
+        },
       })
     } catch (error) {
       return this.err(`Login failed: could not save tokens. ${(error as Error).message}`)

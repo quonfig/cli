@@ -7,11 +7,14 @@ import {afterEach, beforeEach, describe, it} from 'mocha'
 import {
   type AuthConfig,
   getActiveProfile,
+  getTokenForOrg,
   loadAuthConfig,
+  loadTokens,
   saveAuthConfig,
   saveTokens,
-  type TokenData,
+  type TokenSet,
   type TokenStorageOptions,
+  type TokenStore,
 } from '../../src/util/token-storage.js'
 
 describe('token-storage', () => {
@@ -171,12 +174,16 @@ workspace = workspace-work # Work Org - Work Workspace
   })
 
   describe('post-write verification', () => {
-    const sampleTokens: TokenData = {
-      accessToken: 'access',
-      expiresAt: Date.now() + 60_000,
-      refreshToken: 'refresh',
-      userEmail: 'a@b.com',
-      userId: 'u1',
+    const sampleTokenSet: TokenSet = {
+      access_token: 'access',
+      expires_at: Date.now() + 60_000,
+      refresh_token: 'refresh',
+      user_email: 'a@b.com',
+      user_id: 'u1',
+    }
+    const sampleTokens: TokenStore = {
+      defaultOrgId: 'org_1',
+      tokensByOrg: {org_1: sampleTokenSet},
     }
 
     it('saveTokens throws if the target file is missing after rename', async () => {
@@ -244,8 +251,67 @@ workspace = workspace-work # Work Org - Work Workspace
       // Round-trip via the existing loader path
       const tokenFile = path.join(quonfigDir, 'tokens.json')
       const content = fs.readFileSync(tokenFile, 'utf8')
-      const parsed = JSON.parse(content) as TokenData
-      expect(parsed.accessToken).to.equal('access')
+      const parsed = JSON.parse(content) as TokenStore
+      expect(parsed.tokensByOrg.org_1.access_token).to.equal('access')
+    })
+  })
+
+  describe('per-org token storage', () => {
+    const tokenFile = path.join(quonfigDir, 'tokens.json')
+    const orgA: TokenSet = {access_token: 'a-tok', expires_at: 1, refresh_token: 'a-ref'}
+    const orgB: TokenSet = {access_token: 'b-tok', expires_at: 2, refresh_token: 'b-ref'}
+
+    it('saveTokens writes the new tokensByOrg shape', async () => {
+      const store: TokenStore = {
+        defaultOrgId: 'org_A',
+        tokensByOrg: {org_A: orgA, org_B: orgB},
+      }
+      await saveTokens(store, options)
+
+      const onDisk = JSON.parse(fs.readFileSync(tokenFile, 'utf8')) as TokenStore
+      expect(onDisk.tokensByOrg.org_A.access_token).to.equal('a-tok')
+      expect(onDisk.tokensByOrg.org_B.refresh_token).to.equal('b-ref')
+      expect(onDisk.defaultOrgId).to.equal('org_A')
+    })
+
+    it('loadTokens round-trips the new shape', async () => {
+      const store: TokenStore = {tokensByOrg: {org_A: orgA}}
+      await saveTokens(store, options)
+      const loaded = await loadTokens(options)
+      expect(loaded).to.deep.equal(store)
+    })
+
+    it('loadTokens returns null when the file does not exist', async () => {
+      const loaded = await loadTokens(options)
+      expect(loaded).to.equal(null)
+    })
+
+    it('loadTokens hard-fails on the legacy flat shape', async () => {
+      // Old shape: flat TokenData written directly, no tokensByOrg key.
+      const legacy = {accessToken: 'old', expiresAt: 1, refreshToken: 'old-ref'}
+      fs.writeFileSync(tokenFile, JSON.stringify(legacy), 'utf8')
+
+      let caught: Error | undefined
+      try {
+        await loadTokens(options)
+      } catch (error) {
+        caught = error as Error
+      }
+
+      expect(caught, 'expected loadTokens to throw on legacy shape').to.exist
+      expect(caught!.message).to.include('Token store format has changed')
+      expect(caught!.message).to.include('qfg login')
+    })
+
+    it('getTokenForOrg returns the matching token set', () => {
+      const store: TokenStore = {tokensByOrg: {org_A: orgA, org_B: orgB}}
+      expect(getTokenForOrg(store, 'org_A')).to.deep.equal(orgA)
+      expect(getTokenForOrg(store, 'org_B')).to.deep.equal(orgB)
+    })
+
+    it('getTokenForOrg returns undefined for a missing org', () => {
+      const store: TokenStore = {tokensByOrg: {org_A: orgA}}
+      expect(getTokenForOrg(store, 'org_missing')).to.equal(undefined)
     })
   })
 

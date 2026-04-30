@@ -39,11 +39,16 @@ export const setupTestAuth = () => {
   const mockJwt = `eyJhbGciOiJSUzI1NiJ9.${jwtPayload}.mock-signature`
 
   const mockTokens = {
-    accessToken: mockJwt,
-    expiresAt: Date.now() + 3_600_000,
-    refreshToken: 'mock-refresh-token',
-    userEmail: 'test@example.com',
-    userId: 'user_test-123',
+    defaultOrgId: 'org_workspace-123',
+    tokensByOrg: {
+      'org_workspace-123': {
+        access_token: mockJwt,
+        expires_at: Date.now() + 3_600_000,
+        refresh_token: 'mock-refresh-token',
+        user_email: 'test@example.com',
+        user_id: 'user_test-123',
+      },
+    },
   }
   fs.writeFileSync(tokensFile, JSON.stringify(mockTokens, null, 2))
 

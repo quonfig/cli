@@ -94,14 +94,16 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     }
   } else {
     const authConfig = await loadAuthConfig()
-    const tokens = await loadTokens()
+    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+    const store = await loadTokens()
+    const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
 
     command.verboseLog('OAuth auth', {
       hasAuthConfig: Boolean(authConfig),
-      hasAccessToken: Boolean(tokens?.accessToken),
+      hasAccessToken: Boolean(tokens?.access_token),
     })
 
-    if (!authConfig || !tokens?.accessToken) {
+    if (!authConfig || !tokens?.access_token) {
       command.error('No authentication found. Please run `qfg login`.', {exit: 401})
     }
 

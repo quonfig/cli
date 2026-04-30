@@ -81,9 +81,13 @@ describe('resolve-workspace recovery from tokens', () => {
 
   it('refreshes tokens, calls /userWorkspaces/list, saves a profile, and returns the workspace id', async () => {
     await saveTokens({
-      accessToken: buildJwt(3600),
-      expiresAt: Date.now() + 3_600_000,
-      refreshToken: 'mock-refresh-token',
+      tokensByOrg: {
+        org_test: {
+          access_token: buildJwt(3600),
+          expires_at: Date.now() + 3_600_000,
+          refresh_token: 'mock-refresh-token',
+        },
+      },
     })
 
     let listCalled = false
@@ -128,9 +132,13 @@ describe('resolve-workspace recovery from tokens', () => {
 
   it('errors with a clear message when tokens exist but /userWorkspaces/list returns no entries', async () => {
     await saveTokens({
-      accessToken: buildJwt(3600),
-      expiresAt: Date.now() + 3_600_000,
-      refreshToken: 'mock-refresh-token',
+      tokensByOrg: {
+        org_test: {
+          access_token: buildJwt(3600),
+          expires_at: Date.now() + 3_600_000,
+          refresh_token: 'mock-refresh-token',
+        },
+      },
     })
 
     globalThis.fetch = (async (url: unknown) => {

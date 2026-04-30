@@ -27,44 +27,48 @@ export async function getValidAccessToken(log: Logger = noopLog): Promise<string
     return envKey
   }
 
-  const tokens = await loadTokens()
+  // TODO(qfg-kr7.6): take a workosOrgId argument and pick the matching token entry.
+  // For now, use the defaultOrgId (or the first available org) as a stopgap.
+  const store = await loadTokens()
+  const orgId = store?.defaultOrgId ?? (store ? Object.keys(store.tokensByOrg)[0] : undefined)
+  const tokens = store && orgId ? store.tokensByOrg[orgId] : undefined
   log('getValidAccessToken: loaded tokens', {
     domain: getDomain(),
-    hasAccessToken: Boolean(tokens?.accessToken),
-    hasRefreshToken: Boolean(tokens?.refreshToken),
-    expiresAt: tokens?.expiresAt,
+    hasAccessToken: Boolean(tokens?.access_token),
+    hasRefreshToken: Boolean(tokens?.refresh_token),
+    expiresAt: tokens?.expires_at,
   })
-  if (!tokens?.accessToken) {
+  if (!tokens?.access_token || !store || !orgId) {
     throw new Error('Not authenticated. Please run `qfg login` first.')
   }
 
-  // Check expiry using the JWT's exp claim, falling back to stored expiresAt
-  let expired = tokens.expiresAt ? tokens.expiresAt < Date.now() : false
+  // Check expiry using the JWT's exp claim, falling back to stored expires_at
+  let expired = tokens.expires_at ? tokens.expires_at < Date.now() : false
   let expirySource: 'stored' | 'jwt' = 'stored'
   try {
-    const payload = decodeJWT(tokens.accessToken)
+    const payload = decodeJWT(tokens.access_token)
     if (typeof payload.exp === 'number') {
       expired = payload.exp * 1000 < Date.now()
       expirySource = 'jwt'
     }
   } catch {
-    /* use stored expiresAt */
+    /* use stored expires_at */
   }
 
   log('getValidAccessToken: expiry check', {expired, expirySource, now: Date.now()})
 
   if (!expired) {
-    return tokens.accessToken
+    return tokens.access_token
   }
 
-  if (!tokens.refreshToken) {
+  if (!tokens.refresh_token) {
     throw new Error('Session expired (no refresh_token on disk). Please run `qfg login` to re-authenticate.')
   }
 
   log('getValidAccessToken: access token expired, calling WorkOS refresh')
   let refreshed
   try {
-    refreshed = await refreshAccessToken(tokens.refreshToken)
+    refreshed = await refreshAccessToken(tokens.refresh_token)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     log('getValidAccessToken: refresh FAILED', {detail})
@@ -85,13 +89,13 @@ export async function getValidAccessToken(log: Logger = noopLog): Promise<string
     /* use fallback */
   }
 
-  const updated = {
+  store.tokensByOrg[orgId] = {
     ...tokens,
-    accessToken: refreshed.access_token,
-    expiresAt,
-    refreshToken: refreshed.refresh_token,
+    access_token: refreshed.access_token,
+    expires_at: expiresAt,
+    refresh_token: refreshed.refresh_token,
   }
-  await saveTokens(updated)
+  await saveTokens(store)
   log('getValidAccessToken: refreshed tokens saved', {newExpiresAt: expiresAt})
 
   return refreshed.access_token

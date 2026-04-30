@@ -65,9 +65,13 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
     // Short-circuit path must ignore the file entirely.
     await saveTokens(
       {
-        accessToken: 'DISK_SHOULD_BE_IGNORED',
-        expiresAt: 1000, // long expired
-        refreshToken: 'fake-refresh',
+        tokensByOrg: {
+          org_test: {
+            access_token: 'DISK_SHOULD_BE_IGNORED',
+            expires_at: 1000, // long expired
+            refresh_token: 'fake-refresh',
+          },
+        },
       },
       tokenOptions,
     )

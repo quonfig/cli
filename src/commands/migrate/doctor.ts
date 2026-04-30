@@ -7,9 +7,19 @@ import {loadTokens} from '../../util/token-storage.js'
 const SUPPORTED_SOURCES = new Set(['launch'])
 
 const defaultLoadSession = async (): Promise<DoctorSession | null> => {
-  const tokens = await loadTokens()
-  if (!tokens?.accessToken) return null
-  return {expiresAt: tokens.expiresAt ?? 0}
+  // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+  let store
+  try {
+    store = await loadTokens()
+  } catch {
+    // Legacy on-disk shape (pre-qfg-kr7.3) — treat as "not logged in" so the
+    // doctor can tell the user to re-run `qfg login` rather than crashing.
+    return null
+  }
+
+  const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
+  if (!tokens?.access_token) return null
+  return {expiresAt: tokens.expires_at ?? 0}
 }
 
 export default class MigrateDoctor extends BaseCommand {

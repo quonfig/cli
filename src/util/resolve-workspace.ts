@@ -88,8 +88,10 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     // 0f8bee6) or a partial login that wrote tokens but never the config
     // (qfg-2qj). getValidAccessToken already knows how to refresh, so try
     // that path before declaring "Not logged in".
-    const tokens = await loadTokens()
-    if (!tokens?.refreshToken) {
+    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+    const store = await loadTokens()
+    const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
+    if (!tokens?.refresh_token) {
       command.error('Not logged in. Run `qfg login` first (or set QUONFIG_API_KEY for CI).', {exit: 401})
     }
 

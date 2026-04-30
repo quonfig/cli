@@ -20,13 +20,21 @@ const getConfigFile = (options?: TokenStorageOptions) => {
   return path.join(getQuonfigDir(options), filename)
 }
 
-export interface TokenData {
-  accessToken: string
-  expiresAt: number
-  refreshToken: string
-  userEmail?: string
-  userId?: string
+export interface TokenSet {
+  access_token: string
+  expires_at: number
+  refresh_token: string
+  user_email?: string
+  user_id?: string
 }
+
+export interface TokenStore {
+  defaultOrgId?: string
+  tokensByOrg: {[workosOrgId: string]: TokenSet}
+}
+
+export const getTokenForOrg = (store: TokenStore, workosOrgId: string): TokenSet | undefined =>
+  store.tokensByOrg[workosOrgId]
 
 export interface AuthConfig {
   defaultProfile?: string
@@ -82,11 +90,11 @@ const verifyWritten = async (filePath: string, label: string): Promise<void> => 
   }
 }
 
-export const saveTokens = async (tokens: TokenData, options?: TokenStorageOptions): Promise<string> => {
+export const saveTokens = async (store: TokenStore, options?: TokenStorageOptions): Promise<string> => {
   await ensureQuonfigDir(options)
   const targetFile = getTokenFile(options)
   const tmpFile = `${targetFile}.tmp`
-  await fs.promises.writeFile(tmpFile, JSON.stringify(tokens, null, 2), {encoding: 'utf8', mode: 0o600})
+  await fs.promises.writeFile(tmpFile, JSON.stringify(store, null, 2), {encoding: 'utf8', mode: 0o600})
   await fs.promises.rename(tmpFile, targetFile)
   await verifyWritten(targetFile, 'tokens')
   // Round-trip parse to confirm the file on disk is the JSON we just wrote.
@@ -100,13 +108,23 @@ export const saveTokens = async (tokens: TokenData, options?: TokenStorageOption
   return targetFile
 }
 
-export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenData | null> => {
+const isTokenStore = (value: unknown): value is TokenStore =>
+  typeof value === 'object' && value !== null && 'tokensByOrg' in (value as Record<string, unknown>)
+
+export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenStore | null> => {
+  let data: string
   try {
-    const data = await fs.promises.readFile(getTokenFile(options), 'utf8')
-    return JSON.parse(data) as TokenData
+    data = await fs.promises.readFile(getTokenFile(options), 'utf8')
   } catch {
     return null
   }
+
+  const parsed = JSON.parse(data) as unknown
+  if (!isTokenStore(parsed)) {
+    throw new Error('Token store format has changed. Run `qfg login` to re-authenticate.')
+  }
+
+  return parsed
 }
 
 export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageOptions): Promise<string> => {

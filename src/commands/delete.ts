@@ -69,8 +69,10 @@ Examples
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Delete)
 
-    const tokens = await loadTokens()
-    if (!tokens?.accessToken) {
+    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+    const store = await loadTokens()
+    const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
+    if (!tokens?.access_token) {
       return this.err('Not logged in. Run `qfg login` first.')
     }
 
