@@ -8,7 +8,7 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
-import {readWorkspaceSlug, writeWorkspaceSlug} from '../util/quonfig-json.js'
+import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../util/quonfig-json.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
@@ -203,19 +203,37 @@ CLI shortcuts (no JSON editing needed for simple cases):
       return
     }
 
+    // The pin is stored as `<org-slug>/<workspace-slug>`. The backend's
+    // `workspaceSlug` is just the workspace component today; until the
+    // server learns to return the org slug, we can only backfill / compare
+    // when the backend response itself already carries the slash form
+    // (e.g. when later beads in this epic update the API). Otherwise,
+    // skip with a verbose log — pull itself already succeeded.
+    const backendPin = tryParseWorkspacePin(backendSlug)
+    if (!backendPin) {
+      this.verboseLog(
+        'Pull',
+        `Backend workspaceSlug "${backendSlug}" is not in <org>/<ws> form; skipping pin backfill.`,
+      )
+      return
+    }
+
     try {
       const existingPin = await readWorkspaceSlug(dir)
       if (!existingPin) {
-        await writeWorkspaceSlug(dir, backendSlug)
-        this.verboseLog('Pull', `Backfilled workspace pin "${backendSlug}" into quonfig.json.`)
-        await this.commitPinIfRepo(dir, backendSlug)
+        await writeWorkspaceSlug(dir, backendPin)
+        const formatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`
+        this.verboseLog('Pull', `Backfilled workspace pin "${formatted}" into quonfig.json.`)
+        await this.commitPinIfRepo(dir, formatted)
         return
       }
 
-      if (existingPin !== backendSlug) {
+      if (existingPin.orgSlug !== backendPin.orgSlug || existingPin.workspaceSlug !== backendPin.workspaceSlug) {
+        const existingFormatted = `${existingPin.orgSlug}/${existingPin.workspaceSlug}`
+        const backendFormatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`
         this.log('')
         this.log(
-          `Warning: quonfig.json pins workspace "${existingPin}", but the backend says this workspace is "${backendSlug}".`,
+          `Warning: quonfig.json pins workspace "${existingFormatted}", but the backend says this workspace is "${backendFormatted}".`,
         )
         this.log('Leaving the existing pin in place. Run `qfg push` to see the full identity check.')
       }

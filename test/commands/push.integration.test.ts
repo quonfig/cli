@@ -335,7 +335,7 @@ describe('runPush: integration against real local bare git repos (server-side co
   describe('1. clone-path happy', () => {
     it('sends a modified-file FileDelta with beforeJson + afterJson and returns the server commitSha', async () => {
       const {remoteUrl} = createBareRemote(root)
-      const quonfigJson = JSON.stringify({workspace: 'acme-prod'}) + '\n'
+      const quonfigJson = JSON.stringify({workspace: 'acme/acme-prod'}) + '\n'
       seedRemote(remoteUrl, root, {
         'quonfig.json': quonfigJson,
         'configs/one.json': '{"k":1}\n',
@@ -384,14 +384,14 @@ describe('runPush: integration against real local bare git repos (server-side co
     it('sends FileDeltas for add/modify/delete from a no-.git/ local against a divergent origin', async () => {
       const {remoteUrl} = createBareRemote(root)
       const seeded: Record<string, string> = {
-        'quonfig.json': JSON.stringify({workspace: 'acme-prod'}) + '\n',
+        'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
       }
       for (let i = 0; i < 10; i++) seeded[`configs/c${i}.json`] = `{"k":${i}}\n`
       seedRemote(remoteUrl, root, seeded)
 
       const local = fs.mkdtempSync(path.join(root, 'bare-'))
       const localFiles: Record<string, string> = {
-        'quonfig.json': JSON.stringify({workspace: 'acme-prod'}) + '\n',
+        'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
         'configs/c0.json': '{"k":111}\n', // modified
         'configs/new.json': '{"k":42}\n', // added
       }
@@ -444,13 +444,13 @@ describe('runPush: integration against real local bare git repos (server-side co
     it('throws IDENTITY_ABORT when quonfig.json pin disagrees with --workspace; pushToServer is never called', async () => {
       const {remoteUrl} = createBareRemote(root)
       seedRemote(remoteUrl, root, {
-        'quonfig.json': JSON.stringify({workspace: 'other-ws'}) + '\n',
+        'quonfig.json': JSON.stringify({workspace: 'other-org/other-ws'}) + '\n',
         'configs/one.json': '{"k":1}\n',
       })
 
       const local = path.join(root, 'work')
       cloneRemoteTo(remoteUrl, local)
-      writeFiles(local, {'quonfig.json': JSON.stringify({workspace: 'acme-prod'}) + '\n'})
+      writeFiles(local, {'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n'})
       commitAll(local, 'pin to acme-prod locally')
 
       const io = makeIo()
@@ -482,7 +482,7 @@ describe('runPush: integration against real local bare git repos (server-side co
     it('--yes does NOT skip typed-slug; EOF aborts; typed slug proceeds', async () => {
       const {remoteUrl, remoteDir} = createBareRemote(root)
       const seeded: Record<string, string> = {
-        'quonfig.json': JSON.stringify({workspace: 'acme-prod'}) + '\n',
+        'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
       }
       for (let i = 0; i < 20; i++) seeded[`configs/c${i}.json`] = `{"k":${i}}\n`
       seedRemote(remoteUrl, root, seeded)
@@ -555,7 +555,7 @@ describe('runPush: integration against real local bare git repos (server-side co
     it('translates a server CONFLICT into PushFatalError(CONFLICT) with a `qfg pull` hint', async () => {
       const {remoteUrl} = createBareRemote(root)
       seedRemote(remoteUrl, root, {
-        'quonfig.json': JSON.stringify({workspace: 'acme-prod'}) + '\n',
+        'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
         'configs/one.json': '{"k":1}\n',
       })
 
@@ -600,7 +600,7 @@ describe('runPush: integration against real local bare git repos (server-side co
     it('returns no-op without calling pushToServer when local matches origin exactly', async () => {
       const {remoteUrl} = createBareRemote(root)
       seedRemote(remoteUrl, root, {
-        'quonfig.json': JSON.stringify({workspace: 'acme-prod'}) + '\n',
+        'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
         'configs/one.json': '{"k":1}\n',
       })
 

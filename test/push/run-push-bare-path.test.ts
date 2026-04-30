@@ -154,7 +154,7 @@ describe('runPush: bare-path with real computeBarePathDiff', () => {
 
   it('reports no-op when a bare-path local dir matches remote exactly', async () => {
     const remote = createBareRemote(root)
-    const quonfigJson = JSON.stringify({workspace: 'test-ws'})
+    const quonfigJson = JSON.stringify({workspace: 'acme/test-ws'})
     seedRemoteWith(remote, root, {
       'configs/one.json': '{"k":1}\n',
       'quonfig.json': quonfigJson,
@@ -195,7 +195,7 @@ describe('runPush: bare-path with real computeBarePathDiff', () => {
     })
 
     const local = fs.mkdtempSync(path.join(root, 'local-'))
-    fs.writeFileSync(path.join(local, 'quonfig.json'), JSON.stringify({workspace: 'test-ws'}))
+    fs.writeFileSync(path.join(local, 'quonfig.json'), JSON.stringify({workspace: 'acme/test-ws'}))
     writeLocal(local, {
       'configs/one.json': '{"k":1}\n',
       'configs/new.json': '{"k":2}\n', // added

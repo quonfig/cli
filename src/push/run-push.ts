@@ -22,7 +22,7 @@
 import * as fs from 'node:fs'
 
 import {commitPinFixIfPinOnly} from '../util/git-ops.js'
-import {readWorkspaceSlug, writeWorkspaceSlug} from '../util/quonfig-json.js'
+import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../util/quonfig-json.js'
 import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
 import {FileDelta, summarizeDiff} from './diff-summary.js'
@@ -195,7 +195,10 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   // Guard 1 pre-work: read repo pin + current origin BEFORE we mint a write
   // token. The identity check happens after minting (so we can cross-reference
   // the backend's canonical identity) but we want the pin/origin up front.
-  const repoPinSlug = await readWorkspaceSlug(input.dir)
+  // The pin is `<org>/<ws>`; identity-check still operates on the workspace
+  // component until backend responses carry the org slug too (qfg-kr7 epic).
+  const repoPin = await readWorkspaceSlug(input.dir)
+  const repoPinSlug = repoPin?.workspaceSlug
   const hasGit = await deps.gitOps.isGitRepo(input.dir)
   const remoteOriginUrl = hasGit ? await deps.gitOps.getRemoteOriginUrl(input.dir) : undefined
 
@@ -348,11 +351,19 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   }
 
   if (unpinned && !input.noPinWrite) {
-    try {
-      await writeWorkspaceSlug(input.dir, backend.workspaceSlug)
-      log(`Wrote workspace = "${backend.workspaceSlug}" into quonfig.json`)
-    } catch {
-      /* non-fatal; pin is advisory */
+    // Backend `workspaceSlug` is just the workspace component today; until
+    // it returns the slash form, we can only write the pin when the
+    // response is already in `<org>/<ws>` form. Otherwise skip — the pin
+    // is advisory and will be backfilled by a later `qfg pull` once the
+    // backend learns the new shape (qfg-kr7 epic).
+    const backendPin = tryParseWorkspacePin(backend.workspaceSlug)
+    if (backendPin) {
+      try {
+        await writeWorkspaceSlug(input.dir, backendPin)
+        log(`Wrote workspace = "${backendPin.orgSlug}/${backendPin.workspaceSlug}" into quonfig.json`)
+      } catch {
+        /* non-fatal; pin is advisory */
+      }
     }
   }
 

@@ -172,7 +172,7 @@ describe('runPush (core)', () => {
       const dir = tmpDir()
       try {
         // Write a pin that points at a different workspace than the backend.
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'other-ws'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'other-org/other-ws'}))
 
         const {deps, calls} = makeDeps()
         const input: RunPushInput = {
@@ -203,7 +203,7 @@ describe('runPush (core)', () => {
     it('throws PushFatalError(VALIDATION_FAILED) when validate reports errors', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const {deps, calls} = makeDeps({validateErrors: ['missing quonfig.json']})
         const input: RunPushInput = {
           dir,
@@ -230,7 +230,7 @@ describe('runPush (core)', () => {
     it('skips validate when --skip-validate is set', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const {deps, calls} = makeDeps({
           validateErrors: ['should-be-ignored'],
           userInput: 'acme-prod\n', // typed-slug confirm because unpinned? no — pinned — but no git so identity is requires-typed-slug since origin undefined but pin set => ok
@@ -261,7 +261,7 @@ describe('runPush (core)', () => {
     it('takes the clone path when .git exists and origin matches the backend repo URL', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/one.json'}]
         const {deps, calls} = makeDeps({
           gitOps: {
@@ -294,7 +294,7 @@ describe('runPush (core)', () => {
       const dir = tmpDir()
       try {
         // Pre-pin so identity passes without typed-slug.
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const {deps, calls} = makeDeps({
           gitOps: {
             isGitRepo: async () => false,
@@ -331,7 +331,7 @@ describe('runPush (core)', () => {
     it('--yes proceeds past a non-destructive Y/N prompt on the clone path', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/one.json'}]
         const {deps, calls} = makeDeps({
           gitOps: {
@@ -361,7 +361,7 @@ describe('runPush (core)', () => {
     it('--yes does NOT skip the typed-slug prompt when the diff is destructive', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         // 12 deletes -> trips destructive (>=10 deletes)
         const deltas: FileDelta[] = []
         for (let i = 0; i < 12; i++) deltas.push({kind: 'deleted', path: `configs/gone-${i}.json`})
@@ -393,7 +393,7 @@ describe('runPush (core)', () => {
     it('accepts a typed slug on destructive confirmation and proceeds', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = []
         for (let i = 0; i < 12; i++) deltas.push({kind: 'deleted', path: `configs/gone-${i}.json`})
         const {deps, calls} = makeDeps({
@@ -425,7 +425,7 @@ describe('runPush (core)', () => {
     it('maps a server CONFLICT to PushFatalError(CONFLICT) with a `qfg pull` hint', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const {deps} = makeDeps({
           gitOps: {
             isGitRepo: async () => true,

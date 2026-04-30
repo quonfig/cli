@@ -8,7 +8,7 @@ import type {JsonObj} from '../../result.js'
 import {BaseCommand} from '../../index.js'
 import {getActiveProfile, loadAuthConfig} from '../../util/token-storage.js'
 import {mintGiteaToken} from '../../util/gitea-api.js'
-import {readWorkspaceSlug, writeWorkspaceSlug} from '../../util/quonfig-json.js'
+import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../../util/quonfig-json.js'
 import {
   isGitRepo,
   hasAtLeastOneCommit,
@@ -175,21 +175,39 @@ export default class WorkspaceBootstrap extends BaseCommand {
     // we keep what is there — bootstrap is for fresh cases, not re-pinning.
     // If we do write it, commit and push so the bootstrap leaves no
     // uncommitted changes behind.
+    //
+    // The pin is stored as `<org-slug>/<workspace-slug>`. The backend's
+    // `workspaceSlug` is just the workspace component today; until the
+    // server returns the slash form, we skip the write rather than
+    // emitting a bare slug.
+    const backendPin = tryParseWorkspacePin(backendSlug)
     try {
       const existingPin = await readWorkspaceSlug(resolvedDir)
-      if (existingPin && existingPin !== backendSlug) {
+      const existingFormatted = existingPin ? `${existingPin.orgSlug}/${existingPin.workspaceSlug}` : undefined
+
+      if (!backendPin) {
+        this.verboseLog(
+          'WorkspaceBootstrap',
+          `Backend workspaceSlug "${backendSlug}" is not in <org>/<ws> form; skipping pin write.`,
+        )
+      } else if (
+        existingPin &&
+        (existingPin.orgSlug !== backendPin.orgSlug || existingPin.workspaceSlug !== backendPin.workspaceSlug)
+      ) {
+        const backendFormatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`
         this.log('')
         this.log(
-          `Warning: quonfig.json already pins workspace "${existingPin}", but the backend says this workspace is "${backendSlug}".`,
+          `Warning: quonfig.json already pins workspace "${existingFormatted}", but the backend says this workspace is "${backendFormatted}".`,
         )
         this.log('Leaving the existing pin in place. If this is wrong, edit quonfig.json manually and re-run.')
-      } else if (existingPin === backendSlug) {
-        this.verboseLog('WorkspaceBootstrap', `quonfig.json already pinned to ${backendSlug}; no-op.`)
+      } else if (existingPin) {
+        this.verboseLog('WorkspaceBootstrap', `quonfig.json already pinned to ${existingFormatted}; no-op.`)
       } else {
+        const backendFormatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`
         this.log('')
-        this.log(`Pinning quonfig.json to workspace "${backendSlug}"...`)
-        await writeWorkspaceSlug(resolvedDir, backendSlug)
-        await this.commitAndPushPin(resolvedDir, backendSlug, flags.force)
+        this.log(`Pinning quonfig.json to workspace "${backendFormatted}"...`)
+        await writeWorkspaceSlug(resolvedDir, backendPin)
+        await this.commitAndPushPin(resolvedDir, backendFormatted, flags.force)
       }
     } catch (error: unknown) {
       // The main push has already succeeded, so don't fail the whole command.

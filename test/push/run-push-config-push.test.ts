@@ -121,7 +121,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
     it('passes beforeJson + afterJson for modifies, afterJson-only for adds, beforeJson-only for deletes', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [
           {kind: 'added', path: 'configs/new.json', afterJson: '{"k":1}'},
           {kind: 'modified', path: 'configs/changed.json', beforeJson: '{"k":1}', afterJson: '{"k":2}'},
@@ -176,7 +176,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
     it('throws PushFatalError(PUSH_DENIED) with one line per denial including the required permission', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [
           {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
           {kind: 'modified', path: 'configs/b.json', beforeJson: '{}', afterJson: '{"v":2}'},
@@ -240,7 +240,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
     it('throws PushFatalError(CONFLICT) with a "qfg pull and retry" hint', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [
           {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
         ]
@@ -283,7 +283,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
     it('returns the commit SHA from the server response', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [
           {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
         ]
@@ -319,7 +319,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
     it('only mints with scope=read; never with scope=write', async () => {
       const dir = tmpDir()
       try {
-        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme-prod'}))
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
         const deltas: FileDelta[] = [
           {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
         ]

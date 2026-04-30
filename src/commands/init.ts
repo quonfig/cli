@@ -32,7 +32,8 @@ export default class Init extends BaseCommand {
       description: 'Include sample configs (default: yes on first init, no on update)',
     }),
     workspace: Flags.string({
-      description: 'Workspace slug to pin in quonfig.json (Guard 1). If omitted, no pin is written.',
+      description:
+        'Workspace pin in <org-slug>/<workspace-slug> form (Guard 1). If omitted, no pin is written.',
       required: false,
     }),
   }
@@ -96,7 +97,14 @@ export default class Init extends BaseCommand {
     // non-interactive: flag → write, no flag → no write. Users who need the
     // pin later can run `qfg pull` (backfills) or edit the file directly.
     if (flags.workspace) {
-      await writeWorkspaceSlug(dir, flags.workspace)
+      const parts = flags.workspace.split('/')
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        this.error(
+          `--workspace must be in <org-slug>/<workspace-slug> form (e.g. acme/foo). Got: ${JSON.stringify(flags.workspace)}.`,
+        )
+      }
+
+      await writeWorkspaceSlug(dir, {orgSlug: parts[0]!, workspaceSlug: parts[1]!})
     }
 
     this.log(`${mode} workspace: ${dir === '.' ? process.cwd() : dir}\n`)

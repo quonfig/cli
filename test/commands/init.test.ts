@@ -295,20 +295,20 @@ describe('qfg init', () => {
   // ── Workspace pin (Guard 1) ────────────────────────────────────────
 
   describe('workspace pin (--workspace flag)', () => {
-    it('writes the workspace slug into quonfig.json when the flag is provided', async () => {
+    it('writes the workspace pin into quonfig.json when the flag is provided', async () => {
       const dir = tmpDir()
       try {
         // Simulate the init command's full flow: execute init, then write pin.
         initFresh(dir)
-        await writeWorkspaceSlug(dir, 'acme-prod')
+        await writeWorkspaceSlug(dir, {orgSlug: 'acme', workspaceSlug: 'prod'})
 
         // quonfig.json should now carry the pin AND keep the original environments field
         const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'quonfig.json'), 'utf8'))
-        expect(parsed.workspace).to.equal('acme-prod')
+        expect(parsed.workspace).to.equal('acme/prod')
         expect(parsed.environments).to.deep.equal([])
 
         const slug = await readWorkspaceSlug(dir)
-        expect(slug).to.equal('acme-prod')
+        expect(slug).to.deep.equal({orgSlug: 'acme', workspaceSlug: 'prod'})
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
