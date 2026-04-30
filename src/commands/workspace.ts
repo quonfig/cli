@@ -64,10 +64,11 @@ export default class Workspace extends BaseCommand {
       )
     }
 
-    // getValidAccessToken short-circuits when QUONFIG_API_KEY is set.
+    // getValidAccessToken short-circuits when QUONFIG_API_KEY is set, so the
+    // orgId argument is ignored on this path.
     let jwt: string
     try {
-      jwt = await getValidAccessToken()
+      jwt = await getValidAccessToken('')
     } catch (error) {
       return this.err(error instanceof Error ? error.message : String(error))
     }

@@ -1,7 +1,7 @@
 import type {BaseCommand} from '../index.js'
 
 import {getApiUrl} from './domain-urls.js'
-import {getValidAccessToken} from './get-valid-token.js'
+import {getValidAccessToken, resolveDefaultOrgId} from './get-valid-token.js'
 import {
   type AuthConfig,
   getActiveProfile,
@@ -43,7 +43,8 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     }
 
     // Slug — resolve via the server since there's no local auth config in CI mode.
-    const jwt = await getValidAccessToken(command.verboseLog)
+    // API-key path short-circuits before consulting the orgId.
+    const jwt = await getValidAccessToken('', command.verboseLog)
     let res: Response
     try {
       res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
@@ -132,7 +133,9 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
 async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthConfig> {
   let jwt: string
   try {
-    jwt = await getValidAccessToken(command.verboseLog)
+    // TODO(qfg-kr7.5): pick the orgId resolved from the workspace address.
+    const orgId = await resolveDefaultOrgId()
+    jwt = await getValidAccessToken(orgId, command.verboseLog)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     command.error(`Tokens found but refresh failed: ${detail}. Run \`qfg login\` to repopulate.`, {exit: 401})

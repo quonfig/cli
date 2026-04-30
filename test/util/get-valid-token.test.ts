@@ -5,7 +5,13 @@ import * as path from 'node:path'
 import {afterEach, beforeEach, describe, it} from 'mocha'
 
 import {getValidAccessToken} from '../../src/util/get-valid-token.js'
-import {saveTokens, type TokenStorageOptions} from '../../src/util/token-storage.js'
+import {loadTokens, saveTokens, type TokenStorageOptions} from '../../src/util/token-storage.js'
+
+const buildJwt = (payload: Record<string, unknown>): string => {
+  const header = Buffer.from(JSON.stringify({alg: 'RS256', typ: 'JWT'})).toString('base64url')
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  return `${header}.${body}.signature`
+}
 
 /**
  * These tests exercise the QUONFIG_API_KEY short-circuit in getValidAccessToken().
@@ -52,7 +58,7 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
   it('returns the env key directly when QUONFIG_API_KEY starts with qf_uk_', async () => {
     process.env.QUONFIG_API_KEY = 'qf_uk_abcdef'
 
-    const token = await getValidAccessToken()
+    const token = await getValidAccessToken('org_unused')
 
     expect(token).to.equal('qf_uk_abcdef')
   })
@@ -80,7 +86,7 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
     const beforeEntries = fs.readdirSync(quonfigDir).sort()
     const beforeMtimes = beforeEntries.map((name) => fs.statSync(path.join(quonfigDir, name)).mtimeMs)
 
-    const token = await getValidAccessToken()
+    const token = await getValidAccessToken('org_unused')
 
     expect(token).to.equal('qf_uk_abcdef0123456789')
 
@@ -96,7 +102,7 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
 
     let caught: Error | undefined
     try {
-      await getValidAccessToken()
+      await getValidAccessToken('org_unused')
     } catch (error) {
       caught = error as Error
     }
@@ -112,16 +118,16 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
   it('falls through to disk path when QUONFIG_API_KEY is empty', async () => {
     process.env.QUONFIG_API_KEY = ''
 
-    // No tokens on disk, so we expect the canonical "Not authenticated" error.
+    // No tokens on disk, so we expect the canonical "No token for org" error.
     let caught: Error | undefined
     try {
-      await getValidAccessToken()
+      await getValidAccessToken('org_alpha')
     } catch (error) {
       caught = error as Error
     }
 
     expect(caught, 'expected getValidAccessToken to throw').to.be.instanceOf(Error)
-    expect(caught!.message).to.include('Not authenticated')
+    expect(caught!.message).to.include('org_alpha')
   })
 
   it('falls through to disk path when QUONFIG_API_KEY is unset', async () => {
@@ -129,12 +135,191 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
 
     let caught: Error | undefined
     try {
-      await getValidAccessToken()
+      await getValidAccessToken('org_alpha')
     } catch (error) {
       caught = error as Error
     }
 
     expect(caught, 'expected getValidAccessToken to throw').to.be.instanceOf(Error)
-    expect(caught!.message).to.include('Not authenticated')
+    expect(caught!.message).to.include('org_alpha')
+  })
+})
+
+describe('get-valid-token (per-org OAuth path)', () => {
+  const testRoot = path.join(os.tmpdir(), '.quonfig-get-valid-token-oauth-test-' + Date.now())
+  const fakeHome = path.join(testRoot, 'home')
+  const quonfigDir = path.join(fakeHome, '.quonfig')
+  const tokenOptions: TokenStorageOptions = {quonfigDir}
+  let originalHome: string | undefined
+  let originalApiKey: string | undefined
+  let originalFetch: typeof globalThis.fetch
+
+  beforeEach(() => {
+    fs.mkdirSync(quonfigDir, {recursive: true})
+    originalHome = process.env.HOME
+    originalApiKey = process.env.QUONFIG_API_KEY
+    originalFetch = globalThis.fetch
+    process.env.HOME = fakeHome
+    delete process.env.QUONFIG_API_KEY
+  })
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = originalHome
+    }
+
+    if (originalApiKey === undefined) {
+      delete process.env.QUONFIG_API_KEY
+    } else {
+      process.env.QUONFIG_API_KEY = originalApiKey
+    }
+
+    globalThis.fetch = originalFetch
+
+    if (fs.existsSync(testRoot)) {
+      fs.rmSync(testRoot, {recursive: true})
+    }
+  })
+
+  it('returns the matching org token when valid', async () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600
+    const alphaJwt = buildJwt({exp: futureExp, org_id: 'org_alpha', sub: 'user_1'})
+    const betaJwt = buildJwt({exp: futureExp, org_id: 'org_beta', sub: 'user_1'})
+
+    await saveTokens(
+      {
+        tokensByOrg: {
+          org_alpha: {access_token: alphaJwt, expires_at: futureExp * 1000, refresh_token: 'r_alpha'},
+          org_beta: {access_token: betaJwt, expires_at: futureExp * 1000, refresh_token: 'r_beta'},
+        },
+      },
+      tokenOptions,
+    )
+
+    const token = await getValidAccessToken('org_beta')
+
+    expect(token).to.equal(betaJwt)
+  })
+
+  it('throws "No token for org <orgId>" when the org is not in the store', async () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600
+    await saveTokens(
+      {
+        tokensByOrg: {
+          org_alpha: {
+            access_token: buildJwt({exp: futureExp, org_id: 'org_alpha'}),
+            expires_at: futureExp * 1000,
+            refresh_token: 'r_alpha',
+          },
+        },
+      },
+      tokenOptions,
+    )
+
+    let caught: Error | undefined
+    try {
+      await getValidAccessToken('org_missing')
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught, 'expected getValidAccessToken to throw').to.be.instanceOf(Error)
+    expect(caught!.message).to.include('No token for org')
+    expect(caught!.message).to.include('org_missing')
+    expect(caught!.message).to.include('qfg login')
+  })
+
+  it('throws "No token" when no token store exists at all', async () => {
+    let caught: Error | undefined
+    try {
+      await getValidAccessToken('org_alpha')
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught, 'expected getValidAccessToken to throw').to.be.instanceOf(Error)
+    expect(caught!.message).to.include('org_alpha')
+  })
+
+  it('refreshes via authenticateWithOrg(refreshToken, workosOrgId) when the org token is expired', async () => {
+    const pastExp = Math.floor(Date.now() / 1000) - 3600
+    const futureExp = Math.floor(Date.now() / 1000) + 3600
+    const expiredAlphaJwt = buildJwt({exp: pastExp, org_id: 'org_alpha'})
+    const validBetaJwt = buildJwt({exp: futureExp, org_id: 'org_beta'})
+    const refreshedJwt = buildJwt({exp: futureExp, org_id: 'org_alpha', sub: 'user_1'})
+
+    await saveTokens(
+      {
+        tokensByOrg: {
+          org_alpha: {access_token: expiredAlphaJwt, expires_at: pastExp * 1000, refresh_token: 'r_alpha'},
+          org_beta: {access_token: validBetaJwt, expires_at: futureExp * 1000, refresh_token: 'r_beta'},
+        },
+      },
+      tokenOptions,
+    )
+
+    const captured: {body?: URLSearchParams; url?: string} = {}
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      captured.url = url
+      captured.body = new URLSearchParams((init.body as URLSearchParams).toString())
+      return {
+        ok: true,
+        json: async () => ({
+          access_token: refreshedJwt,
+          authentication_method: 'RefreshToken',
+          refresh_token: 'r_alpha_v2',
+          user: {id: 'user_1', email: 'foo@bar.com'},
+        }),
+      } as Response
+    }) as typeof globalThis.fetch
+
+    const token = await getValidAccessToken('org_alpha')
+
+    expect(token).to.equal(refreshedJwt)
+    // Asserts the refresh hop carried organization_id — the whole point of the
+    // change. Without this param, WorkOS returns a user-scoped token with no
+    // permissions[], which is the bug qfg-kr7 exists to fix.
+    expect(captured.body?.get('organization_id')).to.equal('org_alpha')
+    expect(captured.body?.get('grant_type')).to.equal('refresh_token')
+    expect(captured.body?.get('refresh_token')).to.equal('r_alpha')
+
+    // Per-org isolation: org_beta's slot must be unchanged on disk.
+    const reloaded = await loadTokens(tokenOptions)
+    expect(reloaded?.tokensByOrg.org_alpha.access_token).to.equal(refreshedJwt)
+    expect(reloaded?.tokensByOrg.org_alpha.refresh_token).to.equal('r_alpha_v2')
+    expect(reloaded?.tokensByOrg.org_beta.access_token).to.equal(validBetaJwt)
+    expect(reloaded?.tokensByOrg.org_beta.refresh_token).to.equal('r_beta')
+  })
+
+  it('surfaces refresh errors with the org context in the message', async () => {
+    const pastExp = Math.floor(Date.now() / 1000) - 3600
+    const expiredJwt = buildJwt({exp: pastExp, org_id: 'org_alpha'})
+
+    await saveTokens(
+      {
+        tokensByOrg: {
+          org_alpha: {access_token: expiredJwt, expires_at: pastExp * 1000, refresh_token: 'r_alpha'},
+        },
+      },
+      tokenOptions,
+    )
+
+    globalThis.fetch = (async () =>
+      ({
+        ok: false,
+        text: async () => 'invalid_grant: refresh token revoked',
+      }) as Response) as typeof globalThis.fetch
+
+    let caught: Error | undefined
+    try {
+      await getValidAccessToken('org_alpha')
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught, 'expected getValidAccessToken to throw').to.be.instanceOf(Error)
+    expect(caught!.message).to.include('org_alpha')
   })
 })

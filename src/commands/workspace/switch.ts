@@ -5,7 +5,7 @@ import type {JsonObj} from '../../result.js'
 
 import {BaseCommand} from '../../index.js'
 import {getApiUrl} from '../../util/domain-urls.js'
-import {getValidAccessToken} from '../../util/get-valid-token.js'
+import {getValidAccessToken, resolveDefaultOrgId} from '../../util/get-valid-token.js'
 import {loadAuthConfig, saveAuthConfig} from '../../util/token-storage.js'
 
 const UUID_PATTERN = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
@@ -25,10 +25,13 @@ export default class WorkspaceSwitch extends BaseCommand {
   public async run(): Promise<JsonObj | void> {
     const {args} = await this.parse(WorkspaceSwitch)
 
-    // Get a valid token — refresh silently if needed, error if not logged in
+    // Get a valid token — refresh silently if needed, error if not logged in.
+    // TODO(qfg-kr7.9): switch.ts will iterate over all (org, workspace) pairs
+    // across the user's memberships; for now we use the default org.
     let accessToken: string
     try {
-      accessToken = await getValidAccessToken()
+      const orgId = await resolveDefaultOrgId()
+      accessToken = await getValidAccessToken(orgId)
     } catch {
       return this.err('Not logged in. Run `qfg login` first.')
     }

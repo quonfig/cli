@@ -4,7 +4,7 @@ import type {JsonObj} from '../../result.js'
 
 import {BaseCommand} from '../../index.js'
 import {getApiUrl} from '../../util/domain-urls.js'
-import {getValidAccessToken} from '../../util/get-valid-token.js'
+import {getValidAccessToken, resolveDefaultOrgId} from '../../util/get-valid-token.js'
 
 /**
  * Slugify matches the UI's rules exactly (see
@@ -72,7 +72,10 @@ export default class WorkspaceCreate extends BaseCommand {
     // valid bearer token / API key.
     let accessToken: string
     try {
-      accessToken = await getValidAccessToken()
+      // TODO(qfg-kr7.7): once --org is required for multi-org users, resolve the
+      // orgId from --org first and pass it here. Today we use the default org.
+      const orgId = await resolveDefaultOrgId()
+      accessToken = await getValidAccessToken(orgId)
     } catch {
       return this.err('Not logged in. Run `qfg login` first.')
     }

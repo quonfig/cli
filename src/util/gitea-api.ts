@@ -1,5 +1,5 @@
 import {getApiUrl} from './domain-urls.js'
-import {getValidAccessToken} from './get-valid-token.js'
+import {getValidAccessToken, resolveDefaultOrgId} from './get-valid-token.js'
 import {GiteaTokenEntry, saveGiteaToken} from './gitea-token-storage.js'
 
 export interface GiteaTokenResponse {
@@ -27,7 +27,9 @@ export const mintGiteaToken = async (
   scope: 'read' | 'write',
   purpose: 'pull' | 'bootstrap' | 'push',
 ): Promise<GiteaTokenResponse> => {
-  const accessToken = await getValidAccessToken()
+  // TODO(qfg-kr7.5): thread workosOrgId through from the resolved workspace address.
+  const orgId = await resolveDefaultOrgId()
+  const accessToken = await getValidAccessToken(orgId)
 
   const apiUrl = getApiUrl()
   const res = await fetch(`${apiUrl}/api/v1/gitea/token`, {

@@ -18,7 +18,7 @@
 import type {ConfigPushInput, ConfigPushResult, PushDenial} from './run-push.js'
 
 import {getApiUrl} from '../util/domain-urls.js'
-import {getValidAccessToken} from '../util/get-valid-token.js'
+import {getValidAccessToken, resolveDefaultOrgId} from '../util/get-valid-token.js'
 
 interface OrpcEnvelope<T> {
   json?: T
@@ -32,7 +32,9 @@ interface OrpcErrorJson {
 }
 
 export const callConfigsPush = async (input: ConfigPushInput): Promise<ConfigPushResult> => {
-  const accessToken = await getValidAccessToken()
+  // TODO(qfg-kr7.5): thread workosOrgId through from the resolved workspace address.
+  const orgId = await resolveDefaultOrgId()
+  const accessToken = await getValidAccessToken(orgId)
   const apiUrl = getApiUrl()
 
   const res = await fetch(`${apiUrl}/api/v1/configs/push`, {

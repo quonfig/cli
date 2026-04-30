@@ -5,7 +5,7 @@ import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
 import {getActiveProfile, loadAuthConfig, loadTokens, resolveWorkspaceId} from '../util/token-storage.js'
-import {getValidAccessToken} from '../util/get-valid-token.js'
+import {getValidAccessToken, resolveDefaultOrgId} from '../util/get-valid-token.js'
 import version from '../version.js'
 
 let clientInstance: Client | undefined
@@ -35,9 +35,9 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     // No jwt / workspace resolution — SDK-key path talks to api-delivery.
   } else if (apiKey && apiKey.length > 0) {
     // API-key (workspace-scoped bearer) path. getValidAccessToken short-circuits
-    // when QUONFIG_API_KEY is set, so this never touches disk.
+    // when QUONFIG_API_KEY is set, so this never touches disk and orgId is ignored.
     try {
-      jwt = await getValidAccessToken(command.verboseLog)
+      jwt = await getValidAccessToken('', command.verboseLog)
     } catch (error) {
       command.error(error instanceof Error ? error.message : String(error), {exit: 1})
     }
@@ -109,7 +109,9 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
 
     command.verboseLog('Checking token validity...')
     try {
-      jwt = await getValidAccessToken(command.verboseLog)
+      // TODO(qfg-kr7.5): pick the orgId resolved from the workspace address.
+      const orgId = await resolveDefaultOrgId()
+      jwt = await getValidAccessToken(orgId, command.verboseLog)
       command.verboseLog('Token valid (or refreshed)')
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
