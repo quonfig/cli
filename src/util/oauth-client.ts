@@ -1,4 +1,5 @@
 import {getDomain} from './domain-urls.js'
+import type {TokenSet} from './token-storage.js'
 
 const WORKOS_BASE_URL = 'https://api.workos.com'
 
@@ -150,6 +151,46 @@ export const refreshAccessToken = async (refreshToken: string): Promise<TokenRef
   }
 
   return response.json()
+}
+
+// --- Org-Scoped Authentication ---
+
+// WorkOS access tokens are org-scoped: there is no single token that authorizes
+// work across two orgs. Exchange a refresh_token for a per-org TokenSet so the
+// CLI can hold one token per organization the user belongs to.
+export const authenticateWithOrg = async (refreshToken: string, organizationId: string): Promise<TokenSet> => {
+  const response = await fetch(`${WORKOS_BASE_URL}/user_management/authenticate`, {
+    body: new URLSearchParams({
+      client_id: getClientId(),
+      grant_type: 'refresh_token',
+      organization_id: organizationId,
+      refresh_token: refreshToken,
+    }),
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Failed to authenticate with org ${organizationId}: ${errorText}`)
+  }
+
+  const data = (await response.json()) as {
+    access_token: string
+    refresh_token: string
+    user?: {email?: string; id?: string}
+  }
+
+  const payload = decodeJWT(data.access_token)
+  const expiresAt = typeof payload.exp === 'number' ? (payload.exp as number) * 1000 : Date.now() + 300 * 1000
+
+  return {
+    access_token: data.access_token,
+    expires_at: expiresAt,
+    refresh_token: data.refresh_token,
+    user_email: data.user?.email,
+    user_id: data.user?.id,
+  }
 }
 
 // --- JWT Utilities ---
