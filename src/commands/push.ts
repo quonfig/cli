@@ -1,7 +1,5 @@
-import {execFile as execFileCb} from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import * as util from 'node:util'
 
 import {Flags} from '@oclif/core'
 
@@ -9,7 +7,7 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
-import {getRemoteUrl, gitFetch, gitSetRemote, isGitRepo} from '../util/git-ops.js'
+import {getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, runGit} from '../util/git-ops.js'
 import {
   PushFatalError,
   runPush,
@@ -20,8 +18,6 @@ import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
 import {callConfigsPush} from '../push/config-push-client.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
-
-const execFile = util.promisify(execFileCb)
 
 export default class Push extends BaseCommand {
   static description = `Push local config changes up to your workspace on Quonfig cloud.
@@ -284,7 +280,7 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
  * baseline — i.e. origin/main..HEAD.
  */
 async function diffHeadVsOrigin(dir: string): Promise<FileDelta[]> {
-  const {stdout} = await execFile('git', ['-C', dir, 'diff', '--name-status', 'origin/main..HEAD'])
+  const {stdout} = await runGit(['-C', dir, 'diff', '--name-status', 'origin/main..HEAD'])
   const deltas: FileDelta[] = []
   for (const raw of stdout.split('\n')) {
     const line = raw.trim()
@@ -319,7 +315,7 @@ async function diffHeadVsOrigin(dir: string): Promise<FileDelta[]> {
 
 async function showAtRef(dir: string, ref: string, relPath: string): Promise<string | undefined> {
   try {
-    const {stdout} = await execFile('git', ['-C', dir, 'show', `${ref}:${relPath}`])
+    const {stdout} = await runGit(['-C', dir, 'show', `${ref}:${relPath}`])
     return stdout
   } catch {
     return undefined
@@ -336,7 +332,7 @@ async function readWorkingTreeFile(dir: string, relPath: string): Promise<string
 
 async function countTrackedFilesAtRef(dir: string, ref: string): Promise<number> {
   try {
-    const {stdout} = await execFile('git', ['-C', dir, 'ls-tree', '-r', '--name-only', ref])
+    const {stdout} = await runGit(['-C', dir, 'ls-tree', '-r', '--name-only', ref])
     return stdout.split('\n').filter((l) => l.trim().length > 0).length
   } catch {
     return 0

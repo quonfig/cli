@@ -1,23 +1,48 @@
-import {execFile as execFileCb} from 'node:child_process'
+import {execFile as execFileCb, spawn} from 'node:child_process'
 import * as util from 'node:util'
 
 const execFile = util.promisify(execFileCb)
+
+/**
+ * Args prepended to every git invocation. Empty `credential.helper` resets the
+ * helper chain for this child process only — prevents macOS git's osxkeychain
+ * helper from popping a "Keychain Not Found" dialog when qfg-managed creds are
+ * embedded in the URL.
+ */
+export const GIT_SAFE_ARGS: readonly string[] = ['-c', 'credential.helper=']
+
+/**
+ * Env additions for every git invocation. Suppress tty prompts and Git
+ * Credential Manager interactive flows.
+ */
+export const GIT_SAFE_ENV: Readonly<NodeJS.ProcessEnv> = {
+  GIT_TERMINAL_PROMPT: '0',
+  GCM_INTERACTIVE: 'Never',
+}
 
 /**
  * Redact a token from a URL string so it is safe to display to users.
  */
 export const redactToken = (url: string): string => url.replace(/:([^/@]+)@/, ':***@')
 
+export interface RunGitOptions {
+  cwd?: string
+  /** Extra env vars merged on top of `process.env` and `GIT_SAFE_ENV`. */
+  env?: NodeJS.ProcessEnv
+}
+
 /**
- * Wrap execFile errors to strip tokens from the message.
+ * Canonical entry point for shelling out to git from the CLI. Always prepends
+ * `GIT_SAFE_ARGS` and merges `GIT_SAFE_ENV` so credential prompts never leak
+ * to the user. Errors are re-thrown with tokens redacted from message/stderr.
  */
-const safeExec = async (
-  file: string,
+export const runGit = async (
   args: string[],
-  options?: {cwd?: string},
+  options?: RunGitOptions,
 ): Promise<{stdout: string; stderr: string}> => {
+  const env = {...process.env, ...GIT_SAFE_ENV, ...options?.env}
   try {
-    return await execFile(file, args, {cwd: options?.cwd})
+    return await execFile('git', [...GIT_SAFE_ARGS, ...args], {cwd: options?.cwd, env})
   } catch (error: unknown) {
     const e = error as {stdout?: string; stderr?: string; cmd?: string} & Error
     const message = redactToken(e.message || String(error))
@@ -28,13 +53,40 @@ const safeExec = async (
   }
 }
 
+export interface SpawnGitOptions {
+  cwd?: string
+  env?: NodeJS.ProcessEnv
+  /** If set, written to the child's stdin and then stdin is closed. */
+  stdin?: string
+}
+
+/**
+ * Spawn-based git invocation for cases where stdin needs to be piped (e.g.
+ * `git commit -F -`). Same safe-args/env injection as `runGit`.
+ */
+export const spawnGit = (args: string[], options?: SpawnGitOptions): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const env = {...process.env, ...GIT_SAFE_ENV, ...options?.env}
+    const child = spawn('git', [...GIT_SAFE_ARGS, ...args], {cwd: options?.cwd, env})
+    let stderr = ''
+    child.stderr.on('data', (d) => {
+      stderr += d.toString()
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`git ${args[0] ?? ''} exited ${code}: ${redactToken(stderr)}`))
+    })
+    if (options?.stdin !== undefined) child.stdin.end(options.stdin)
+  })
+
 export const gitClone = async (repoUrl: string, dir: string): Promise<void> => {
-  await safeExec('git', ['clone', repoUrl, dir])
+  await runGit(['clone', repoUrl, dir])
 }
 
 export const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    await execFile('git', ['-C', dir, 'rev-parse', '--git-dir'])
+    await runGit(['-C', dir, 'rev-parse', '--git-dir'])
     return true
   } catch {
     return false
@@ -43,7 +95,7 @@ export const isGitRepo = async (dir: string): Promise<boolean> => {
 
 export const getRemoteUrl = async (dir: string): Promise<string | null> => {
   try {
-    const {stdout} = await execFile('git', ['-C', dir, 'remote', 'get-url', 'origin'])
+    const {stdout} = await runGit(['-C', dir, 'remote', 'get-url', 'origin'])
     return stdout.trim() || null
   } catch {
     return null
@@ -51,7 +103,7 @@ export const getRemoteUrl = async (dir: string): Promise<string | null> => {
 }
 
 export const isWorkingTreeClean = async (dir: string): Promise<boolean> => {
-  const {stdout} = await execFile('git', ['-C', dir, 'status', '--porcelain'])
+  const {stdout} = await runGit(['-C', dir, 'status', '--porcelain'])
   return stdout.trim() === ''
 }
 
@@ -60,7 +112,7 @@ export const isWorkingTreeClean = async (dir: string): Promise<boolean> => {
  * staged change, false if its tracked content matches HEAD.
  */
 export const hasFileChanges = async (dir: string, file: string): Promise<boolean> => {
-  const {stdout} = await execFile('git', ['-C', dir, 'status', '--porcelain', '--', file])
+  const {stdout} = await runGit(['-C', dir, 'status', '--porcelain', '--', file])
   return stdout.trim() !== ''
 }
 
@@ -71,7 +123,7 @@ export const hasFileChanges = async (dir: string, file: string): Promise<boolean
  * user has work-in-progress that should not be swept into a commit.
  */
 export const dirtyTrackedFiles = async (dir: string): Promise<string[]> => {
-  const {stdout} = await execFile('git', ['-C', dir, 'status', '--porcelain'])
+  const {stdout} = await runGit(['-C', dir, 'status', '--porcelain'])
   return stdout
     .split('\n')
     .filter(Boolean)
@@ -89,8 +141,8 @@ export const dirtyTrackedFiles = async (dir: string): Promise<string[]> => {
  */
 export const addAndCommitFile = async (dir: string, file: string, message: string): Promise<boolean> => {
   if (!(await hasFileChanges(dir, file))) return false
-  await safeExec('git', ['-C', dir, 'add', '--', file])
-  await safeExec('git', ['-C', dir, 'commit', '-m', message, '--', file])
+  await runGit(['-C', dir, 'add', '--', file])
+  await runGit(['-C', dir, 'commit', '-m', message, '--', file])
   return true
 }
 
@@ -101,7 +153,7 @@ export const addAndCommitFile = async (dir: string, file: string, message: strin
  */
 export const readFileAtHead = async (dir: string, file: string): Promise<string | undefined> => {
   try {
-    const {stdout} = await execFile('git', ['-C', dir, 'show', `HEAD:${file}`])
+    const {stdout} = await runGit(['-C', dir, 'show', `HEAD:${file}`])
     return stdout
   } catch {
     return undefined
@@ -179,13 +231,13 @@ export const commitPinFixIfPinOnly = async (
     return {kind: 'skipped', reason: 'working-tree file has changes beyond the workspace pin'}
   }
 
-  await safeExec('git', ['-C', dir, 'add', '--', file])
-  await safeExec('git', ['-C', dir, 'commit', '-m', `qfg: pin workspace = ${expectedSlug}`, '--', file])
+  await runGit(['-C', dir, 'add', '--', file])
+  await runGit(['-C', dir, 'commit', '-m', `qfg: pin workspace = ${expectedSlug}`, '--', file])
   return {kind: 'committed', slug: expectedSlug}
 }
 
 export const gitFetch = async (dir: string): Promise<void> => {
-  await safeExec('git', ['-C', dir, 'fetch', 'origin'])
+  await runGit(['-C', dir, 'fetch', 'origin'])
 }
 
 /**
@@ -194,8 +246,8 @@ export const gitFetch = async (dir: string): Promise<void> => {
 export const canFastForward = async (dir: string): Promise<boolean> => {
   try {
     // Get the local HEAD and origin/main SHAs
-    const {stdout: localSha} = await execFile('git', ['-C', dir, 'rev-parse', 'HEAD'])
-    const {stdout: remoteSha} = await execFile('git', ['-C', dir, 'rev-parse', 'origin/main'])
+    const {stdout: localSha} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
+    const {stdout: remoteSha} = await runGit(['-C', dir, 'rev-parse', 'origin/main'])
 
     const local = localSha.trim()
     const remote = remoteSha.trim()
@@ -204,7 +256,7 @@ export const canFastForward = async (dir: string): Promise<boolean> => {
 
     // Check if local is an ancestor of remote (i.e. ff is possible)
     try {
-      await execFile('git', ['-C', dir, 'merge-base', '--is-ancestor', local, remote])
+      await runGit(['-C', dir, 'merge-base', '--is-ancestor', local, remote])
       return true // exit code 0 means local is an ancestor of remote
     } catch {
       return false // local has diverged
@@ -219,8 +271,8 @@ export const canFastForward = async (dir: string): Promise<boolean> => {
  */
 export const hasDivergedFromRemote = async (dir: string): Promise<boolean> => {
   try {
-    const {stdout: localSha} = await execFile('git', ['-C', dir, 'rev-parse', 'HEAD'])
-    const {stdout: remoteSha} = await execFile('git', ['-C', dir, 'rev-parse', 'origin/main'])
+    const {stdout: localSha} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
+    const {stdout: remoteSha} = await runGit(['-C', dir, 'rev-parse', 'origin/main'])
 
     const local = localSha.trim()
     const remote = remoteSha.trim()
@@ -229,12 +281,12 @@ export const hasDivergedFromRemote = async (dir: string): Promise<boolean> => {
 
     // If remote is an ancestor of local, local is ahead (diverged for our purposes)
     try {
-      await execFile('git', ['-C', dir, 'merge-base', '--is-ancestor', remote, local])
+      await runGit(['-C', dir, 'merge-base', '--is-ancestor', remote, local])
       return true
     } catch {
       // Check if truly diverged (neither is ancestor of the other)
       try {
-        await execFile('git', ['-C', dir, 'merge-base', '--is-ancestor', local, remote])
+        await runGit(['-C', dir, 'merge-base', '--is-ancestor', local, remote])
         return false // ff possible, not diverged
       } catch {
         return true // truly diverged
@@ -252,8 +304,8 @@ export const gitMergeFfOnly = async (dir: string): Promise<string[]> => {
   // Get commits that will be merged (before merge)
   let newCommits: string[] = []
   try {
-    const {stdout: localSha} = await execFile('git', ['-C', dir, 'rev-parse', 'HEAD'])
-    const {stdout: log} = await execFile('git', [
+    const {stdout: localSha} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
+    const {stdout: log} = await runGit([
       '-C',
       dir,
       'log',
@@ -268,7 +320,7 @@ export const gitMergeFfOnly = async (dir: string): Promise<string[]> => {
     // Non-fatal — we'll still attempt the merge
   }
 
-  await safeExec('git', ['-C', dir, 'merge', '--ff-only', 'origin/main'])
+  await runGit(['-C', dir, 'merge', '--ff-only', 'origin/main'])
   return newCommits
 }
 
@@ -278,23 +330,23 @@ export const gitMergeFfOnly = async (dir: string): Promise<string[]> => {
 export const gitSetRemote = async (dir: string, url: string): Promise<void> => {
   const existing = await getRemoteUrl(dir)
   if (existing === null) {
-    await safeExec('git', ['-C', dir, 'remote', 'add', 'origin', url])
+    await runGit(['-C', dir, 'remote', 'add', 'origin', url])
   } else {
-    await safeExec('git', ['-C', dir, 'remote', 'set-url', 'origin', url])
+    await runGit(['-C', dir, 'remote', 'set-url', 'origin', url])
   }
 }
 
 export const gitPushForceLease = async (dir: string): Promise<void> => {
-  await safeExec('git', ['-C', dir, 'push', 'origin', 'main', '--force-with-lease'])
+  await runGit(['-C', dir, 'push', 'origin', 'main', '--force-with-lease'])
 }
 
 export const gitPushForce = async (dir: string): Promise<void> => {
-  await safeExec('git', ['-C', dir, 'push', 'origin', 'main', '--force'])
+  await runGit(['-C', dir, 'push', 'origin', 'main', '--force'])
 }
 
 export const hasAtLeastOneCommit = async (dir: string): Promise<boolean> => {
   try {
-    await execFile('git', ['-C', dir, 'rev-parse', 'HEAD'])
+    await runGit(['-C', dir, 'rev-parse', 'HEAD'])
     return true
   } catch {
     return false

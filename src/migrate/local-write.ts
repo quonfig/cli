@@ -1,12 +1,11 @@
-import {execFile as execFileCb, spawn} from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import * as util from 'node:util'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
+import {runGit, spawnGit} from '../util/git-ops.js'
 import type {
   DroppedOverrideSummary,
   DuplicateResolution,
@@ -15,8 +14,6 @@ import type {
   MigrationSource,
   SkippedConfigSummary,
 } from './source.js'
-
-const execFile = util.promisify(execFileCb)
 
 export interface ApplyLocalMigrationOptions {
   /** Commit author. Defaults to the migrator identity. */
@@ -49,7 +46,7 @@ export interface ApplyLocalMigrationResult {
 
 const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    await execFile('git', ['-C', dir, 'rev-parse', '--git-dir'])
+    await runGit(['-C', dir, 'rev-parse', '--git-dir'])
     return true
   } catch {
     return false
@@ -57,24 +54,9 @@ const isGitRepo = async (dir: string): Promise<boolean> => {
 }
 
 const hasStagedChanges = async (dir: string): Promise<boolean> => {
-  const {stdout} = await execFile('git', ['-C', dir, 'status', '--porcelain'])
+  const {stdout} = await runGit(['-C', dir, 'status', '--porcelain'])
   return stdout.trim().length > 0
 }
-
-const gitCommitFromStdin = (cwd: string, message: string, env: NodeJS.ProcessEnv): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', cwd, 'commit', '-F', '-'], {env})
-    let stderr = ''
-    child.stderr.on('data', (d) => {
-      stderr += d.toString()
-    })
-    child.on('error', reject)
-    child.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(`git commit exited ${code}: ${stderr}`))
-    })
-    child.stdin.end(message)
-  })
 
 const ensureQuonfigJson = (dir: string, environments: string[]): void => {
   const filePath = path.join(dir, 'quonfig.json')
@@ -86,7 +68,7 @@ const ensureQuonfigJson = (dir: string, environments: string[]): void => {
 const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initialized' | 'reused'> => {
   fs.mkdirSync(localDir, {recursive: true})
   if (await isGitRepo(localDir)) return 'reused'
-  await execFile('git', ['init', `--initial-branch=${branch}`, localDir])
+  await runGit(['init', `--initial-branch=${branch}`, localDir])
   return 'initialized'
 }
 
@@ -138,8 +120,8 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
 
   const action = await ensureLocalRepo(opts.localDir, branch)
 
-  await execFile('git', ['-C', opts.localDir, 'config', 'user.name', author.name])
-  await execFile('git', ['-C', opts.localDir, 'config', 'user.email', author.email])
+  await runGit(['-C', opts.localDir, 'config', 'user.name', author.name])
+  await runGit(['-C', opts.localDir, 'config', 'user.email', author.email])
 
   ensureQuonfigJson(opts.localDir, opts.environments)
   const resolutionEntries = writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
@@ -158,21 +140,23 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   }
   writeMigrationReport(opts.localDir, reportData)
 
-  await execFile('git', ['-C', opts.localDir, 'add', '--all'])
+  await runGit(['-C', opts.localDir, 'add', '--all'])
 
   if (!(await hasStagedChanges(opts.localDir))) {
     return {action, committed: false, commitSha: null, droppedOverrides, duplicateResolutions, skippedConfigs}
   }
 
-  await gitCommitFromStdin(opts.localDir, opts.commitMessage, {
-    ...process.env,
-    GIT_AUTHOR_EMAIL: author.email,
-    GIT_AUTHOR_NAME: author.name,
-    GIT_COMMITTER_EMAIL: author.email,
-    GIT_COMMITTER_NAME: author.name,
+  await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
+    stdin: opts.commitMessage,
+    env: {
+      GIT_AUTHOR_EMAIL: author.email,
+      GIT_AUTHOR_NAME: author.name,
+      GIT_COMMITTER_EMAIL: author.email,
+      GIT_COMMITTER_NAME: author.name,
+    },
   })
 
-  const {stdout: sha} = await execFile('git', ['-C', opts.localDir, 'rev-parse', 'HEAD'])
+  const {stdout: sha} = await runGit(['-C', opts.localDir, 'rev-parse', 'HEAD'])
   return {
     action,
     commitSha: sha.trim(),

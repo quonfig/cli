@@ -1,24 +1,7 @@
-import {execFile as execFileCb, spawn} from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import * as util from 'node:util'
 
-const execFile = util.promisify(execFileCb)
-
-const gitCommitFromStdin = (cwd: string, message: string, env: NodeJS.ProcessEnv): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', cwd, 'commit', '-F', '-'], {env})
-    let stderr = ''
-    child.stderr.on('data', (d) => {
-      stderr += d.toString()
-    })
-    child.on('error', reject)
-    child.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(`git commit exited ${code}: ${stderr}`))
-    })
-    child.stdin.end(message)
-  })
+import {runGit as runGitSafe, spawnGit} from './git-ops.js'
 
 export const MIGRATOR_IDENTITY = {
   name: 'quonfig migrator',
@@ -65,7 +48,7 @@ export class PushConflictError extends Error {
 
 const runGit = async (cwd: string, args: string[]): Promise<{stdout: string; stderr: string}> => {
   try {
-    return await execFile('git', args, {cwd})
+    return await runGitSafe(args, {cwd})
   } catch (error: unknown) {
     const e = error as {stderr?: string; stdout?: string} & Error
     const stderr = redactToken(e.stderr ?? '')
@@ -83,7 +66,7 @@ const runGit = async (cwd: string, args: string[]): Promise<{stdout: string; std
 
 const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    await execFile('git', ['-C', dir, 'rev-parse', '--git-dir'])
+    await runGitSafe(['-C', dir, 'rev-parse', '--git-dir'])
     return true
   } catch {
     return false
@@ -92,7 +75,7 @@ const isGitRepo = async (dir: string): Promise<boolean> => {
 
 const getOriginUrl = async (dir: string): Promise<string | null> => {
   try {
-    const {stdout} = await execFile('git', ['-C', dir, 'remote', 'get-url', 'origin'])
+    const {stdout} = await runGitSafe(['-C', dir, 'remote', 'get-url', 'origin'])
     return stdout.trim() || null
   } catch {
     return null
@@ -136,7 +119,7 @@ const ensureCloneOrReuse = async (
 }
 
 const hasStagedChanges = async (dir: string): Promise<boolean> => {
-  const {stdout} = await execFile('git', ['-C', dir, 'status', '--porcelain'])
+  const {stdout} = await runGitSafe(['-C', dir, 'status', '--porcelain'])
   return stdout.trim().length > 0
 }
 
@@ -158,15 +141,17 @@ export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise
     return {action, committed: false, commitSha: null}
   }
 
-  await gitCommitFromStdin(opts.localDir, opts.commitMessage, {
-    ...process.env,
-    GIT_AUTHOR_NAME: author.name,
-    GIT_AUTHOR_EMAIL: author.email,
-    GIT_COMMITTER_NAME: author.name,
-    GIT_COMMITTER_EMAIL: author.email,
+  await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
+    stdin: opts.commitMessage,
+    env: {
+      GIT_AUTHOR_NAME: author.name,
+      GIT_AUTHOR_EMAIL: author.email,
+      GIT_COMMITTER_NAME: author.name,
+      GIT_COMMITTER_EMAIL: author.email,
+    },
   })
 
-  const {stdout: sha} = await execFile('git', ['-C', opts.localDir, 'rev-parse', 'HEAD'])
+  const {stdout: sha} = await runGitSafe(['-C', opts.localDir, 'rev-parse', 'HEAD'])
 
   try {
     // Plain push — no force, no force-with-lease. If the remote has advanced, we fail

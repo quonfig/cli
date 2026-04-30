@@ -17,6 +17,7 @@ import {
   gitPushForce,
   getRemoteUrl,
   displayUrl,
+  runGit,
 } from '../../util/git-ops.js'
 
 export default class WorkspaceBootstrap extends BaseCommand {
@@ -217,35 +218,28 @@ export default class WorkspaceBootstrap extends BaseCommand {
    * don't accidentally sweep in unrelated user edits.
    */
   private async commitAndPushPin(dir: string, slug: string, force: boolean): Promise<void> {
-    const {execFile: execFileCb} = await import('node:child_process')
-    const util = await import('node:util')
-    const execFile = util.promisify(execFileCb)
-
     // Stage just quonfig.json so we don't accidentally commit other dirty files.
-    await execFile('git', ['-C', dir, 'add', 'quonfig.json'])
+    await runGit(['-C', dir, 'add', 'quonfig.json'])
 
     // If `git add` produced no staged change (e.g. content matched an earlier
     // version on disk), `git commit` would fail. Check the index first.
-    const {stdout: diffStat} = await execFile('git', ['-C', dir, 'diff', '--cached', '--name-only'])
+    const {stdout: diffStat} = await runGit(['-C', dir, 'diff', '--cached', '--name-only'])
     if (!diffStat.trim()) {
       this.verboseLog('WorkspaceBootstrap', 'quonfig.json pin matches HEAD; no commit needed.')
       return
     }
 
-    await execFile('git', ['-C', dir, 'commit', '-m', `chore: pin quonfig.json to workspace "${slug}"`])
+    await runGit(['-C', dir, 'commit', '-m', `chore: pin quonfig.json to workspace "${slug}"`])
 
     // Push the new commit using the same force semantics as the main push.
     const pushArgs = ['-C', dir, 'push', 'origin', 'main']
     pushArgs.push(force ? '--force' : '--force-with-lease')
-    await execFile('git', pushArgs)
+    await runGit(pushArgs)
     this.log(`Pushed pin commit.`)
   }
 
   private async remoteHasCommits(repoUrl: string): Promise<boolean> {
-    const {execFile: execFileCb} = await import('node:child_process')
-    const util = await import('node:util')
-    const execFile = util.promisify(execFileCb)
-    const {stdout} = await execFile('git', ['ls-remote', '--heads', repoUrl])
+    const {stdout} = await runGit(['ls-remote', '--heads', repoUrl])
     return stdout.trim().length > 0
   }
 }

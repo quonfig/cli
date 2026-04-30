@@ -25,16 +25,13 @@
  *     into the real push clone.
  */
 
-import {execFile as execFileCb} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import * as util from 'node:util'
 
 import {FileDelta} from './diff-summary.js'
-
-const execFile = util.promisify(execFileCb)
+import {runGit} from '../util/git-ops.js'
 
 export interface BarePathDiffResult {
   deltas: FileDelta[]
@@ -55,7 +52,7 @@ export async function computeBarePathDiff(localDir: string, remoteUrl: string): 
     // --depth 1 would miss information needed for later identity checks, but
     // for the diff we only need the tip — shallow is fine and a lot faster on
     // workspaces with 2 years of history.
-    await execFile('git', ['clone', '--branch', 'main', '--depth', '1', remoteUrl, scratchDir])
+    await runGit(['clone', '--branch', 'main', '--depth', '1', remoteUrl, scratchDir])
   } catch (error: unknown) {
     // Clean up before re-throwing so we never leak a scratch dir on failure.
     try {
