@@ -5,7 +5,6 @@ import GenerateNewHexKey from './commands/generate-new-hex-key.js'
 import Get from './commands/get.js'
 import Info from './commands/info.js'
 import List from './commands/list.js'
-import Mcp from './commands/mcp.js'
 import Override from './commands/override.js'
 import SetDefault from './commands/set-default.js'
 import {APICommand} from './index.js'
@@ -27,7 +26,6 @@ type SuggestedCommand = {
     | typeof Get
     | typeof Info
     | typeof List
-    | typeof Mcp
     | typeof Override
     | typeof SetDefault
   description: string
@@ -36,7 +34,7 @@ type SuggestedCommand = {
   implicitFlags: string[]
 }
 
-const commands: SuggestedCommand[] = [SetDefault, GenerateNewHexKey, Create, Get, Info, Mcp, Override, List].map(
+const commands: SuggestedCommand[] = [SetDefault, GenerateNewHexKey, Create, Get, Info, Override, List].map(
   (command): SuggestedCommand => {
     const id = convertToKebabCase(command.name)
     return {

@@ -119,7 +119,6 @@ The spec outlines a P0/P1/P2 priority for CLI features:
 
 **P2:**
 
-- `qfg mcp serve` — MCP server surface (partially exists, needs expansion)
 - Agent skill files — `.qf/agent-context.md`
 
 ### 9. New command: `qfg eval`

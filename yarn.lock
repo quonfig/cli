@@ -2135,7 +2135,6 @@ __metadata:
     acorn-walk: "npm:^8.2.0"
     chai: "npm:^4"
     chalk: "npm:^5.4.1"
-    comment-json: "npm:^4.6.2"
     common-tags: "npm:^1.8.2"
     eslint: "npm:^8"
     eslint-config-oclif: "npm:^5"
@@ -3730,13 +3729,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"array-timsort@npm:^1.0.3":
-  version: 1.0.3
-  resolution: "array-timsort@npm:1.0.3"
-  checksum: 10c0/bd3a1707b621947265c89867e67c9102b9b9f4c50f5b3974220112290d8b60d26ce60595edec5deed3325207b759d70b758bed3cd310b5ddadb835657ffb6d12
-  languageName: node
-  linkType: hard
-
 "array-union@npm:^2.1.0":
   version: 2.1.0
   resolution: "array-union@npm:2.1.0"
@@ -4380,16 +4372,6 @@ __metadata:
     strip-ansi: "npm:^6.0.1"
     wcwidth: "npm:^1.0.0"
   checksum: 10c0/25b90b59129331bbb8b0c838f8df69924349b83e8eab9549f431062a20a39094b8d744bb83265be38fd5d03140ce4bfbd85837c293f618925e83157ae9535f1d
-  languageName: node
-  linkType: hard
-
-"comment-json@npm:^4.6.2":
-  version: 4.6.2
-  resolution: "comment-json@npm:4.6.2"
-  dependencies:
-    array-timsort: "npm:^1.0.3"
-    esprima: "npm:^4.0.1"
-  checksum: 10c0/8965ec6c40612aa0cc66d4324ff5819cf205c997f3a84dd82dffe4e6398449e37bbc5765184bc9149e95d15994f0c2740cee82284828fa1c0f733a669022d3dd
   languageName: node
   linkType: hard
 
@@ -5359,7 +5341,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"esprima@npm:^4.0.0, esprima@npm:^4.0.1, esprima@npm:~4.0.0":
+"esprima@npm:^4.0.0, esprima@npm:~4.0.0":
   version: 4.0.1
   resolution: "esprima@npm:4.0.1"
   bin:
