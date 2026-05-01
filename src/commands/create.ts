@@ -9,6 +9,7 @@ import {TYPE_MAPPING, coerceBool, coerceIntoType} from '../util/coerce.js'
 import {checkmark} from '../util/color.js'
 import {mapConfigValueToDto, mapValueTypeToString} from '../util/config-value-dto.js'
 import {makeConfidentialValue} from '../util/encryption.js'
+import {EntitySubdir, writeStoredConfigToWorkspace} from '../util/local-config-writer.js'
 import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.js'
 import secretFlags, {parsedSecretFlags} from '../util/secret-flags.js'
 
@@ -181,6 +182,8 @@ Log levels:
 
     const confidentialMaybe = flags.confidential ? '(confidential) ' : ''
 
+    await this.syncConfigToDisk('configs', key, response)
+
     return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key}`, {key, ...response})
   }
 
@@ -235,6 +238,8 @@ Log levels:
     }
 
     const response = request.json
+
+    await this.syncConfigToDisk('feature-flags', key, response)
 
     return this.ok(`${checkmark} Created boolean flag: ${key}`, {key, ...response})
   }
@@ -359,5 +364,34 @@ Log levels:
       key,
       value: rawValue,
     })
+  }
+
+  /**
+   * Mirror the server-side create to disk under QUONFIG_DIR so the user can
+   * `qfg verify` (or just open the JSON) without a follow-up `qfg pull`.
+   * Best-effort — server already created the flag, so we never let local-disk
+   * problems fail the command. Closes qfg-d5t.
+   */
+  private async syncConfigToDisk(subdir: EntitySubdir, key: string, response: JsonObj | undefined): Promise<void> {
+    if (!response) return
+
+    try {
+      const result = await writeStoredConfigToWorkspace({
+        subdir,
+        key,
+        storedConfig: response as Record<string, unknown>,
+      })
+      if (result) {
+        this.verboseLog('LocalWrite', {
+          path: result.filePath,
+          committed: result.committed,
+          skippedCommitReason: result.skippedCommitReason,
+        })
+      } else {
+        this.verboseLog('LocalWrite', 'skipped: QUONFIG_DIR not set or workspace dir missing')
+      }
+    } catch (error: unknown) {
+      this.verboseLog('LocalWrite', `Failed to sync ${key} to disk: ${String(error)}`)
+    }
   }
 }

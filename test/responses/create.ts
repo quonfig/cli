@@ -6,10 +6,29 @@ const conflictResponse = {
   error: 'already exists',
 }
 
-const successResponse = {
-  message: '',
-  newId: '17000801114938347',
-}
+// Build a realistic FlagDetail response (StoredConfig + commitSha) — this
+// matches what app-quonfig's createEntity returns. Tests that assert on
+// `qfg create --json` output and the local-disk write both depend on this
+// shape lining up with production.
+const buildFlagDetail = (key: string, defaultBoolValue: boolean) => ({
+  key,
+  type: 'feature_flag',
+  valueType: 'bool',
+  sendToClientSdk: true,
+  access: 'standard',
+  tags: [],
+  default: {
+    rules: [
+      {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: defaultBoolValue}},
+    ],
+  },
+  environments: [],
+  variants: [
+    {value: {type: 'bool', value: true}, name: 'True', description: 'Enabled'},
+    {value: {type: 'bool', value: false}, name: 'False', description: 'Disabled'},
+  ],
+  commitSha: 'abc123def456abc123def456abc123def456abc1',
+})
 
 // POST /api/v1/flags/create - create boolean flags (oRPC wrapped)
 const flagsCreateHandler = http.post('https://app.quonfig.com/api/v1/flags/create', async ({request}) => {
@@ -21,7 +40,8 @@ const flagsCreateHandler = http.post('https://app.quonfig.com/api/v1/flags/creat
     return HttpResponse.json({json: conflictResponse}, {status: 409})
   }
 
-  return HttpResponse.json({json: successResponse})
+  const defaultBoolValue = input?.flag?.defaultValue?.value === true
+  return HttpResponse.json({json: buildFlagDetail(key, defaultBoolValue)})
 })
 
 // Capture last create-config payload so tests can assert on the exact request body
@@ -31,6 +51,23 @@ export let capturedCreateConfigInput: any = null
 export function resetCapturedCreateConfigInput(): void {
   capturedCreateConfigInput = null
 }
+
+// Build a realistic ConfigDetail response (StoredConfig + commitSha) for
+// regular `qfg create --type=string|int|...` paths. Mirrors createEntity.
+const buildConfigDetail = (key: string, valueType: string, defaultValue: unknown) => ({
+  key,
+  type: 'config',
+  valueType,
+  sendToClientSdk: false,
+  access: 'standard',
+  tags: [],
+  default: {
+    rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: defaultValue}],
+  },
+  environments: [],
+  variants: [],
+  commitSha: 'config-sha-1234567890abcdef1234567890abcdef12345678',
+})
 
 // POST /api/v1/configs/create - create configs (oRPC wrapped)
 const configsCreateHandler = http.post('https://app.quonfig.com/api/v1/configs/create', async ({request}) => {
@@ -55,7 +92,9 @@ const configsCreateHandler = http.post('https://app.quonfig.com/api/v1/configs/c
     }
   }
 
-  return HttpResponse.json({json: successResponse})
+  return HttpResponse.json({
+    json: buildConfigDetail(key, input?.config?.valueType ?? 'string', defaultValue ?? {type: 'string', value: ''}),
+  })
 })
 
 // Metadata response for encryption key checks

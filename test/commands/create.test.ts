@@ -1,3 +1,7 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+
 import {expect, test} from '@oclif/test'
 
 import {resetClientCache} from '../../src/util/get-client.js'
@@ -33,11 +37,11 @@ describe('create', () => {
       .stdout()
       .command(['create', 'brand.new.flag', '--type=boolean-flag', '--json'])
       .it('can create a boolean flag and return a JSON response', (ctx) => {
-        expect(JSON.parse(ctx.stdout)).to.deep.equal({
-          key: 'brand.new.flag',
-          message: '',
-          newId: '17000801114938347',
-        })
+        const parsed = JSON.parse(ctx.stdout)
+        expect(parsed.key).to.equal('brand.new.flag')
+        expect(parsed.type).to.equal('feature_flag')
+        expect(parsed.valueType).to.equal('bool')
+        expect(parsed.commitSha).to.be.a('string')
       })
 
     test
@@ -572,5 +576,80 @@ describe('create', () => {
           // Error assertion done in catch block
         })
     })
+  })
+
+  // qfg-d5t: server-side create should also drop the JSON file into
+  // ${QUONFIG_DIR}/<subdir>/<key>.json so the user doesn't have to run
+  // `qfg pull` afterwards. The server already returns the full StoredConfig
+  // (FlagDetail / ConfigDetail) — we just need to write it locally.
+  describe('writes the new config to disk under QUONFIG_DIR (qfg-d5t)', () => {
+    let tmpDir: string
+    let prevQuonfigDir: string | undefined
+    let prevQuonfigDirSet = false
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-create-d5t-'))
+      // Make it look like a workspace dir so writes are not gated on a
+      // missing quonfig.json (mirroring `qfg pull`'s output state).
+      fs.writeFileSync(path.join(tmpDir, 'quonfig.json'), '{"workspace":"acme/test"}\n')
+      prevQuonfigDirSet = Object.hasOwn(process.env, 'QUONFIG_DIR')
+      prevQuonfigDir = process.env.QUONFIG_DIR
+      process.env.QUONFIG_DIR = tmpDir
+    })
+
+    afterEach(() => {
+      try {
+        fs.rmSync(tmpDir, {force: true, recursive: true})
+      } catch {
+        // ignore
+      }
+
+      if (prevQuonfigDirSet) {
+        process.env.QUONFIG_DIR = prevQuonfigDir
+      } else {
+        delete process.env.QUONFIG_DIR
+      }
+    })
+
+    test
+      .stdout()
+      .command(['create', 'flag.cli-test', '--type=boolean-flag', '--value=true'])
+      .it('writes feature-flags/<key>.json after a successful boolean-flag create', () => {
+        const filePath = path.join(tmpDir, 'feature-flags', 'flag.cli-test.json')
+        expect(fs.existsSync(filePath), `expected ${filePath} to exist on disk`).to.equal(true)
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
+        expect(parsed.key).to.equal('flag.cli-test')
+        expect(parsed.type).to.equal('feature_flag')
+        expect(parsed.valueType).to.equal('bool')
+        // commitSha is server-only metadata; it must NOT bleed into the
+        // on-disk config (the canonical source of truth in git).
+        expect(parsed).to.not.have.property('commitSha')
+      })
+
+    test
+      .stdout()
+      .command(['create', 'string.cli-test', '--type=string', '--value=hello'])
+      .it('writes configs/<key>.json after a successful regular config create', () => {
+        const filePath = path.join(tmpDir, 'configs', 'string.cli-test.json')
+        expect(fs.existsSync(filePath), `expected ${filePath} to exist on disk`).to.equal(true)
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>
+        expect(parsed.key).to.equal('string.cli-test')
+        expect(parsed.type).to.equal('config')
+        expect(parsed).to.not.have.property('commitSha')
+      })
+
+    test
+      .stdout()
+      .command(['create', 'flag.no-dir', '--type=boolean-flag', '--value=true'])
+      .do(() => {
+        // Override QUONFIG_DIR to a missing path — the create should still
+        // succeed (server-side create is the source of truth) and exit 0;
+        // we just don't write locally. This is the "no workspace cloned
+        // yet" path.
+        delete process.env.QUONFIG_DIR
+      })
+      .it('does not fail if QUONFIG_DIR is unset', (ctx) => {
+        expect(ctx.stdout).to.contain('Created boolean flag: flag.no-dir')
+      })
   })
 })
