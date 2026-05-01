@@ -1,11 +1,11 @@
 import {Flags} from '@oclif/core'
-import {select} from '@inquirer/prompts'
 
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {decodeJWT, pollForToken, requestDeviceCode} from '../util/oauth-client.js'
 import {getApiUrl} from '../util/domain-urls.js'
+import {orchestrateMultiOrgLogin} from '../util/login-orchestrator.js'
+import {decodeJWT, pollForToken, requestDeviceCode} from '../util/oauth-client.js'
 import {openBrowser} from '../util/open-browser.js'
 import {
   getAuthConfigFilePath,
@@ -15,8 +15,16 @@ import {
   saveTokens,
 } from '../util/token-storage.js'
 
+type WorkspaceEntry = {
+  workspaceId: string
+  workspaceSlug: string
+  workosOrgId: string
+  organizationSlug?: string
+  organizationName?: string
+}
+
 export default class Login extends BaseCommand {
-  static description = 'Log in to Quonfig via WorkOS device authorization'
+  static description = 'Log in to Quonfig via WorkOS device authorization (mints one token per org)'
 
   static examples = ['<%= config.bin %> <%= command.id %>', '<%= config.bin %> <%= command.id %> --profile myprofile']
 
@@ -45,9 +53,8 @@ export default class Login extends BaseCommand {
     this.log(`  ${deviceAuth.verification_uri_complete}\n`)
     this.log(`Or go to ${deviceAuth.verification_uri} and enter code: ${deviceAuth.user_code}\n`)
 
-    // Listen for Enter to open the URL in the user's browser.
-    // Runs concurrently with token polling so the user can also authenticate
-    // by pasting the URL manually without having to press Enter first.
+    // Listen for Enter to open the URL in the user's browser. Runs alongside
+    // token polling so the user can also paste the URL manually.
     const stdinIsTTY = Boolean(process.stdin.isTTY)
     let browserOpened = false
     const onEnter = (chunk: Buffer): void => {
@@ -81,10 +88,6 @@ export default class Login extends BaseCommand {
       }
     }
 
-    const user = tokenResponse.user
-    const userEmail = user.email
-
-    // Decode JWT to inspect claims
     if (this.isVerbose) {
       const payload = decodeJWT(tokenResponse.access_token)
       this.verboseLog('\n=== Decoded JWT Payload ===')
@@ -92,107 +95,71 @@ export default class Login extends BaseCommand {
       this.verboseLog('===========================\n')
     }
 
-    // Extract org_id from JWT (WorkOS scopes the token to the selected org)
-    const jwtPayload = decodeJWT(tokenResponse.access_token)
-    const orgId = (jwtPayload.org_id as string) || user.organization_id
-    if (!orgId) {
-      return this.err('Login failed: token did not include an organization_id. Re-run `qfg login`.')
+    // Step 4: Multi-org orchestration — fetch /me/organizations, mint one
+    // org-scoped TokenSet per org in parallel, build the per-org TokenStore.
+    const apiUrl = getApiUrl()
+    let result
+    try {
+      result = await orchestrateMultiOrgLogin({
+        apiUrl,
+        initialAccessToken: tokenResponse.access_token,
+        initialRefreshToken: tokenResponse.refresh_token,
+        user: tokenResponse.user,
+      })
+    } catch (error) {
+      return this.err(`Login failed: ${(error as Error).message}`)
     }
 
-    // Use the JWT's actual exp claim for expiry
-    let expiresAt = Date.now() + 300 * 1000 // fallback: 5 minutes
-    if (typeof jwtPayload.exp === 'number') {
-      expiresAt = (jwtPayload.exp as number) * 1000
+    if (result.skippedOrgSlugs.length > 0) {
+      this.log(
+        `\nNote: you belong to ${result.organizations.length} orgs; minting tokens for the first 10 alphabetically. ` +
+          `Skipped: ${result.skippedOrgSlugs.join(', ')}.`,
+      )
     }
 
-    // Save tokens — verifies the file actually persisted before returning.
+    // Step 5: Persist token store.
     this.verboseLog('Saving tokens to', getTokenFilePath())
     let tokensPath: string
     try {
-      // TODO(qfg-kr7-mol): rewrite for multi-org token minting. For now, store the single
-      // user-scoped token under its org_id so the new TokenStore shape round-trips.
-      tokensPath = await saveTokens({
-        defaultOrgId: orgId,
-        tokensByOrg: {
-          [orgId]: {
-            access_token: tokenResponse.access_token,
-            expires_at: expiresAt,
-            refresh_token: tokenResponse.refresh_token,
-            user_email: userEmail,
-            user_id: user.id,
-          },
-        },
-      })
+      tokensPath = await saveTokens(result.tokenStore)
     } catch (error) {
       return this.err(`Login failed: could not save tokens. ${(error as Error).message}`)
     }
 
     this.verboseLog('Tokens saved at', tokensPath)
 
-    // Resolve org_id → workspace UUID via the API
-    let workspaceId: string | undefined
-    let workspaceName: string | undefined
-    let workspaceSlug: string | undefined
-    let organizationName: string | undefined
-    let organizationId: string | undefined
-    let multipleWorkspacesAvailable = false
+    // Step 6: Pick a default workspace from the default org for the saved
+    // profile. The default org is the only one for single-org users, or the
+    // first slug alphabetically for multi-org users (no interactive prompt).
+    let defaultWorkspace: WorkspaceEntry | undefined
     try {
-      const apiUrl = getApiUrl()
-      this.verboseLog('Resolving workspace...', {apiUrl, orgId})
+      const defaultToken = result.tokenStore.tokensByOrg[result.defaultOrgId]
       const res = await fetch(`${apiUrl}/api/v1/userWorkspaces/list`, {
-        method: 'POST',
+        body: JSON.stringify({json: {}}),
         headers: {
-          Authorization: `Bearer ${tokenResponse.access_token}`,
+          Authorization: `Bearer ${defaultToken.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({json: {}}),
+        method: 'POST',
       })
 
       if (res.ok) {
-        type WorkspaceEntry = {
-          workspaceId: string
-          workspaceSlug: string
-          workosOrgId: string
-          organizationName: string
-        }
         const body = (await res.json()) as {json?: WorkspaceEntry[]}
-        const allWorkspaces = (body.json ?? body) as unknown as WorkspaceEntry[]
-        const candidates = Array.isArray(allWorkspaces) ? allWorkspaces : []
-        multipleWorkspacesAvailable = candidates.length > 1
-
-        let match: WorkspaceEntry | undefined
-        if (candidates.length === 1) {
-          match = candidates[0]
-        } else if (candidates.length > 1) {
-          const chosen = await select({
-            choices: candidates.map((w) => ({
-              name: `${w.organizationName} / ${w.workspaceSlug}`,
-              value: w.workspaceId,
-            })),
-            message: 'Select workspace:',
-          })
-          match = candidates.find((w) => w.workspaceId === chosen)
-        }
-
-        if (match) {
-          workspaceId = match.workspaceId
-          workspaceName = match.workspaceSlug
-          workspaceSlug = match.workspaceSlug
-          organizationName = match.organizationName
-          organizationId = match.workosOrgId
-          this.verboseLog('Resolved workspace', {workspaceId, workspaceName, workspaceSlug, organizationName})
-        }
+        const list = (body.json ?? body) as unknown as WorkspaceEntry[]
+        const candidates = (Array.isArray(list) ? list : []).filter(
+          (w) => w.workosOrgId === result.defaultOrgId,
+        )
+        candidates.sort((a, b) => a.workspaceSlug.localeCompare(b.workspaceSlug))
+        defaultWorkspace = candidates[0]
       } else {
-        this.verboseLog('Failed to resolve workspace', {status: res.status})
+        this.verboseLog('userWorkspaces/list non-OK', {status: res.status})
       }
     } catch (error) {
-      this.verboseLog('Failed to resolve workspace', {error: String(error)})
+      this.verboseLog('userWorkspaces/list failed', {error: String(error)})
     }
 
-    // Get or create config with profile
+    // Step 7: Save auth config with the picked workspace.
     const existingConfig = await loadAuthConfig()
-
-    // Save auth config
     const isFirstProfile = !existingConfig || Object.keys(existingConfig.profiles).length === 0
     const shouldSetDefault = isFirstProfile || profileName === 'default' || !existingConfig?.defaultProfile
 
@@ -204,10 +171,12 @@ export default class Login extends BaseCommand {
         profiles: {
           ...existingConfig?.profiles,
           [profileName]: {
-            workspace: workspaceId || orgId || 'unknown',
-            workspaceName: workspaceName || (orgId ? `org:${orgId}` : undefined),
-            workspaceSlug,
-            organizationName,
+            organizationName: result.defaultOrg.name,
+            organizationSlug: result.defaultOrg.slug,
+            workosOrgId: result.defaultOrgId,
+            workspace: defaultWorkspace?.workspaceId ?? result.defaultOrgId,
+            workspaceName: defaultWorkspace?.workspaceSlug,
+            workspaceSlug: defaultWorkspace?.workspaceSlug,
           },
         },
       })
@@ -217,36 +186,40 @@ export default class Login extends BaseCommand {
 
     this.verboseLog('Auth config saved at', configPath)
 
+    // Step 8: User-facing summary.
     this.log('\nSuccessfully logged in!')
-    if (userEmail) {
-      this.log(`Logged in as: ${userEmail}`)
-    }
+    if (result.email) this.log(`Logged in as: ${result.email}`)
+    this.log(`Tokens stored for orgs: ${result.mintedOrgSlugs.join(', ')}`)
 
-    if (workspaceName) {
-      const orgPrefix = organizationName ? `${organizationName} / ` : ''
-      this.log(`Workspace:    ${orgPrefix}${workspaceName}`)
-      if (workspaceId) {
-        this.log(`              (${workspaceId})`)
+    if (defaultWorkspace) {
+      const pin = `${result.defaultOrg.slug}/${defaultWorkspace.workspaceSlug}`
+      this.log(`Default workspace: ${pin}  (${defaultWorkspace.workspaceId})`)
+      this.log(`\nTo pin a project to this workspace, add to your .env:`)
+      this.log(`  QUONFIG_WORKSPACE=${pin}`)
+      if (result.organizations.length > 1) {
+        this.log(`\nYou belong to multiple orgs. To switch: qfg workspace switch`)
       }
-    } else if (orgId) {
-      this.log(`Organization: ${orgId}`)
-    }
-
-    if (multipleWorkspacesAvailable && workspaceSlug) {
-      this.log(`\nYou have multiple workspaces. To pin this project to ${workspaceSlug},`)
-      this.log(`add this to your project's .env file:`)
-      this.log(`  QUONFIG_WORKSPACE=${workspaceSlug}`)
-      this.log(`\nTo switch your default workspace: qfg workspace switch`)
+    } else {
+      this.log(
+        `\nNo workspaces found in ${result.defaultOrg.slug}. Create one with: qfg workspace create <slug> --org ${result.defaultOrg.slug}`,
+      )
     }
 
     return {
-      email: userEmail,
-      organizationId: organizationId || orgId,
-      organizationName,
+      defaultOrg: {
+        organizationName: result.defaultOrg.name,
+        organizationSlug: result.defaultOrg.slug,
+        workosOrgId: result.defaultOrgId,
+      },
+      email: result.email,
+      mintedOrgSlugs: result.mintedOrgSlugs,
+      organizationId: result.defaultOrgId,
+      organizationName: result.defaultOrg.name,
+      skippedOrgSlugs: result.skippedOrgSlugs,
       success: true,
-      userId: user.id,
-      workspaceId,
-      workspaceSlug,
+      userId: result.userId,
+      workspaceId: defaultWorkspace?.workspaceId,
+      workspaceSlug: defaultWorkspace?.workspaceSlug,
     }
   }
 }
