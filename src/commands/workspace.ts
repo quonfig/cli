@@ -76,6 +76,12 @@ export default class Workspace extends BaseCommand {
       }
     }
 
+    const totalWorkspaces = grouped.reduce((sum, g) => sum + g.workspaces.length, 0)
+    if (totalWorkspaces > 1) {
+      this.log('')
+      this.log('To switch the default workspace: qfg workspace switch')
+    }
+
     return {
       activeWorkspace: activePin,
       defaultProfile: defaultProfilePin,
