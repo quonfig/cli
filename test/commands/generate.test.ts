@@ -97,6 +97,43 @@ describe('generate', () => {
       })
   })
 
+  /**
+   * qfg-kr7.11: confirm `qfg generate` routes through the shared
+   * org/ws-aware resolver (not its own slug parser). The simplest proof
+   * is that a bare-slug `--workspace` value in OAuth mode produces the
+   * exact migration error string the resolver throws — if generate.ts
+   * had its own inline parsing, it would either accept the bare slug or
+   * emit a different message.
+   */
+  describe('routes --workspace through the kr7.5 resolver', () => {
+    let originalApiKey: string | undefined
+    let originalDir: string | undefined
+
+    beforeEach(() => {
+      originalApiKey = process.env.QUONFIG_API_KEY
+      originalDir = process.env.QUONFIG_DIR
+      delete process.env.QUONFIG_API_KEY
+      delete process.env.QUONFIG_DIR
+    })
+
+    afterEach(() => {
+      if (originalApiKey === undefined) delete process.env.QUONFIG_API_KEY
+      else process.env.QUONFIG_API_KEY = originalApiKey
+      if (originalDir === undefined) delete process.env.QUONFIG_DIR
+      else process.env.QUONFIG_DIR = originalDir
+    })
+
+    test
+      .command(['generate', '--workspace', 'just-bare-slug'])
+      .catch((error: Error) => {
+        // Specific mechanism: this is the resolver's BARE_SLUG_ENV_MIGRATION_MESSAGE.
+        expect(error.message).to.include('org/workspace form')
+        expect(error.message).to.include('acme/foo')
+        expect(error.message).to.include('qfg login')
+      })
+      .it('rejects bare-slug --workspace with the kr7.5 migration error')
+  })
+
   test
     .command(['generate', '--dir', '/nonexistent/path/to/nowhere'])
     .catch((error) => {

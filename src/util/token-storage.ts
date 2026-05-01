@@ -66,6 +66,14 @@ export interface AuthConfig {
       workspaceName?: string
       workspaceSlug?: string
       organizationName?: string
+      /**
+       * WorkOS organization UUID for the saved workspace. Persisted by
+       * `qfg workspace switch` (qfg-kr7.9) so other commands can pick the
+       * matching per-org token without round-tripping `me.organizations`.
+       */
+      workosOrgId?: string
+      /** Org URL slug — used when rendering the org/ws pin form. */
+      organizationSlug?: string
     }
   }
 }
@@ -176,6 +184,14 @@ export const saveAuthConfig = async (config: AuthConfig, options?: TokenStorageO
       configContent += `organization_name = ${profileData.organizationName}\n`
     }
 
+    if (profileData.organizationSlug) {
+      configContent += `organization_slug = ${profileData.organizationSlug}\n`
+    }
+
+    if (profileData.workosOrgId) {
+      configContent += `workos_org_id = ${profileData.workosOrgId}\n`
+    }
+
     configContent += '\n'
   }
 
@@ -212,6 +228,8 @@ export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<Aut
       const workspaceMatch = block.match(/workspace\s*=\s*([^\s#]+)(?:\s*#\s*(.+))?/)
       const slugMatch = block.match(/workspace_slug\s*=\s*(\S+)/)
       const orgMatch = block.match(/organization_name\s*=\s*(.+)/)
+      const orgSlugMatch = block.match(/organization_slug\s*=\s*(\S+)/)
+      const workosOrgIdMatch = block.match(/workos_org_id\s*=\s*(\S+)/)
 
       if (!workspaceMatch) continue
 
@@ -220,6 +238,8 @@ export const loadAuthConfig = async (options?: TokenStorageOptions): Promise<Aut
         workspaceName: workspaceMatch[2]?.trim(),
         workspaceSlug: slugMatch?.[1]?.trim(),
         organizationName: orgMatch?.[1]?.trim(),
+        organizationSlug: orgSlugMatch?.[1]?.trim(),
+        workosOrgId: workosOrgIdMatch?.[1]?.trim(),
       }
     }
 

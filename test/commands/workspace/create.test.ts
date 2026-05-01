@@ -1,4 +1,6 @@
 import {expect, test} from '@oclif/test'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
 import {resetClientCache} from '../../../src/util/get-client.js'
 import {conflictHandler, multiOrgHandler, server, unauthorizedHandler} from '../../responses/workspace-create.js'
@@ -72,4 +74,178 @@ describe('workspace create', () => {
       expect(error.message).to.contain('--org')
     })
     .it('reports 400 multi-org with --org guidance')
+})
+
+/**
+ * qfg-kr7.7: workspace create must pick the org from the per-org token store.
+ *
+ * 1 org → auto-select.
+ * 2+ orgs → require `--org`; bare command errors with the list of orgs.
+ * 0 orgs → error with `qfg login` instructions.
+ *
+ * Each test rewrites the tokens.json fixture in QUONFIG_CONFIG_HOME so the
+ * `loadTokens()` call inside the command sees the multi-org shape it needs.
+ */
+describe('workspace create — kr7.7 multi-org token resolution', () => {
+  let originalTokens: string | undefined
+  const buildJwt = (expSecondsFromNow: number) => {
+    const payload = Buffer.from(
+      JSON.stringify({
+        exp: Math.floor(Date.now() / 1000) + expSecondsFromNow,
+        iat: Math.floor(Date.now() / 1000),
+        sub: 'user_test',
+      }),
+    ).toString('base64url')
+    return `eyJhbGciOiJSUzI1NiJ9.${payload}.sig`
+  }
+
+  const tokensPath = () => {
+    const home = process.env.QUONFIG_CONFIG_HOME
+    if (!home) throw new Error('QUONFIG_CONFIG_HOME unset — setupTestAuth must run before this test')
+    return path.join(home, 'tokens.json')
+  }
+
+  before(() => {
+    setupTestAuth()
+    server.listen()
+    originalTokens = fs.readFileSync(tokensPath(), 'utf8')
+  })
+
+  afterEach(() => {
+    server.resetHandlers()
+    resetClientCache()
+    if (originalTokens !== undefined) {
+      fs.writeFileSync(tokensPath(), originalTokens)
+    }
+  })
+
+  after(() => {
+    server.close()
+    cleanupTestAuth()
+  })
+
+  test
+    .stdout()
+    .do(() => {
+      const store = {
+        defaultOrgId: 'org_workspace-123',
+        tokensByOrg: {
+          'org_workspace-123': {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'mock-refresh-token',
+            org_slug: 'test-organization',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+    })
+    .command(['workspace create', 'lt-21-smoke'])
+    .it('1 org: auto-selects and prints the active org slug', (ctx) => {
+      // Specific mechanism: the command must announce the auto-selected org.
+      expect(ctx.stdout).to.contain('Creating workspace in org: test-organization')
+      expect(ctx.stdout).to.contain('Workspace created.')
+    })
+
+  test
+    .stdout()
+    .stderr()
+    .do(() => {
+      const store = {
+        tokensByOrg: {
+          org_acme: {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'r_a',
+            org_slug: 'acme',
+          },
+          org_beta: {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'r_b',
+            org_slug: 'beta',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+    })
+    .command(['workspace create', 'lt-21-smoke'])
+    .catch((error: Error) => {
+      expect(error.message).to.contain('multiple orgs')
+      expect(error.message).to.contain('--org')
+      expect(error.message).to.contain('acme')
+      expect(error.message).to.contain('beta')
+    })
+    .it('2+ orgs without --org: lists orgs and instructs user to specify --org')
+
+  test
+    .stdout()
+    .do(() => {
+      const store = {
+        tokensByOrg: {
+          org_acme: {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'r_a',
+            org_slug: 'acme',
+          },
+          'org_workspace-123': {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'mock-refresh-token',
+            org_slug: 'test-organization',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+    })
+    .command(['workspace create', 'lt-21-smoke', '--org', 'test-organization'])
+    .it('2+ orgs with --org slug: resolves slug to workosOrgId and creates', (ctx) => {
+      expect(ctx.stdout).to.contain('Creating workspace in org: test-organization')
+      expect(ctx.stdout).to.contain('Workspace created.')
+    })
+
+  test
+    .stdout()
+    .stderr()
+    .do(() => {
+      const store = {
+        tokensByOrg: {
+          org_acme: {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'r_a',
+            org_slug: 'acme',
+          },
+          'org_workspace-123': {
+            access_token: buildJwt(3600),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'mock-refresh-token',
+            org_slug: 'test-organization',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+    })
+    .command(['workspace create', 'lt-21-smoke', '--org', 'unknown-org'])
+    .catch((error: Error) => {
+      expect(error.message).to.contain('unknown-org')
+      expect(error.message).to.contain('not found in your token store')
+      expect(error.message).to.contain('qfg login')
+    })
+    .it('--org slug not in token store: errors with refresh hint')
+
+  test
+    .stdout()
+    .stderr()
+    .do(() => {
+      const empty = {tokensByOrg: {}}
+      fs.writeFileSync(tokensPath(), JSON.stringify(empty, null, 2))
+    })
+    .command(['workspace create', 'lt-21-smoke'])
+    .catch((error: Error) => {
+      expect(error.message).to.contain('No orgs found')
+      expect(error.message).to.contain('qfg login')
+    })
+    .it('0 orgs in token store: errors with login hint')
 })

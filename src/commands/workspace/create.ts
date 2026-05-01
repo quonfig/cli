@@ -4,7 +4,10 @@ import type {JsonObj} from '../../result.js'
 
 import {BaseCommand} from '../../index.js'
 import {getApiUrl} from '../../util/domain-urls.js'
-import {getValidAccessToken, resolveDefaultOrgId} from '../../util/get-valid-token.js'
+import {getValidAccessToken} from '../../util/get-valid-token.js'
+import {findOrgIdBySlug, loadTokens} from '../../util/token-storage.js'
+
+const UUID_PATTERN = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
 
 /**
  * Slugify matches the UI's rules exactly (see
@@ -66,32 +69,25 @@ export default class WorkspaceCreate extends BaseCommand {
       return this.err(`"${args.slug}" does not produce a valid slug. Use letters, numbers, or hyphens.`)
     }
 
-    // Resolve auth via the same path every other command uses. We
-    // don't require an active-workspace profile (AuthConfig) — the
-    // whole point of this command is to create one — but we do need a
-    // valid bearer token / API key.
+    // workspace create has no workspace context to lean on, so it can't go
+    // through the org/ws resolver. Pick the org directly from the token
+    // store: 1 org → auto, 2+ orgs → require --org, 0 orgs → not logged in.
+    const orgResolution = await this.resolveOrgFromTokens(flags.org)
+    if ('error' in orgResolution) return this.err(orgResolution.error)
+    const {workosOrgId, orgSlug} = orgResolution
+
     let accessToken: string
     try {
-      // TODO(qfg-kr7.7): once --org is required for multi-org users, resolve the
-      // orgId from --org first and pass it here. Today we use the default org.
-      const orgId = await resolveDefaultOrgId()
-      accessToken = await getValidAccessToken(orgId)
+      accessToken = await getValidAccessToken(workosOrgId)
     } catch {
       return this.err('Not logged in. Run `qfg login` first.')
     }
 
     const apiUrl = getApiUrl()
-    const body: Record<string, string> = {slug}
+    const body: Record<string, string> = {slug, organizationId: workosOrgId}
     if (flags.name) body.name = flags.name
-    if (flags.org) {
-      // Accept either a UUID (from the API) or a human-readable slug.
-      // The server resolves the slug to the local org UUID.
-      const uuidPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
-      if (uuidPattern.test(flags.org)) {
-        body.organizationId = flags.org
-      } else {
-        body.organizationSlug = flags.org
-      }
+    if (orgSlug) {
+      this.log(`Creating workspace in org: ${orgSlug}`)
     }
 
     this.verboseLog('WorkspaceCreate', {apiUrl, body})
@@ -163,6 +159,59 @@ export default class WorkspaceCreate extends BaseCommand {
       gitRepoUrl: created.gitRepoUrl,
       gitRepoFullName: created.gitRepoFullName ?? null,
       environments: created.environments,
+    }
+  }
+
+  /**
+   * Pick the org for the new workspace from the per-org token store.
+   *
+   * - 0 orgs → "No orgs found. Run `qfg login` first."
+   * - 1 org → auto-select that org's workosOrgId.
+   * - 2+ orgs → require `--org <slug-or-uuid>`. Slug is matched against
+   *   `org_slug` in the token store; UUID is matched against the token
+   *   store key. Either way the org must exist locally — we never invent
+   *   an orgId we don't have a token for.
+   */
+  private async resolveOrgFromTokens(
+    flagOrg: string | undefined,
+  ): Promise<{workosOrgId: string; orgSlug?: string} | {error: string}> {
+    const store = await loadTokens()
+    if (!store || Object.keys(store.tokensByOrg).length === 0) {
+      return {error: 'No orgs found. Run `qfg login` first.'}
+    }
+
+    const entries = Object.entries(store.tokensByOrg)
+
+    if (flagOrg) {
+      if (UUID_PATTERN.test(flagOrg)) {
+        const tokens = store.tokensByOrg[flagOrg]
+        if (!tokens) {
+          return {error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`}
+        }
+
+        return {workosOrgId: flagOrg, orgSlug: tokens.org_slug}
+      }
+
+      const matchedId = findOrgIdBySlug(store, flagOrg)
+      if (!matchedId) {
+        return {error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`}
+      }
+
+      return {workosOrgId: matchedId, orgSlug: flagOrg}
+    }
+
+    if (entries.length === 1) {
+      const [orgId, tokens] = entries[0]
+      return {workosOrgId: orgId, orgSlug: tokens.org_slug}
+    }
+
+    const slugList = entries
+      .map(([, tokens]) => tokens.org_slug)
+      .filter((s): s is string => Boolean(s))
+      .join(', ')
+    const orgList = slugList || entries.map(([orgId]) => orgId).join(', ')
+    return {
+      error: `You are a member of multiple orgs. Specify --org <org-slug> to indicate which org to create the workspace in. Your orgs: ${orgList}.`,
     }
   }
 
