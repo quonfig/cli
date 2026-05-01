@@ -1,2 +1,2 @@
-// NOTE: This file is generated
-export default '0.5.2'
+// AUTO-GENERATED from package.json by scripts/generate-version.mjs — do not edit.
+export default '0.0.29'

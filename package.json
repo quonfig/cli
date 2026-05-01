@@ -1,7 +1,7 @@
 {
   "packageManager": "yarn@4.11.0+sha512.4e54aeace9141df2f0177c266b05ec50dc044638157dae128c471ba65994ac802122d7ab35bcd9e81641228b7dcf24867d28e750e0bcae8a05277d600008ad54",
   "name": "@quonfig/cli",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "bugs": {
     "url": "https://github.com/quonfig/cli/issues"
   },
@@ -86,6 +86,7 @@
     }
   },
   "scripts": {
+    "prebuild": "node scripts/generate-version.mjs",
     "build": "shx rm -rf dist && tsc -b",
     "lint": "eslint --cache=true \"**/*.{ts,md,json}\"",
     "lint:fix": "eslint --cache=true --fix \"**/*.{ts,md,json}\"",
