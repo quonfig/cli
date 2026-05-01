@@ -4,9 +4,14 @@ import {APICommand} from '../index.js'
 import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
-import {getActiveProfile, loadAuthConfig, loadTokens, resolveWorkspaceId} from '../util/token-storage.js'
+import {tryParseWorkspacePin} from '../util/quonfig-json.js'
+import {findOrgIdBySlug, getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
 import {getValidAccessToken, resolveDefaultOrgId} from '../util/get-valid-token.js'
 import version from '../version.js'
+
+const BARE_SLUG_ENV_MIGRATION_MESSAGE =
+  'QUONFIG_WORKSPACE must be in org/workspace form (e.g. acme/foo). ' +
+  'Bare workspace slugs are no longer accepted. Update your .env and run `qfg login` if you have not yet migrated.'
 
 let clientInstance: Client | undefined
 let cachedWorkspaceId: string | undefined
@@ -93,54 +98,86 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
       command.verboseLog('ApiKey auth', {source: 'slug', slug: workspaceOverride, workspaceId})
     }
   } else {
-    const authConfig = await loadAuthConfig()
-    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
-    const store = await loadTokens()
-    const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
-
-    command.verboseLog('OAuth auth', {
-      hasAuthConfig: Boolean(authConfig),
-      hasAccessToken: Boolean(tokens?.access_token),
-    })
-
-    if (!authConfig || !tokens?.access_token) {
-      command.error('No authentication found. Please run `qfg login`.', {exit: 401})
-    }
-
-    command.verboseLog('Checking token validity...')
-    try {
-      // TODO(qfg-kr7.5): pick the orgId resolved from the workspace address.
-      const orgId = await resolveDefaultOrgId()
-      jwt = await getValidAccessToken(orgId, command.verboseLog)
-      command.verboseLog('Token valid (or refreshed)')
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
-      command.error(`Session expired. Please run \`qfg login\` to re-authenticate. (${detail})`, {exit: 401})
-    }
-
-    // Resolve workspace: --workspace/QUONFIG_WORKSPACE (slug) → QUONFIG_PROFILE (profile name) → default
+    // OAuth path: --workspace/QUONFIG_WORKSPACE must be in `org/ws` form so we
+    // can mint the org-scoped JWT for the right org and resolve the workspace
+    // slug *within that org*. No override → use the saved default profile.
     const workspaceSlugOverride = profile ?? process.env.QUONFIG_WORKSPACE
     const profileNameOverride = process.env.QUONFIG_PROFILE
 
+    const store = await loadTokens()
+    if (!store || Object.keys(store.tokensByOrg).length === 0) {
+      command.error('No authentication found. Please run `qfg login`.', {exit: 401})
+    }
+
     if (workspaceSlugOverride) {
-      // Try slug resolution first, then fall back to treating it as a profile name
-      const resolved = resolveWorkspaceId(authConfig, workspaceSlugOverride)
-      if (resolved) {
-        workspaceId = resolved
-        command.verboseLog('Workspace lookup', {source: 'slug', slug: workspaceSlugOverride, workspaceId})
-      } else {
-        const profileData = authConfig.profiles[workspaceSlugOverride]
-        if (profileData) {
-          workspaceId = profileData.workspace
-          command.verboseLog('Workspace lookup', {source: 'profile-name', profile: workspaceSlugOverride, workspaceId})
-        } else {
-          command.error(
-            `Workspace '${workspaceSlugOverride}' not found. Run \`qfg workspace switch\` to select and save a workspace.`,
-            {exit: 1},
-          )
-        }
+      const pin = tryParseWorkspacePin(workspaceSlugOverride)
+      if (!pin) {
+        command.error(BARE_SLUG_ENV_MIGRATION_MESSAGE, {exit: 1})
       }
+
+      const {orgSlug, workspaceSlug} = pin
+      const orgId = findOrgIdBySlug(store, orgSlug)
+      if (!orgId) {
+        command.error(`No token found for org \`${orgSlug}\`. Run \`qfg login\` to add this org.`, {exit: 401})
+      }
+
+      try {
+        jwt = await getValidAccessToken(orgId, command.verboseLog)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        command.error(`Session expired for org ${orgSlug}: ${detail}. Run \`qfg login\` to re-authenticate.`, {
+          exit: 401,
+        })
+      }
+
+      type WorkspaceEntry = {organizationName?: string; workosOrgId?: string; workspaceId: string; workspaceSlug: string}
+      let res: Response
+      try {
+        res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
+          method: 'POST',
+          headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
+          body: JSON.stringify({json: {}}),
+        })
+      } catch (error) {
+        command.error(
+          `Failed to resolve workspace "${workspaceSlugOverride}": ${error instanceof Error ? error.message : String(error)}`,
+          {exit: 1},
+        )
+      }
+
+      if (!res.ok) {
+        command.error(`Failed to resolve workspace "${workspaceSlugOverride}" (HTTP ${res.status}).`, {exit: 1})
+      }
+
+      const body = (await res.json()) as {json?: WorkspaceEntry[]}
+      const entries = (body.json ?? body) as unknown as WorkspaceEntry[]
+      const candidates = Array.isArray(entries) ? entries : []
+      const match = candidates.find((w) => w.workosOrgId === orgId && w.workspaceSlug === workspaceSlug)
+      if (!match) {
+        const inOrg = candidates.filter((w) => w.workosOrgId === orgId).map((w) => w.workspaceSlug)
+        const available = inOrg.length > 0 ? inOrg.join(', ') : '(none)'
+        command.error(`Workspace "${workspaceSlug}" not found in org "${orgSlug}". Available: ${available}.`, {exit: 1})
+      }
+
+      workspaceId = match.workspaceId
+      command.verboseLog('Workspace lookup', {source: 'org/ws', orgSlug, workspaceSlug, orgId, workspaceId})
     } else {
+      const authConfig = await loadAuthConfig()
+      if (!authConfig) {
+        command.error('No authentication found. Please run `qfg login`.', {exit: 401})
+      }
+
+      command.verboseLog('OAuth auth', {hasAuthConfig: true})
+
+      try {
+        const orgId = await resolveDefaultOrgId()
+        jwt = await getValidAccessToken(orgId, command.verboseLog)
+        command.verboseLog('Token valid (or refreshed)')
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        command.error(`Session expired. Please run \`qfg login\` to re-authenticate. (${detail})`, {exit: 401})
+      }
+
       const activeProfile = getActiveProfile(profileNameOverride)
       const profileData =
         authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']

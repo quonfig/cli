@@ -2,16 +2,21 @@ import type {BaseCommand} from '../index.js'
 
 import {getApiUrl} from './domain-urls.js'
 import {getValidAccessToken, resolveDefaultOrgId} from './get-valid-token.js'
+import {tryParseWorkspacePin} from './quonfig-json.js'
 import {
   type AuthConfig,
+  findOrgIdBySlug,
   getActiveProfile,
   loadAuthConfig,
   loadTokens,
-  resolveWorkspaceId as resolveOAuthWorkspaceId,
   saveAuthConfig,
 } from './token-storage.js'
 
 const UUID_PATTERN = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
+
+const BARE_SLUG_ENV_MIGRATION_MESSAGE =
+  'QUONFIG_WORKSPACE must be in org/workspace form (e.g. acme/foo). ' +
+  'Bare workspace slugs are no longer accepted. Update your .env and run `qfg login` if you have not yet migrated.'
 
 /**
  * Resolve the target workspace UUID for commands that don't extend APICommand
@@ -81,7 +86,16 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     return match.workspaceId
   }
 
-  // OAuth path.
+  // OAuth path with an explicit override → must be in org/ws form. Parse,
+  // look up the workosOrgId for that org slug in the local token store, and
+  // resolve the workspaceSlug *within that org*. Bare slug is rejected with
+  // a migration message (the API-key branch above is the one exception).
+  if (override) {
+    return resolveOrgScopedWorkspace(command, override)
+  }
+
+  // No override → fall back to the saved default profile, recovering the
+  // auth config from tokens if the config file is absent.
   let authConfig = await loadAuthConfig()
   if (!authConfig) {
     // Auth config can be missing while tokens.json still holds a valid
@@ -89,7 +103,6 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     // 0f8bee6) or a partial login that wrote tokens but never the config
     // (qfg-2qj). getValidAccessToken already knows how to refresh, so try
     // that path before declaring "Not logged in".
-    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
     const store = await loadTokens()
     const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
     if (!tokens?.refresh_token) {
@@ -97,17 +110,6 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     }
 
     authConfig = await recoverAuthConfigFromTokens(command)
-  }
-
-  if (override) {
-    const resolved = resolveOAuthWorkspaceId(authConfig, override)
-    if (resolved) return resolved
-
-    // Fall back to treating the override as a profile name.
-    const profileData = authConfig.profiles[override]
-    if (profileData?.workspace) return profileData.workspace
-
-    command.error(`Workspace "${override}" not found. Run \`qfg workspace switch\` to pick one.`, {exit: 1})
   }
 
   const activeProfile = getActiveProfile()
@@ -120,6 +122,77 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
   }
 
   return profileData.workspace
+}
+
+/**
+ * OAuth-mode resolver for an explicit `<org-slug>/<workspace-slug>` override.
+ *
+ * 1. Parse the override; bare slug → migration error.
+ * 2. Look up workosOrgId via the token store's org_slug index. If the user
+ *    hasn't logged in to that org, error with `qfg login` instructions.
+ * 3. Mint/refresh an org-scoped JWT for that org, call /userWorkspaces/list,
+ *    and pick the entry whose (workosOrgId, workspaceSlug) matches.
+ */
+async function resolveOrgScopedWorkspace(command: BaseCommand, override: string): Promise<string> {
+  const pin = tryParseWorkspacePin(override)
+  if (!pin) {
+    command.error(BARE_SLUG_ENV_MIGRATION_MESSAGE, {exit: 1})
+  }
+
+  const {orgSlug, workspaceSlug} = pin
+  const store = await loadTokens()
+  if (!store) {
+    command.error('Not logged in. Run `qfg login` first (or set QUONFIG_API_KEY for CI).', {exit: 401})
+  }
+
+  const workosOrgId = findOrgIdBySlug(store, orgSlug)
+  if (!workosOrgId) {
+    command.error(`No token found for org \`${orgSlug}\`. Run \`qfg login\` to add this org.`, {exit: 401})
+  }
+
+  let jwt: string
+  try {
+    jwt = await getValidAccessToken(workosOrgId, command.verboseLog)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    command.error(`Session expired for org ${orgSlug}: ${detail}. Run \`qfg login\` to re-authenticate.`, {exit: 401})
+  }
+
+  type WorkspaceEntry = {organizationName?: string; workosOrgId?: string; workspaceId: string; workspaceSlug: string}
+
+  let res: Response
+  try {
+    res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
+      method: 'POST',
+      headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({json: {}}),
+    })
+  } catch (error) {
+    command.error(
+      `Failed to resolve workspace "${override}": ${error instanceof Error ? error.message : String(error)}`,
+      {exit: 1},
+    )
+  }
+
+  if (!res.ok) {
+    command.error(`Failed to resolve workspace "${override}" (HTTP ${res.status}).`, {exit: 1})
+  }
+
+  const body = (await res.json()) as {json?: WorkspaceEntry[]}
+  const entries = (body.json ?? body) as unknown as WorkspaceEntry[]
+  const candidates = Array.isArray(entries) ? entries : []
+  const match = candidates.find((w) => w.workosOrgId === workosOrgId && w.workspaceSlug === workspaceSlug)
+  if (!match) {
+    const inOrg = candidates.filter((w) => w.workosOrgId === workosOrgId).map((w) => w.workspaceSlug)
+    const available = inOrg.length > 0 ? inOrg.join(', ') : '(none)'
+    command.error(
+      `Workspace "${workspaceSlug}" not found in org "${orgSlug}". Available: ${available}.`,
+      {exit: 1},
+    )
+  }
+
+  command.verboseLog('OAuth workspace lookup', {orgSlug, workspaceSlug, workosOrgId, workspaceId: match.workspaceId})
+  return match.workspaceId
 }
 
 /**

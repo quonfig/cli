@@ -26,6 +26,15 @@ export interface TokenSet {
   refresh_token: string
   user_email?: string
   user_id?: string
+  /**
+   * Human-readable org slug (e.g. "acme") — populated by the per-org login
+   * flow so the CLI can resolve `acme/foo`-form workspace addresses against
+   * the local store without round-tripping `me.organizations`. See
+   * project/plans/multi-org-cli-auth.md (qfg-kr7).
+   */
+  org_slug?: string
+  /** Org display name for `qfg whoami` / `qfg workspace`. */
+  org_name?: string
 }
 
 export interface TokenStore {
@@ -35,6 +44,19 @@ export interface TokenStore {
 
 export const getTokenForOrg = (store: TokenStore, workosOrgId: string): TokenSet | undefined =>
   store.tokensByOrg[workosOrgId]
+
+/**
+ * Find the workosOrgId in the per-org token store whose TokenSet has the
+ * given org_slug. Returns undefined when no matching slug is present (either
+ * because the user has never logged in to that org, or because tokens were
+ * minted by a pre-qfg-kr7 login flow that didn't persist org_slug).
+ */
+export const findOrgIdBySlug = (store: TokenStore, orgSlug: string): string | undefined => {
+  for (const [orgId, tokens] of Object.entries(store.tokensByOrg)) {
+    if (tokens.org_slug === orgSlug) return orgId
+  }
+  return undefined
+}
 
 export interface AuthConfig {
   defaultProfile?: string
