@@ -333,6 +333,29 @@ describe('migrate/sources/launch/translate', () => {
       ])
     })
 
+    it("normalizes segment valueType to 'bool' regardless of source value (qfg-ol8y)", () => {
+      // Launch emits valueType: 'not_set_value_type' for segments where the
+      // valueType was never explicitly set in Launch's UI. Quonfig's validator
+      // requires segments to have valueType === 'bool' (segments are
+      // conceptually "is the user in the segment?"). Force-normalize so the
+      // qfg-verify pre-receive hook stops rejecting these pushes.
+      const input: LaunchConfig = {
+        default: {
+          rules: [
+            {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+          ],
+        },
+        environments: [],
+        id: '1',
+        key: 'test',
+        projectId: 'p',
+        type: 'segment',
+        valueType: 'not_set_value_type',
+      } as unknown as LaunchConfig
+      const out = transformConfig(input, envMap)
+      expect(out.valueType).to.equal('bool')
+    })
+
     it('skips variant/valueType check for weighted_values valueType (qfg-0cz.5)', () => {
       const input: LaunchConfig = {
         default: {

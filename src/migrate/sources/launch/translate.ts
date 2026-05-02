@@ -191,6 +191,14 @@ export function transformConfig(
     out.valueType = 'log_level'
   }
 
+  // qfg-ol8y: Launch passes through `valueType: 'not_set_value_type'` for
+  // segments where the field was never explicitly set. qfg-verify rejects
+  // that since segments must have valueType 'bool'. Segments in qfg are
+  // unconditionally boolean ("is the user in the segment?"), so force-set.
+  if (typeof out.type === 'string' && (out.type as string).toLowerCase() === 'segment') {
+    out.valueType = 'bool'
+  }
+
   if (out.type === 'log_level' && typeof out.key === 'string') {
     out.key = normalizeLogLevelKey(out.key)
   }
