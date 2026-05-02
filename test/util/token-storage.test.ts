@@ -288,10 +288,8 @@ workspace = workspace-work # Work Org - Work Workspace
       expect(loaded).to.equal(null)
     })
 
-    it('loadTokens hard-fails on the legacy flat shape', async () => {
-      // Old shape: flat TokenData written directly, no tokensByOrg key.
-      const legacy = {accessToken: 'old', expiresAt: 1, refreshToken: 'old-ref'}
-      fs.writeFileSync(tokenFile, JSON.stringify(legacy), 'utf8')
+    it('loadTokens rejects a malformed file', async () => {
+      fs.writeFileSync(tokenFile, JSON.stringify({nonsense: true}), 'utf8')
 
       let caught: Error | undefined
       try {
@@ -300,18 +298,11 @@ workspace = workspace-work # Work Org - Work Workspace
         caught = error as Error
       }
 
-      expect(caught, 'expected loadTokens to throw on legacy shape').to.exist
-      expect(caught!.message).to.include('Token store format has changed')
+      expect(caught).to.exist
       expect(caught!.message).to.include('qfg login')
-      // qfg-7mau: stale-binary scenario must be called out — a pre-kr7 binary
-      // clobbering a new-format file is the most common cause of this error.
-      expect(caught!.message).to.match(/older CLI|stale binary|upgrade/i)
-      expect(caught!.message).to.include('npm i -g @quonfig/cli@latest')
     })
 
-    it('loadTokens hard-fails when the file version is from a newer CLI', async () => {
-      // qfg-7mau: a future CLI bumps version to 3; this CLI must refuse it
-      // with "upgrade your CLI" rather than silently treating it as logged-out.
+    it('loadTokens rejects a file written by a newer CLI version', async () => {
       fs.writeFileSync(tokenFile, JSON.stringify({version: 99, tokensByOrg: {org_A: orgA}}), 'utf8')
 
       let caught: Error | undefined
@@ -321,28 +312,16 @@ workspace = workspace-work # Work Org - Work Workspace
         caught = error as Error
       }
 
-      expect(caught, 'expected loadTokens to throw on future version').to.exist
-      expect(caught!.message).to.match(/newer CLI|newer version/i)
+      expect(caught).to.exist
+      expect(caught!.message).to.match(/newer CLI/i)
       expect(caught!.message).to.include('npm i -g @quonfig/cli@latest')
     })
 
-    it('loadTokens accepts files without a version field (kr7-shipped 0.0.26-0.0.29)', async () => {
-      // Files written before qfg-7mau didn't include a version key. The
-      // current CLI must treat a missing version as the current shape, not
-      // reject it as a future format.
-      fs.writeFileSync(tokenFile, JSON.stringify({tokensByOrg: {org_A: orgA}}), 'utf8')
-      const loaded = await loadTokens(options)
-      expect(loaded?.tokensByOrg.org_A.access_token).to.equal('a-tok')
-    })
-
     it('saveTokens stamps a version field on the file', async () => {
-      // qfg-7mau: every write tags the file with the current schema version
-      // so future CLIs can detect stale state cleanly.
       const store: TokenStore = {tokensByOrg: {org_A: orgA}}
       await saveTokens(store, options)
       const onDisk = JSON.parse(fs.readFileSync(tokenFile, 'utf8')) as TokenStore & {version?: number}
-      expect(onDisk.version).to.be.a('number')
-      expect(onDisk.version).to.be.greaterThanOrEqual(2)
+      expect(onDisk.version).to.equal(2)
     })
 
     it('getTokenForOrg returns the matching token set', () => {

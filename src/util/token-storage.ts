@@ -38,16 +38,13 @@ export interface TokenSet {
 }
 
 /**
- * Schema version of tokens.json. Stamped on every write by saveTokens so a
+ * Schema version of tokens.json. Stamped on every saveTokens write so a
  * future CLI can refuse files written by an even-newer CLI with a clear
- * "upgrade your CLI" error (qfg-7mau). Files written before qfg-7mau (kr7
- * shipped 0.0.26-0.0.29) lack this field; loadTokens treats a missing
- * version as the current shape.
+ * "upgrade your CLI" error.
  */
 export const TOKEN_STORE_VERSION = 2
 
 export interface TokenStore {
-  /** Schema version. Optional on read for back-compat with kr7-shipped files. */
   version?: number
   defaultOrgId?: string
   tokensByOrg: {[workosOrgId: string]: TokenSet}
@@ -163,13 +160,7 @@ export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenSt
 
   const parsed = JSON.parse(data) as unknown
   if (!isTokenStore(parsed)) {
-    // qfg-7mau: most likely cause is a stale (pre-kr7) CLI that overwrote
-    // the multi-org token file with the old flat shape on `qfg login`.
-    throw new Error(
-      'Token store format has changed. Run `qfg login` to re-authenticate. ' +
-        'If you recently ran `qfg login` with an older CLI, your tokens were overwritten — ' +
-        'upgrade first: `npm i -g @quonfig/cli@latest`',
-    )
+    throw new Error('Token store malformed. Run `qfg login` to re-authenticate.')
   }
 
   const fileVersion = parsed.version ?? TOKEN_STORE_VERSION
