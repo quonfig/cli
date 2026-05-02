@@ -1,4 +1,5 @@
 import {
+  type CoercedSentinelSummary,
   type DroppedOverrideSummary,
   type LegacyChange,
   type MigrationSource,
@@ -20,12 +21,19 @@ const SOURCE_NAME = 'launch'
 
 interface LaunchState {
   apiKey: null | string
+  coercedSentinels: Map<string, Map<string, number>>
   droppedOverrides: Map<string, Map<string, number>>
   envIdMap: null | Record<string, string>
   skippedConfigs: SkippedConfigEntry[]
 }
 
-const state: LaunchState = {apiKey: null, droppedOverrides: new Map(), envIdMap: null, skippedConfigs: []}
+const state: LaunchState = {
+  apiKey: null,
+  coercedSentinels: new Map(),
+  droppedOverrides: new Map(),
+  envIdMap: null,
+  skippedConfigs: [],
+}
 
 class MissingAuthError extends Error {
   constructor(operation: string) {
@@ -83,15 +91,28 @@ function translateImpl(change: LegacyChange): QuonfigFile[] {
   const outputPath = getOutputPath(raw.type, raw.key)
   let transformed: Record<string, unknown>
   try {
-    transformed = transformConfig(raw.newConfig, envIdMap, (envId) => {
-      let perFlag = state.droppedOverrides.get(envId)
-      if (!perFlag) {
-        perFlag = new Map<string, number>()
-        state.droppedOverrides.set(envId, perFlag)
-      }
+    transformed = transformConfig(
+      raw.newConfig,
+      envIdMap,
+      (envId) => {
+        let perFlag = state.droppedOverrides.get(envId)
+        if (!perFlag) {
+          perFlag = new Map<string, number>()
+          state.droppedOverrides.set(envId, perFlag)
+        }
 
-      perFlag.set(outputPath, (perFlag.get(outputPath) ?? 0) + 1)
-    })
+        perFlag.set(outputPath, (perFlag.get(outputPath) ?? 0) + 1)
+      },
+      (envId) => {
+        let perFlag = state.coercedSentinels.get(envId)
+        if (!perFlag) {
+          perFlag = new Map<string, number>()
+          state.coercedSentinels.set(envId, perFlag)
+        }
+
+        perFlag.set(outputPath, (perFlag.get(outputPath) ?? 0) + 1)
+      },
+    )
   } catch (error) {
     if (error instanceof InvalidSourceConfigError) {
       state.skippedConfigs.push({key: raw.key, reason: error.message})
@@ -122,6 +143,24 @@ function getDroppedOverridesImpl(): DroppedOverrideSummary | null {
   return {byEnv, total}
 }
 
+function getCoercedSentinelsImpl(): CoercedSentinelSummary | null {
+  if (state.coercedSentinels.size === 0) return null
+  const byEnv: Record<string, Record<string, number>> = {}
+  let total = 0
+  for (const envId of [...state.coercedSentinels.keys()].sort()) {
+    const perFlag = state.coercedSentinels.get(envId)!
+    const record: Record<string, number> = {}
+    for (const [flagPath, count] of [...perFlag.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      record[flagPath] = count
+      total += count
+    }
+
+    byEnv[envId] = record
+  }
+
+  return {byEnv, total}
+}
+
 function getSkippedConfigsImpl(): SkippedConfigSummary | null {
   if (state.skippedConfigs.length === 0) return null
   return {entries: [...state.skippedConfigs], total: state.skippedConfigs.length}
@@ -132,12 +171,14 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   state.apiKey = apiKey
   state.droppedOverrides = new Map()
   state.skippedConfigs = []
+  state.coercedSentinels = new Map()
 }
 
 export const launchSource: MigrationSource = {
   fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange> {
     return fetchChangesImpl(sinceEpochMs)
   },
+  getCoercedSentinels: getCoercedSentinelsImpl,
   getDroppedOverrides: getDroppedOverridesImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
@@ -151,4 +192,5 @@ export function __resetLaunchSourceForTests(): void {
   state.envIdMap = null
   state.droppedOverrides = new Map()
   state.skippedConfigs = []
+  state.coercedSentinels = new Map()
 }

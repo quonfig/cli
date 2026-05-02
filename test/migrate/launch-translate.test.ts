@@ -250,6 +250,89 @@ describe('migrate/sources/launch/translate', () => {
       expect(() => transformConfig(input, envMap)).to.throw(/string.*double/)
     })
 
+    it("coerces Launch's empty-string sentinel rule value to the typed default in non-string configs (qfg-gpnd)", () => {
+      // Launch emits {value:{type:'string', value:''}} as a "no value set yet"
+      // sentinel for catch-all rules even when the config valueType is int. The
+      // qfg-verify pre-receive hook rejects this as a value-type mismatch. The
+      // migrator should coerce the sentinel to the typed default (0 for int)
+      // so the rest of the otherwise-valid config still ships.
+      const input: LaunchConfig = {
+        environments: [
+          {
+            id: '148',
+            rules: [
+              {criteria: [{operator: 'PROP_IS_ONE_OF', propertyName: 'tier', valueToMatch: {type: 'string', value: 'pro'}}], value: {type: 'int', value: '50'}},
+              {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}},
+            ],
+          },
+        ],
+        id: '1',
+        key: 'cloud_context.integrations.max_limit',
+        projectId: 'p',
+        type: 'config',
+        valueType: 'int',
+      } as unknown as LaunchConfig
+      const out = transformConfig(input, envMap)
+      const env0 = (out.environments as Array<{rules: Array<{value: {type: string; value: unknown}}>}>)[0]
+      expect(env0.rules[0].value).to.deep.equal({type: 'int', value: '50'})
+      expect(env0.rules[1].value).to.deep.equal({type: 'int', value: '0'})
+    })
+
+    it('coerces empty-string sentinel in default.rules too (qfg-gpnd)', () => {
+      const input: LaunchConfig = {
+        default: {
+          rules: [
+            {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}},
+          ],
+        },
+        environments: [],
+        id: '1',
+        key: 'some.int.config',
+        projectId: 'p',
+        type: 'config',
+        valueType: 'int',
+      } as unknown as LaunchConfig
+      const out = transformConfig(input, envMap)
+      const rules = (out.default as {rules: Array<{value: {type: string; value: unknown}}>}).rules
+      expect(rules[0].value).to.deep.equal({type: 'int', value: '0'})
+    })
+
+    it("leaves a legitimate empty-string value alone when the config valueType IS 'string' (qfg-gpnd)", () => {
+      const input: LaunchConfig = {
+        environments: [
+          {id: '148', rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}}]},
+        ],
+        id: '1',
+        key: 'some.string.config',
+        projectId: 'p',
+        type: 'config',
+        valueType: 'string',
+      } as unknown as LaunchConfig
+      const out = transformConfig(input, envMap)
+      const env0 = (out.environments as Array<{rules: Array<{value: {type: string; value: unknown}}>}>)[0]
+      expect(env0.rules[0].value).to.deep.equal({type: 'string', value: ''})
+    })
+
+    it('reports each sentinel coercion via the onCoercedSentinel callback (qfg-gpnd)', () => {
+      const input: LaunchConfig = {
+        environments: [
+          {id: '148', rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}}]},
+          {id: '149', rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}}]},
+        ],
+        id: '1',
+        key: 'some.int.config',
+        projectId: 'p',
+        type: 'config',
+        valueType: 'int',
+      } as unknown as LaunchConfig
+      const coerced: Array<{envId: string; valueType: string}> = []
+      transformConfig(input, envMap, undefined, (envId, valueType) => coerced.push({envId, valueType}))
+      expect(coerced).to.deep.equal([
+        {envId: 'production', valueType: 'int'},
+        {envId: 'staging', valueType: 'int'},
+      ])
+    })
+
     it('skips variant/valueType check for weighted_values valueType (qfg-0cz.5)', () => {
       const input: LaunchConfig = {
         default: {

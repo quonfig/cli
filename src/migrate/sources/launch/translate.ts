@@ -121,6 +121,27 @@ function normalizeRules(rules: unknown, configKey: string, path: string): void {
   }
 }
 
+// qfg-gpnd: Launch emits {type:'string', value:''} as a "no value set yet"
+// sentinel even when the surrounding config valueType is non-string (most
+// commonly seen on catch-all/ALWAYS_TRUE rules). The qfg-verify hook rejects
+// these as type-mismatches and fail-stops the entire push. Coerce the sentinel
+// to the typed default so the otherwise-valid config still ships, and surface
+// each coercion via the callback so the migrator can report it.
+function coerceSentinelRules(rules: unknown, valueType: string, onCoerced: () => void): void {
+  if (!Array.isArray(rules)) return
+  if (valueType === 'string') return
+  for (const rule of rules) {
+    if (!rule || typeof rule !== 'object') continue
+    const r = rule as {value?: unknown}
+    const v = r.value as {type?: unknown; value?: unknown} | undefined
+    if (!v || typeof v !== 'object') continue
+    if (v.type === 'string' && v.value === '') {
+      r.value = zeroValue(valueType)
+      onCoerced()
+    }
+  }
+}
+
 function normalizeJsonValuesInConfig(out: Record<string, unknown>): void {
   const configKey = String(out.key ?? 'unknown')
 
@@ -149,6 +170,7 @@ export function transformConfig(
   config: LaunchConfig,
   envIdMap: Record<string, string>,
   onDroppedEnv?: (envId: string) => void,
+  onCoercedSentinel?: (envId: string, valueType: string) => void,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = JSON.parse(JSON.stringify(config))
 
@@ -255,6 +277,21 @@ export function transformConfig(
           value: firstVariantValue ?? zeroValue(out.valueType as string),
         },
       ],
+    }
+  }
+
+  if (typeof out.valueType === 'string') {
+    const valueType = out.valueType as string
+    const defaultSection = out.default as {rules?: unknown} | undefined
+    if (defaultSection && Array.isArray(defaultSection.rules)) {
+      coerceSentinelRules(defaultSection.rules, valueType, () => onCoercedSentinel?.('default', valueType))
+    }
+
+    if (Array.isArray(out.environments)) {
+      for (const env of out.environments as Array<Record<string, unknown>>) {
+        const envId = typeof env.id === 'string' ? env.id : 'unknown'
+        coerceSentinelRules(env.rules, valueType, () => onCoercedSentinel?.(envId, valueType))
+      }
     }
   }
 

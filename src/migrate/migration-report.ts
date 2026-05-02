@@ -2,7 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {IdentifierMap} from './identifier-map.js'
-import type {DroppedOverrideSummary, DuplicateResolutionSummary, SkippedConfigSummary} from './source.js'
+import type {
+  CoercedSentinelSummary,
+  DroppedOverrideSummary,
+  DuplicateResolutionSummary,
+  SkippedConfigSummary,
+} from './source.js'
 
 export interface MigrationReportCounts {
   environmentsMapped: number
@@ -39,6 +44,12 @@ export interface FollowUpChecklist {
 
 export interface MigrationReportData {
   cleanMappings: CleanMapping[]
+  /**
+   * Rule values that translate() coerced from a sentinel like Launch's
+   * empty-string "no value set yet" to the typed default. Null when nothing
+   * was coerced.
+   */
+  coercedSentinels?: CoercedSentinelSummary | null
   counts: MigrationReportCounts
   /**
    * Override sections that were dropped during translate() because the env.id was not
@@ -160,6 +171,28 @@ const renderDuplicateResolutions = (resolved: DuplicateResolutionSummary | null 
   return lines.join('\n')
 }
 
+const renderCoercedSentinels = (coerced: CoercedSentinelSummary | null | undefined): null | string => {
+  if (!coerced || coerced.total === 0) return null
+  const envIds = Object.keys(coerced.byEnv).sort()
+  const lines: string[] = [
+    '## Coerced sentinel rule values',
+    '',
+    `Coerced **${coerced.total}** rule value(s) from Launch's "no value set yet" sentinel ({type:"string", value:""}) to the typed default for the surrounding config. The qfg-verify hook would otherwise reject these as type-mismatches and fail-stop the entire push. Affected envs: **${envIds.length}**. Review each and set a real default in the source system if needed.`,
+  ]
+  for (const envId of envIds) {
+    const perFlag = coerced.byEnv[envId]
+    const totalForEnv = Object.values(perFlag).reduce((s, n) => s + n, 0)
+    const flagCount = Object.keys(perFlag).length
+    lines.push('', `### env-${envId} — ${totalForEnv} coerced from ${flagCount} config(s)`, '')
+    const sorted = Object.keys(perFlag).sort()
+    for (const flagPath of sorted) {
+      lines.push(`- \`${flagPath}\` (${perFlag[flagPath]})`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 const renderSkippedConfigs = (skipped: null | SkippedConfigSummary | undefined): null | string => {
   if (!skipped || skipped.total === 0) return null
   const lines: string[] = [
@@ -224,6 +257,9 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
 
   const skipped = renderSkippedConfigs(data.skippedConfigs)
   if (skipped !== null) sections.push(skipped)
+
+  const coerced = renderCoercedSentinels(data.coercedSentinels)
+  if (coerced !== null) sections.push(coerced)
 
   sections.push(renderFollowUp(data.followUp))
 

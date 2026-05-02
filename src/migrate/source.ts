@@ -20,6 +20,20 @@ export interface DroppedOverrideSummary {
   total: number
 }
 
+/**
+ * qfg-gpnd: Per-config tally of rule values that were coerced from a Launch
+ * "no value set yet" sentinel ({type:'string', value:''}) to the typed default
+ * because the surrounding config valueType was non-string. Tracking is per
+ * envId (or 'default' for the default section) so customers can see which
+ * environments were affected.
+ */
+export interface CoercedSentinelSummary {
+  /** Per-envId → per-output-path count of coerced sentinel rule values. */
+  byEnv: Record<string, Record<string, number>>
+  /** Total rule values coerced across every env + config. */
+  total: number
+}
+
 export interface SkippedConfigEntry {
   /** Source key (pre-translate) that was skipped. */
   key: string
@@ -52,6 +66,12 @@ export interface DuplicateResolutionSummary {
 
 export interface MigrationSource {
   fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange>
+  /**
+   * Optional post-translate accumulator. Returns any rule values that translate()
+   * coerced from a sentinel like Launch's empty-string "no value set yet" to the
+   * typed default. Null when nothing was coerced.
+   */
+  getCoercedSentinels?(): CoercedSentinelSummary | null
   /**
    * Optional post-translate accumulator. Returns any override sections that were
    * dropped during translate() calls because the env.id was not present in the

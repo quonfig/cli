@@ -12,6 +12,7 @@ import {PushConflictError} from '../util/clone-and-stack-push.js'
 import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
 import {
+  type CoercedSentinelSummary,
   type DroppedOverrideSummary,
   type DuplicateResolutionSummary,
   type LegacyChange,
@@ -255,6 +256,7 @@ export default class Migrate extends BaseCommand {
       // detectDuplicateKeys). The source accumulator holds the data regardless.
       warnAboutDroppedOverrides(this, source.getDroppedOverrides?.() ?? null)
       warnAboutSkippedConfigs(this, source.getSkippedConfigs?.() ?? null)
+      warnAboutCoercedSentinels(this, source.getCoercedSentinels?.() ?? null)
       warnAboutDuplicateResolutions(this, duplicateResolutionsForWarn)
     }
   }
@@ -341,6 +343,26 @@ function warnAboutDuplicateResolutions(cmd: BaseCommand, resolved: DuplicateReso
   }
 
   cmd.warn('Full detail is also written to MIGRATION_REPORT.md.')
+}
+
+function warnAboutCoercedSentinels(cmd: BaseCommand, coerced: CoercedSentinelSummary | null): void {
+  if (!coerced || coerced.total === 0) return
+  const envIds = Object.keys(coerced.byEnv).sort()
+  cmd.warn(
+    `Coerced ${coerced.total} sentinel rule value(s) from Launch's "no value set yet" sentinel ({type:"string", value:""}) to the typed default for the surrounding config. Without coercion the qfg-verify hook would reject these as type-mismatches and fail-stop the entire push:`,
+  )
+  for (const envId of envIds) {
+    const perFlag = coerced.byEnv[envId]
+    const totalForEnv = Object.values(perFlag).reduce((s, n) => s + n, 0)
+    cmd.warn(`  env-${envId}: ${totalForEnv} coerced from ${Object.keys(perFlag).length} config(s)`)
+    for (const flagPath of Object.keys(perFlag).sort()) {
+      cmd.warn(`    - ${flagPath} (${perFlag[flagPath]})`)
+    }
+  }
+
+  cmd.warn(
+    `If you want a real default for these rules, set one in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
+  )
 }
 
 function warnAboutSkippedConfigs(cmd: BaseCommand, skipped: null | SkippedConfigSummary): void {

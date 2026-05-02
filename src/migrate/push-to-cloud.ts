@@ -10,6 +10,7 @@ import {
   cloneAndStackPush,
 } from '../util/clone-and-stack-push.js'
 import type {
+  CoercedSentinelSummary,
   DroppedOverrideSummary,
   DuplicateResolution,
   DuplicateResolutionSummary,
@@ -36,6 +37,7 @@ export interface PushMigrationToCloudOptions {
 }
 
 export interface PushMigrationToCloudResult extends CloneAndStackPushResult {
+  coercedSentinels: CoercedSentinelSummary | null
   droppedOverrides: DroppedOverrideSummary | null
   duplicateResolutions: DuplicateResolutionSummary | null
   skippedConfigs: SkippedConfigSummary | null
@@ -106,6 +108,7 @@ const mergeEnvironmentsIntoQuonfigJson = (dir: string, sourceEnvs: string[]): vo
 }
 
 export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): Promise<PushMigrationToCloudResult> => {
+  let coercedSentinels: CoercedSentinelSummary | null = null
   let droppedOverrides: DroppedOverrideSummary | null = null
   let duplicateResolutions: DuplicateResolutionSummary | null = null
   let skippedConfigs: SkippedConfigSummary | null = null
@@ -121,10 +124,12 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
 
       droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
       skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+      coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
       duplicateResolutions =
         resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
       const reportData: MigrationReportData = {
         ...opts.reportData,
+        ...(coercedSentinels ? {coercedSentinels} : {}),
         ...(droppedOverrides ? {droppedOverrides} : {}),
         ...(duplicateResolutions ? {duplicateResolutions} : {}),
         ...(skippedConfigs ? {skippedConfigs} : {}),
@@ -138,5 +143,5 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
   if (opts.branch !== undefined) cloneOpts.branch = opts.branch
 
   const result = await cloneAndStackPush(cloneOpts)
-  return {...result, droppedOverrides, duplicateResolutions, skippedConfigs}
+  return {...result, coercedSentinels, droppedOverrides, duplicateResolutions, skippedConfigs}
 }

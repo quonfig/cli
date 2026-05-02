@@ -7,6 +7,7 @@ import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
 import {runGit, spawnGit} from '../util/git-ops.js'
 import type {
+  CoercedSentinelSummary,
   DroppedOverrideSummary,
   DuplicateResolution,
   DuplicateResolutionSummary,
@@ -33,6 +34,8 @@ export interface ApplyLocalMigrationOptions {
 export interface ApplyLocalMigrationResult {
   /** `'initialized'` if we had to `git init` the target, `'reused'` if it was already a repo. */
   action: 'initialized' | 'reused'
+  /** Sentinel rule values coerced to typed defaults during translate. Null if none. */
+  coercedSentinels: CoercedSentinelSummary | null
   commitSha: string | null
   /** `false` if translate produced no net changes — nothing was committed. */
   committed: boolean
@@ -130,10 +133,12 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
 
   const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
   const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+  const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
   const duplicateResolutions: DuplicateResolutionSummary | null =
     resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
   const reportData: MigrationReportData = {
     ...opts.reportData,
+    ...(coercedSentinels ? {coercedSentinels} : {}),
     ...(droppedOverrides ? {droppedOverrides} : {}),
     ...(duplicateResolutions ? {duplicateResolutions} : {}),
     ...(skippedConfigs ? {skippedConfigs} : {}),
@@ -143,7 +148,15 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   await runGit(['-C', opts.localDir, 'add', '--all'])
 
   if (!(await hasStagedChanges(opts.localDir))) {
-    return {action, committed: false, commitSha: null, droppedOverrides, duplicateResolutions, skippedConfigs}
+    return {
+      action,
+      coercedSentinels,
+      committed: false,
+      commitSha: null,
+      droppedOverrides,
+      duplicateResolutions,
+      skippedConfigs,
+    }
   }
 
   await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
@@ -159,6 +172,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const {stdout: sha} = await runGit(['-C', opts.localDir, 'rev-parse', 'HEAD'])
   return {
     action,
+    coercedSentinels,
     commitSha: sha.trim(),
     committed: true,
     droppedOverrides,
