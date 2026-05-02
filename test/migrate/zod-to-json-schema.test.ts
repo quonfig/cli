@@ -10,6 +10,7 @@ describe('zodToJsonSchema (inline)', () => {
     expect(result.warnings).to.deep.equal([])
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,
+      additionalProperties: false,
       properties: {name: {type: 'string'}},
       required: ['name'],
       type: 'object',
@@ -21,6 +22,7 @@ describe('zodToJsonSchema (inline)', () => {
     expect(result.warnings).to.deep.equal(['Ignored unsupported meta field "custom"'])
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,
+      additionalProperties: false,
       properties: {
         count: {description: 'Count', type: 'number'},
       },
@@ -38,6 +40,7 @@ describe('zodToJsonSchema (inline)', () => {
     expect(result.warnings).to.deep.equal([])
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,
+      additionalProperties: false,
       properties: {timeout: {type: ['number', 'null']}},
       required: ['timeout'],
       type: 'object',
@@ -49,6 +52,7 @@ describe('zodToJsonSchema (inline)', () => {
     expect(result.warnings).to.deep.equal([])
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,
+      additionalProperties: false,
       properties: {name: {type: ['string', 'null']}},
       required: ['name'],
       type: 'object',
@@ -60,6 +64,7 @@ describe('zodToJsonSchema (inline)', () => {
     expect(result.warnings).to.deep.equal([])
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,
+      additionalProperties: false,
       properties: {count: {type: 'number'}},
       required: [],
       type: 'object',
@@ -70,6 +75,7 @@ describe('zodToJsonSchema (inline)', () => {
     const result = zodToJsonSchema('z.object({ addr: z.string().email() })')
     expect(result.schema).to.deep.equal({
       $schema: JSON_SCHEMA_DRAFT_2020_12,
+      additionalProperties: false,
       properties: {addr: {format: 'email', type: 'string'}},
       required: ['addr'],
       type: 'object',
@@ -102,5 +108,28 @@ describe('zodToJsonSchema (inline)', () => {
       $schema: JSON_SCHEMA_DRAFT_2020_12,
       enum: ['a', 'b'],
     })
+  })
+
+  // qfg-mrab: Quonfig's UI-side schema validator requires additionalProperties:false
+  // on every object that declares properties. Default zod is open, so the converter
+  // emits additionalProperties:false unconditionally. .strict() stays accepted but
+  // is now a no-op (idempotent).
+  it('emits additionalProperties:false on default z.object()', () => {
+    const result = zodToJsonSchema('z.object({ name: z.string() })')
+    expect((result.schema as Record<string, unknown>).additionalProperties).to.equal(false)
+  })
+
+  it('keeps .strict() as a no-op (still produces additionalProperties:false)', () => {
+    const result = zodToJsonSchema('z.object({ name: z.string() }).strict()')
+    expect((result.schema as Record<string, unknown>).additionalProperties).to.equal(false)
+  })
+
+  it('emits additionalProperties:false on record value object schemas', () => {
+    const result = zodToJsonSchema('z.record(z.object({ a: z.string() }))')
+    const schema = result.schema as Record<string, unknown>
+    expect(schema.type).to.equal('object')
+    const valueSchema = schema.additionalProperties as Record<string, unknown>
+    expect(valueSchema.type).to.equal('object')
+    expect(valueSchema.additionalProperties).to.equal(false)
   })
 })

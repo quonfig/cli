@@ -406,10 +406,14 @@ function convertObjectShape(objectLiteral: ts.ObjectLiteralExpression, ctx: Conv
     }
   }
 
+  // qfg-mrab: Quonfig's authoring validator requires additionalProperties:false on
+  // every object with properties; default zod is open, so we close it here. Users
+  // who genuinely want an open object can edit the emitted schema post-migrate.
   return {
     type: 'object',
     properties,
     required,
+    additionalProperties: false,
   }
 }
 
