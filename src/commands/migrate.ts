@@ -9,7 +9,7 @@ import {CrossSourceError, type ImportState, assertSourceMatches, readImportState
 import {applyLocalMigration} from '../migrate/local-write.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError} from '../util/clone-and-stack-push.js'
-import {pushMigrationToCloud} from '../migrate/push-to-cloud.js'
+import {MigratorVerifyError, pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
 import {
   type CoercedSentinelSummary,
@@ -210,6 +210,14 @@ export default class Migrate extends BaseCommand {
           if (error instanceof PushConflictError) {
             return this.err(
               `${error.message}\n\nRe-run \`qfg migrate --from ${flags.from} --workspace ${workspaceId} --push\` to pick up remote changes before retrying.`,
+            )
+          }
+
+          if (error instanceof MigratorVerifyError) {
+            return this.err(
+              `${error.message}\n\nThe migrated workspace was written to ${dir} but was NOT pushed. ` +
+                `Fix the issues above (typically in the source system or by editing the local files), then re-run with --push. ` +
+                `You can re-run \`qfg verify ${dir}\` locally to confirm the fixes before pushing.`,
             )
           }
 

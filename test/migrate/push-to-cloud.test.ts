@@ -6,7 +6,7 @@ import * as path from 'node:path'
 
 import type {LegacyChange, MigrationSource, QuonfigFile} from '../../src/migrate/source.js'
 
-import {pushMigrationToCloud} from '../../src/migrate/push-to-cloud.js'
+import {MigratorVerifyError, pushMigrationToCloud} from '../../src/migrate/push-to-cloud.js'
 
 function run(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, {cwd, encoding: 'utf8'}).trim()
@@ -76,6 +76,30 @@ function makeChange(key: string, changedAt: number): LegacyChange {
   return {changedAt, key, raw: {}, source: 'fake'}
 }
 
+/**
+ * Build a valid Quonfig feature_flag JSON. We use `bool` valueType so the
+ * default rule value is just true/false — keeps fixtures terse while still
+ * passing the qfg-verify pre-flight gate (qfg-52qg).
+ */
+function validFeatureFlag(key: string, value = true): string {
+  return (
+    JSON.stringify(
+      {
+        default: {
+          rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value}}],
+        },
+        environments: [],
+        key,
+        type: 'feature_flag',
+        valueType: 'bool',
+        variants: [],
+      },
+      null,
+      2,
+    ) + '\n'
+  )
+}
+
 function emptyReport(source = 'fake'): Parameters<typeof pushMigrationToCloud>[0]['reportData'] {
   return {
     cleanMappings: [],
@@ -107,29 +131,14 @@ describe('pushMigrationToCloud', () => {
     const localDir = path.join(root, 'workspace')
 
     const filesByKey = new Map<string, QuonfigFile[]>([
-      [
-        'flag-a',
-        [
-          {
-            contents: JSON.stringify({key: 'flag-a', rows: [{default: {value: true}}]}, null, 2),
-            path: 'feature-flags/flag-a.json',
-          },
-        ],
-      ],
-      [
-        'flag-b',
-        [
-          {
-            contents: JSON.stringify({key: 'flag-b', rows: [{default: {value: 'hello'}}]}, null, 2),
-            path: 'feature-flags/flag-b.json',
-          },
-        ],
-      ],
+      ['flag-a', [{contents: validFeatureFlag('flag-a'), path: 'feature-flags/flag-a.json'}]],
+      ['flag-b', [{contents: validFeatureFlag('flag-b'), path: 'feature-flags/flag-b.json'}]],
     ])
 
     const result = await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000), makeChange('flag-b', 2000)],
       commitMessage: 'migrator: import 2 flags',
+      environments: ['production'],
       importState: {lastProcessedAt: 2000, source: 'fake'},
       localDir,
       remoteUrl: remote,
@@ -168,10 +177,11 @@ describe('pushMigrationToCloud', () => {
     seedRemote(remote, root)
     const localDir = path.join(root, 'workspace')
 
-    // First run: import flag-a (v1) and flag-b (v1)
+    // First run: import flag-a (v1=true) and flag-b (v1=true)
     await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000), makeChange('flag-b', 2000)],
       commitMessage: 'migrator: run 1',
+      environments: ['production'],
       importState: {lastProcessedAt: 2000, source: 'fake'},
       localDir,
       remoteUrl: remote,
@@ -181,34 +191,19 @@ describe('pushMigrationToCloud', () => {
       },
       source: makeFakeSource(
         new Map([
-          [
-            'flag-a',
-            [
-              {
-                contents: JSON.stringify({key: 'flag-a', value: 'v1'}, null, 2) + '\n',
-                path: 'feature-flags/flag-a.json',
-              },
-            ],
-          ],
-          [
-            'flag-b',
-            [
-              {
-                contents: JSON.stringify({key: 'flag-b', value: 'v1'}, null, 2) + '\n',
-                path: 'feature-flags/flag-b.json',
-              },
-            ],
-          ],
+          ['flag-a', [{contents: validFeatureFlag('flag-a', true), path: 'feature-flags/flag-a.json'}]],
+          ['flag-b', [{contents: validFeatureFlag('flag-b', true), path: 'feature-flags/flag-b.json'}]],
         ]),
       ),
     })
 
-    // Simulate UI edit: a human flips flag-b's value in the cloud UI (different file than what we'll touch on re-run)
+    // Simulate UI edit: a human flips flag-b's value in the cloud UI (different file than what we'll touch on re-run).
+    // The UI-edited file must still verify, otherwise the next migrator push will refuse to commit on top of it (qfg-52qg).
     addUiCommit(
       remote,
       root,
       'feature-flags/flag-b.json',
-      JSON.stringify({editedBy: 'ui', key: 'flag-b', value: 'UI-EDITED'}, null, 2) + '\n',
+      validFeatureFlag('flag-b', false),
       'ui: flip flag-b',
     )
 
@@ -217,6 +212,7 @@ describe('pushMigrationToCloud', () => {
     const result = await pushMigrationToCloud({
       changes: [makeChange('flag-a', 3000), makeChange('flag-c', 4000)],
       commitMessage: 'migrator: run 2 delta',
+      environments: ['production'],
       importState: {lastProcessedAt: 4000, source: 'fake'},
       localDir,
       remoteUrl: remote,
@@ -230,24 +226,8 @@ describe('pushMigrationToCloud', () => {
       },
       source: makeFakeSource(
         new Map([
-          [
-            'flag-a',
-            [
-              {
-                contents: JSON.stringify({key: 'flag-a', value: 'v2-flipped'}, null, 2) + '\n',
-                path: 'feature-flags/flag-a.json',
-              },
-            ],
-          ],
-          [
-            'flag-c',
-            [
-              {
-                contents: JSON.stringify({key: 'flag-c', value: 'brand-new'}, null, 2) + '\n',
-                path: 'feature-flags/flag-c.json',
-              },
-            ],
-          ],
+          ['flag-a', [{contents: validFeatureFlag('flag-a', false), path: 'feature-flags/flag-a.json'}]],
+          ['flag-c', [{contents: validFeatureFlag('flag-c', true), path: 'feature-flags/flag-c.json'}]],
         ]),
       ),
     })
@@ -265,18 +245,17 @@ describe('pushMigrationToCloud', () => {
       'initial',
     ])
 
-    // flipped flag updated
+    // flipped flag updated (true → false)
     const flagA = JSON.parse(fs.readFileSync(path.join(reader, 'feature-flags/flag-a.json'), 'utf8'))
-    expect(flagA.value).to.equal('v2-flipped')
+    expect(flagA.default.rules[0].value.value).to.equal(false)
 
     // new flag added
     const flagC = JSON.parse(fs.readFileSync(path.join(reader, 'feature-flags/flag-c.json'), 'utf8'))
-    expect(flagC.value).to.equal('brand-new')
+    expect(flagC.default.rules[0].value.value).to.equal(true)
 
-    // UI-edited flag untouched
+    // UI-edited flag untouched (still the false the UI committed)
     const flagB = JSON.parse(fs.readFileSync(path.join(reader, 'feature-flags/flag-b.json'), 'utf8'))
-    expect(flagB.value).to.equal('UI-EDITED')
-    expect(flagB.editedBy).to.equal('ui')
+    expect(flagB.default.rules[0].value.value).to.equal(false)
 
     // MIGRATION_REPORT.md reflects ONLY the delta of this run (flag-a + flag-c), not flag-b
     const report = fs.readFileSync(path.join(reader, 'MIGRATION_REPORT.md'), 'utf8')
@@ -301,11 +280,14 @@ describe('pushMigrationToCloud', () => {
     await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000)],
       commitMessage: 'migrator: import',
+      environments: ['production'],
       importState: {lastProcessedAt: 1000, source: 'fake'},
       localDir,
       remoteUrl: remote,
       reportData: emptyReport(),
-      source: makeFakeSource(new Map([['flag-a', [{contents: '{"v":1}\n', path: 'feature-flags/flag-a.json'}]]])),
+      source: makeFakeSource(
+        new Map([['flag-a', [{contents: validFeatureFlag('flag-a'), path: 'feature-flags/flag-a.json'}]]]),
+      ),
     })
 
     const reader = cloneForRead(remote, root)
@@ -314,6 +296,68 @@ describe('pushMigrationToCloud', () => {
     expect(gitignore).to.match(/node_modules/)
     // state file landed
     expect(fs.existsSync(path.join(reader, '.qf/import-state.json'))).to.equal(true)
+  })
+
+  it('runs qfg verify on the staged delta and refuses to push when validation fails (qfg-52qg)', async () => {
+    const remote = createBareRemote(root)
+    seedRemote(remote, root)
+    const localDir = path.join(root, 'workspace')
+
+    // Translate emits a feature_flag whose default rule value type ("string")
+    // does not match the config valueType ("bool") — exactly the kind of
+    // mismatch the qfg-verify pre-receive hook rejects (qfg-gpnd /
+    // qfg-ol8y class of bug). We want to catch it client-side.
+    const invalidFlag = JSON.stringify(
+      {
+        default: {
+          rules: [
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {type: 'string', value: ''},
+            },
+          ],
+        },
+        environments: [],
+        key: 'flag-bad',
+        type: 'feature_flag',
+        valueType: 'bool',
+      },
+      null,
+      2,
+    )
+
+    const filesByKey = new Map<string, QuonfigFile[]>([
+      ['flag-bad', [{contents: invalidFlag, path: 'feature-flags/flag-bad.json'}]],
+    ])
+
+    let thrown: unknown
+    try {
+      await pushMigrationToCloud({
+        changes: [makeChange('flag-bad', 1000)],
+        commitMessage: 'migrator: import broken flag',
+        environments: ['production'],
+        importState: {lastProcessedAt: 1000, source: 'fake'},
+        localDir,
+        remoteUrl: remote,
+        reportData: emptyReport(),
+        source: makeFakeSource(filesByKey),
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown, 'expected pushMigrationToCloud to throw a verify error').to.be.instanceOf(MigratorVerifyError)
+    const verifyErr = thrown as MigratorVerifyError
+    // The error MUST carry the underlying validation result so the migrate
+    // command can render the same detail the user would see from `qfg verify`.
+    expect(verifyErr.result.valid).to.equal(false)
+    expect(verifyErr.result.issues.some((i) => i.file === 'feature-flags/flag-bad.json')).to.equal(true)
+    expect(verifyErr.message).to.match(/verify/i)
+
+    // No commit must have landed on the remote — the seed commit is the only one.
+    const reader = cloneForRead(remote, root)
+    expect(logSubjects(reader)).to.deep.equal(['initial'])
+    expect(fs.existsSync(path.join(reader, 'feature-flags/flag-bad.json'))).to.equal(false)
   })
 
   it('merges source envs into the target quonfig.json without clobbering existing envs (qfg-zfl.22)', async () => {
@@ -338,7 +382,9 @@ describe('pushMigrationToCloud', () => {
       localDir,
       remoteUrl: remote,
       reportData: emptyReport(),
-      source: makeFakeSource(new Map([['flag-a', [{contents: '{"v":1}\n', path: 'feature-flags/flag-a.json'}]]])),
+      source: makeFakeSource(
+        new Map([['flag-a', [{contents: validFeatureFlag('flag-a'), path: 'feature-flags/flag-a.json'}]]]),
+      ),
     })
 
     const reader = cloneForRead(remote, root)

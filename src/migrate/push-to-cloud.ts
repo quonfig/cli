@@ -9,6 +9,7 @@ import {
   type CloneAndStackPushResult,
   cloneAndStackPush,
 } from '../util/clone-and-stack-push.js'
+import {type ValidationResult, formatResult, validateWorkspace} from '../verify/validate.js'
 import type {
   CoercedSentinelSummary,
   DroppedOverrideSummary,
@@ -18,6 +19,28 @@ import type {
   MigrationSource,
   SkippedConfigSummary,
 } from './source.js'
+
+/**
+ * Thrown when the migrator's freshly-written workspace fails the same checks
+ * that the Gitea pre-receive `qfg-verify` hook will run server-side. We raise
+ * this client-side after `applyDelta` writes files but before commit + push,
+ * so the customer sees the failure locally rather than after a full push
+ * round-trip is rejected (qfg-52qg).
+ */
+export class MigratorVerifyError extends Error {
+  public readonly result: ValidationResult
+
+  constructor(result: ValidationResult) {
+    const errorCount = result.issues.filter((i) => i.severity === 'error').length
+    super(
+      `Migrator output failed qfg verify: ${errorCount} error(s) in ${result.filesChecked} file(s). ` +
+        `Refusing to push — the same errors would be rejected by the server pre-receive hook.\n\n` +
+        formatResult(result),
+    )
+    this.name = 'MigratorVerifyError'
+    this.result = result
+  }
+}
 
 export interface PushMigrationToCloudOptions {
   branch?: string
@@ -135,6 +158,13 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
         ...(skippedConfigs ? {skippedConfigs} : {}),
       }
       writeMigrationReport(dir, reportData)
+
+      // Pre-flight: run the same validation the Gitea pre-receive `qfg-verify`
+      // hook will run after the push lands. Failing here saves a full
+      // git-push round-trip and gives the customer a local, fixable error
+      // (qfg-52qg).
+      const verifyResult = validateWorkspace(dir)
+      if (!verifyResult.valid) throw new MigratorVerifyError(verifyResult)
     },
     commitMessage: opts.commitMessage,
     localDir: opts.localDir,
