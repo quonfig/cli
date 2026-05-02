@@ -19,11 +19,11 @@ const tokensPath = () => {
   return path.join(home, 'tokens.json')
 }
 
-const buildJwt = () => {
+const buildJwt = (expSecondsFromNow = 3600) => {
   const payload = Buffer.from(
     JSON.stringify({
       email: 'multi@example.com',
-      exp: Math.floor(Date.now() / 1000) + 3600,
+      exp: Math.floor(Date.now() / 1000) + expSecondsFromNow,
       iat: Math.floor(Date.now() / 1000),
       sub: 'user_test',
     }),
@@ -192,5 +192,56 @@ describe('whoami — kr7.10 multi-org', () => {
     .it('reports not-logged-in when the token store is empty', (ctx) => {
       expect(ctx.stdout).to.contain('Not logged in')
       expect(ctx.stdout).to.contain('qfg login')
+    })
+
+  // qfg-8de9: whoami used to print "Logged in" rows for orgs whose access
+  // tokens were stale, leading users to think the session was healthy when
+  // the next API call was about to fail. Each row now carries an expiry
+  // annotation derived from the JWT exp claim, and a summary line flags
+  // that some sessions are expired so users know to re-run `qfg login`.
+  test
+    .stdout()
+    .do(() => {
+      const store = {
+        defaultOrgId: 'org_acme_uuid',
+        tokensByOrg: {
+          org_acme_uuid: {
+            access_token: buildJwt(3600), // ~1h in the future
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'r_acme',
+            user_email: 'multi@example.com',
+            org_slug: 'acme',
+            org_name: 'Acme',
+          },
+          org_beta_uuid: {
+            access_token: buildJwt(-3600), // expired an hour ago
+            expires_at: Date.now() - 3_600_000,
+            refresh_token: 'r_beta',
+            user_email: 'multi@example.com',
+            org_slug: 'beta',
+            org_name: 'Beta',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+    })
+    .command(['whoami'])
+    .it('annotates each org row with session expiry and warns when expired (qfg-8de9)', (ctx) => {
+      const lines = ctx.stdout.split('\n')
+      const acmeLine = lines.find((l) => l.includes('acme'))
+      const betaLine = lines.find((l) => l.includes('beta'))
+      expect(acmeLine, 'acme line present').to.exist
+      expect(betaLine, 'beta line present').to.exist
+      // The valid session must show a positive "expires in <time>" hint —
+      // proves we read the JWT's future exp, not just a present token.
+      expect(acmeLine!).to.match(/expires in/)
+      expect(acmeLine!).to.not.contain('expired')
+      // The expired session must explicitly say so AND nudge the user
+      // toward the recovery step (`qfg login`).
+      expect(betaLine!).to.contain('expired')
+      expect(betaLine!).to.contain('qfg login')
+      // Summary line surfaces the partial-failure case at the bottom so
+      // it's hard to miss in interactive use.
+      expect(ctx.stdout).to.match(/1 of 2 session\(s\) expired/)
     })
 })

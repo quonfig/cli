@@ -5,9 +5,17 @@ import {getApiUrl} from '../util/domain-urls.js'
 import {getValidAccessToken} from '../util/get-valid-token.js'
 import {decodeJWT} from '../util/oauth-client.js'
 import {tryParseWorkspacePin} from '../util/quonfig-json.js'
-import {findOrgIdBySlug, loadTokens, type TokenStore} from '../util/token-storage.js'
+import {findOrgIdBySlug, loadTokens, type TokenSet, type TokenStore} from '../util/token-storage.js'
 
-type OrgMembership = {workosOrgId: string; slug: string; name: string; role: string}
+type SessionStatus = {expired: boolean; description: string}
+
+type OrgMembership = {
+  workosOrgId: string
+  slug: string
+  name: string
+  role: string
+  sessionStatus?: SessionStatus
+}
 
 export default class Whoami extends BaseCommand {
   static description = 'Display information about the currently logged in user and all org memberships'
@@ -40,6 +48,7 @@ export default class Whoami extends BaseCommand {
       slug: t.org_slug ?? orgId,
       name: t.org_name ?? t.org_slug ?? orgId,
       role: '—',
+      sessionStatus: sessionStatusFor(t),
     }))
     const merged = mergeMemberships(localOrgs, memberships)
 
@@ -53,7 +62,14 @@ export default class Whoami extends BaseCommand {
         const marker = org.workosOrgId === activeOrgId ? '*' : ' '
         const label = `${org.slug}${org.workosOrgId === activeOrgId ? ' (active)' : ''}`
         const padded = label.padEnd(labelWidth, ' ')
-        this.log(`  ${marker} ${padded}— ${org.role}`)
+        const statusSuffix = org.sessionStatus ? ` (${org.sessionStatus.description})` : ''
+        this.log(`  ${marker} ${padded}— ${org.role}${statusSuffix}`)
+      }
+
+      const expiredCount = merged.filter((o) => o.sessionStatus?.expired).length
+      if (expiredCount > 0) {
+        this.log('')
+        this.log(`${expiredCount} of ${merged.length} session(s) expired. Run \`qfg login\` to refresh.`)
       }
     }
 
@@ -68,6 +84,7 @@ export default class Whoami extends BaseCommand {
         name: o.name,
         role: o.role,
         active: o.workosOrgId === activeOrgId,
+        sessionExpired: o.sessionStatus?.expired ?? null,
       })),
     }
   }
@@ -148,8 +165,46 @@ export default class Whoami extends BaseCommand {
 function mergeMemberships(local: OrgMembership[], server: OrgMembership[]): OrgMembership[] {
   const merged = new Map<string, OrgMembership>()
   for (const o of local) merged.set(o.workosOrgId, o)
-  for (const o of server) merged.set(o.workosOrgId, o)
+  for (const o of server) {
+    // Server data wins for slug/name/role but lacks sessionStatus — that's
+    // a property of the locally-cached token, so preserve it.
+    const existing = merged.get(o.workosOrgId)
+    merged.set(o.workosOrgId, {...o, sessionStatus: existing?.sessionStatus})
+  }
+
   return [...merged.values()].sort((a, b) => a.slug.localeCompare(b.slug))
+}
+
+/**
+ * Read-only check of a TokenSet's expiry. Prefers the JWT's `exp` claim
+ * (matches getValidAccessToken's logic), falls back to the stored
+ * `expires_at` timestamp if the JWT can't be decoded. No network calls —
+ * whoami stays fast even with many cached orgs.
+ */
+function sessionStatusFor(tokens: TokenSet): SessionStatus {
+  let expMs = tokens.expires_at
+  try {
+    const payload = decodeJWT(tokens.access_token)
+    if (typeof payload.exp === 'number') expMs = payload.exp * 1000
+  } catch {
+    /* keep stored expires_at */
+  }
+
+  const delta = expMs - Date.now()
+  if (delta <= 0) return {expired: true, description: 'expired — run `qfg login`'}
+  return {expired: false, description: `expires in ${formatRelative(delta)}`}
+}
+
+function formatRelative(deltaMs: number): string {
+  const minutes = Math.round(deltaMs / 60_000)
+  if (minutes < 1) return '<1m'
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remMin = minutes % 60
+  if (hours < 24) return remMin > 0 ? `${hours}h ${remMin}m` : `${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours % 24
+  return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`
 }
 
 function pickAnyOrgId(store: TokenStore): string | undefined {
