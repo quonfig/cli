@@ -194,11 +194,11 @@ describe('whoami — kr7.10 multi-org', () => {
       expect(ctx.stdout).to.contain('qfg login')
     })
 
-  // qfg-8de9: whoami used to print "Logged in" rows for orgs whose access
-  // tokens were stale, leading users to think the session was healthy when
-  // the next API call was about to fail. Each row now carries an expiry
-  // annotation derived from the JWT exp claim, and a summary line flags
-  // that some sessions are expired so users know to re-run `qfg login`.
+  // Regression: whoami used to annotate each org row with access-token
+  // expiry and print a "X of N session(s) expired" footer. That was actively
+  // misleading because every API command auto-refreshes via the refresh
+  // token — the access-token clock is an implementation detail. The expiry
+  // info is now --verbose only.
   test
     .stdout()
     .do(() => {
@@ -226,22 +226,15 @@ describe('whoami — kr7.10 multi-org', () => {
       fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
     })
     .command(['whoami'])
-    .it('annotates each org row with session expiry and warns when expired (qfg-8de9)', (ctx) => {
-      const lines = ctx.stdout.split('\n')
-      const acmeLine = lines.find((l) => l.includes('acme'))
-      const betaLine = lines.find((l) => l.includes('beta'))
-      expect(acmeLine, 'acme line present').to.exist
-      expect(betaLine, 'beta line present').to.exist
-      // The valid session must show a positive "expires in <time>" hint —
-      // proves we read the JWT's future exp, not just a present token.
-      expect(acmeLine!).to.match(/expires in/)
-      expect(acmeLine!).to.not.contain('expired')
-      // The expired session must explicitly say so AND nudge the user
-      // toward the recovery step (`qfg login`).
-      expect(betaLine!).to.contain('expired')
-      expect(betaLine!).to.contain('qfg login')
-      // Summary line surfaces the partial-failure case at the bottom so
-      // it's hard to miss in interactive use.
-      expect(ctx.stdout).to.match(/1 of 2 session\(s\) expired/)
+    .it('does not advertise access-token expiry in normal output', (ctx) => {
+      // Both orgs must still appear so users see what they're logged into.
+      expect(ctx.stdout).to.contain('acme')
+      expect(ctx.stdout).to.contain('beta')
+      // Expiry annotations and the "run qfg login" footer must be gone:
+      // they suggested action that wasn't actually needed.
+      expect(ctx.stdout).to.not.match(/expires in/)
+      expect(ctx.stdout).to.not.match(/expired/)
+      expect(ctx.stdout).to.not.match(/session\(s\) expired/)
+      expect(ctx.stdout).to.not.match(/Run `qfg login` to refresh/)
     })
 })
