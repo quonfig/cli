@@ -78,9 +78,15 @@ export default class WorkspaceCreate extends BaseCommand {
 
     let accessToken: string
     try {
-      accessToken = await getValidAccessToken(workosOrgId)
-    } catch {
-      return this.err('Not logged in. Run `qfg login` first.')
+      accessToken = await getValidAccessToken(workosOrgId, this.verboseLog)
+    } catch (error) {
+      // Surface the underlying token error (e.g. "Token refresh failed for
+      // org X: invalid_grant — Refresh token already exchanged") so users
+      // and agents can distinguish "never logged in" from "session went
+      // stale and refresh was rejected" — both used to read "Not logged in".
+      const detail = error instanceof Error ? error.message : String(error)
+      const hint = detail.includes('qfg login') ? '' : ' Run `qfg login` to re-authenticate.'
+      return this.err(`${detail}${hint}`)
     }
 
     const apiUrl = getApiUrl()

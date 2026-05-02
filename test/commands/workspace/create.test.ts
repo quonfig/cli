@@ -1,4 +1,5 @@
 import {expect, test} from '@oclif/test'
+import {http, HttpResponse} from 'msw'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
@@ -248,4 +249,44 @@ describe('workspace create — kr7.7 multi-org token resolution', () => {
       expect(error.message).to.contain('qfg login')
     })
     .it('0 orgs in token store: errors with login hint')
+
+  // qfg-5ee9: an expired access_token + stale refresh_token used to surface
+  // the same "Not logged in" message as a fresh user with no tokens at all,
+  // burying the real diagnostic ("invalid_grant — Refresh token already
+  // exchanged"). This test pins the underlying detail to the user-facing
+  // error so future regressions show up red.
+  test
+    .stdout()
+    .stderr()
+    .do(() => {
+      const pastSeconds = Math.floor(Date.now() / 1000) - 3600
+      const expiredJwtPayload = Buffer.from(
+        JSON.stringify({exp: pastSeconds, iat: pastSeconds - 3600, sub: 'user_test'}),
+      ).toString('base64url')
+      const expiredJwt = `eyJhbGciOiJSUzI1NiJ9.${expiredJwtPayload}.sig`
+      const store = {
+        defaultOrgId: 'org_workspace-123',
+        tokensByOrg: {
+          'org_workspace-123': {
+            access_token: expiredJwt,
+            expires_at: pastSeconds * 1000,
+            refresh_token: 'mock-stale-refresh-token',
+            org_slug: 'test-organization',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+      server.use(
+        http.post('https://api.workos.com/user_management/authenticate', () =>
+          HttpResponse.text('invalid_grant: Refresh token already exchanged', {status: 400}),
+        ),
+      )
+    })
+    .command(['workspace create', 'lt-21-smoke'])
+    .catch((error: Error) => {
+      expect(error.message).to.contain('Token refresh failed')
+      expect(error.message).to.contain('invalid_grant')
+      expect(error.message).to.contain('qfg login')
+    })
+    .it('surfaces token refresh failure detail instead of swallowing to "Not logged in" (qfg-5ee9)')
 })
