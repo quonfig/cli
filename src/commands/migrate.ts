@@ -8,7 +8,7 @@ import {BaseCommand} from '../index.js'
 import {CrossSourceError, type ImportState, assertSourceMatches, readImportState} from '../migrate/import-state.js'
 import {applyLocalMigration} from '../migrate/local-write.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
-import {PushConflictError} from '../util/clone-and-stack-push.js'
+import {PushConflictError, PushHookRejectedError} from '../util/clone-and-stack-push.js'
 import {MigratorVerifyError, pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
 import {
@@ -207,6 +207,12 @@ export default class Migrate extends BaseCommand {
             workspaceId,
           }
         } catch (error) {
+          if (error instanceof PushHookRejectedError) {
+            return this.err(
+              `${error.message}\n\nThe remote validation hook rejected the push. Fix the errors reported above (typically in the source system or by editing the local files in ${dir}), then re-run with --push. You can re-run \`qfg verify ${dir}\` locally to confirm the fixes before pushing.`,
+            )
+          }
+
           if (error instanceof PushConflictError) {
             return this.err(
               `${error.message}\n\nRe-run \`qfg migrate --from ${flags.from} --workspace ${workspaceId} --push\` to pick up remote changes before retrying.`,

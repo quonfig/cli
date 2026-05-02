@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import {PushConflictError, cloneAndStackPush} from '../../src/util/clone-and-stack-push.js'
+import {PushConflictError, PushHookRejectedError, cloneAndStackPush} from '../../src/util/clone-and-stack-push.js'
 
 function run(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, {cwd, encoding: 'utf8'}).trim()
@@ -162,6 +162,45 @@ describe('cloneAndStackPush', () => {
 
     const reader = cloneForRead(remote, root)
     expect(logSubjects(reader)).to.deep.equal(['initial'])
+  })
+
+  it('surfaces a PushHookRejectedError (not a fast-forward conflict) when the remote pre-receive hook declines the push', async () => {
+    const remote = createBareRemote(root)
+    seedRemoteWithInitialCommit(remote, root)
+
+    // Install a pre-receive hook on the bare remote that always rejects, with output that
+    // mimics qfg-verify's failure shape so we can assert the validation framing flows through.
+    const hookPath = path.join(remote, 'hooks', 'pre-receive')
+    fs.writeFileSync(
+      hookPath,
+      '#!/bin/sh\necho "qfg-verify: validating refs/heads/main" 1>&2\necho "FAILED: 2 error(s), 0 warning(s)" 1>&2\nexit 1\n',
+    )
+    fs.chmodSync(hookPath, 0o755)
+
+    const localDir = path.join(root, 'workspace')
+
+    let caught: Error | null = null
+    try {
+      await cloneAndStackPush({
+        remoteUrl: remote,
+        localDir,
+        commitMessage: 'migrator: bad data',
+        async applyDelta(dir) {
+          fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":1}\n')
+        },
+      })
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught, 'expected push to fail when hook rejects').to.be.instanceOf(PushHookRejectedError)
+    // Misleading framing must NOT appear — that sends the user down the fast-forward debug path.
+    expect(caught!.message).to.not.match(/remote has changes we do not have locally/i)
+    expect(caught!.message).to.not.match(/Re-run the migrator to pick up those changes/i)
+    // The hook output must still surface so the user sees the real failure.
+    expect(caught!.message).to.match(/FAILED: 2 error\(s\)/)
+    // And the new framing should mention the hook/validation rejection.
+    expect(caught!.message).to.match(/hook|validation/i)
   })
 
   it('surfaces a PushConflictError and does NOT force-push when the remote has moved between fetch and push', async () => {

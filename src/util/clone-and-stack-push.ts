@@ -46,6 +46,13 @@ export class PushConflictError extends Error {
   }
 }
 
+export class PushHookRejectedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PushHookRejectedError'
+  }
+}
+
 const runGit = async (cwd: string, args: string[]): Promise<{stdout: string; stderr: string}> => {
   try {
     return await runGitSafe(args, {cwd})
@@ -161,9 +168,19 @@ export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise
     const e = error as {stderr?: string} & Error
     const stderr = e.stderr ?? ''
     const combined = `${e.message}\n${stderr}`
+    const detail = redactToken(stderr || e.message)
+    // Pre-receive / update hook rejections are functionally distinct from fast-forward
+    // conflicts: nothing the user can do by re-fetching will help. Route them to a
+    // different lead-in so the hook output (e.g. qfg-verify FAILED ...) is the call to action.
+    if (/hook declined|\[remote rejected]/i.test(combined)) {
+      throw new PushHookRejectedError(
+        `Push to origin/${branch} was rejected by the remote validation hook. Fix the errors below and push again. Original git error:\n${detail}`,
+      )
+    }
+
     if (/non-fast-forward|fetch first|rejected/i.test(combined)) {
       throw new PushConflictError(
-        `Push to origin/${branch} was rejected: the remote has changes we do not have locally. Re-run the migrator to pick up those changes, then push again. Original git error:\n${redactToken(stderr || e.message)}`,
+        `Push to origin/${branch} was rejected: the remote has changes we do not have locally. Re-run the migrator to pick up those changes, then push again. Original git error:\n${detail}`,
       )
     }
 
