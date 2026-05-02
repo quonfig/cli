@@ -7,6 +7,7 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {CrossSourceError, type ImportState, assertSourceMatches, readImportState} from '../migrate/import-state.js'
 import {applyLocalMigration} from '../migrate/local-write.js'
+import {buildPushConflictSuggestion} from '../migrate/migrate-suggestion.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError, PushHookRejectedError} from '../util/clone-and-stack-push.js'
 import {MigratorVerifyError, pushMigrationToCloud} from '../migrate/push-to-cloud.js'
@@ -215,7 +216,7 @@ export default class Migrate extends BaseCommand {
 
           if (error instanceof PushConflictError) {
             return this.err(
-              `${error.message}\n\nRe-run \`qfg migrate --from ${flags.from} --workspace ${workspaceId} --push\` to pick up remote changes before retrying.`,
+              `${error.message}\n\n${buildPushConflictSuggestion({from: flags.from, userWorkspaceFlag: flags.workspace})}`,
             )
           }
 
