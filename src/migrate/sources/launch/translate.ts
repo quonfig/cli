@@ -188,17 +188,20 @@ export function transformConfig(
       | undefined
     const firstRule = defaultSection?.rules?.[0]
     const innerValue = firstRule?.value?.value
+    const key = String((out as Record<string, unknown>).key ?? 'unknown')
     if (!innerValue || innerValue.schemaType !== 'ZOD' || typeof innerValue.schema !== 'string') {
-      throw new Error(`Unsupported schema payload for ${String((out as Record<string, unknown>).key ?? 'unknown')}`)
+      // qfg-p74d: surface as a per-config skip so one bad source config doesn't
+      // abort the whole push. Surfaces in MIGRATION_REPORT.md "Skipped invalid
+      // configs" alongside variant mismatches.
+      throw new InvalidSourceConfigError(`Unsupported schema payload for "${key}"`)
     }
 
-    const key = String((out as Record<string, unknown>).key ?? 'unknown')
     let converted
     try {
       converted = zodToJsonSchema(innerValue.schema)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      throw new Error(
+      throw new InvalidSourceConfigError(
         `Schema conversion failed for "${key}": ${msg}\n--- Zod source ---\n${innerValue.schema}\n--- end ---`,
       )
     }

@@ -260,5 +260,102 @@ describe('migrate/sources/launch — MigrationSource wiring', () => {
       expect(skipped!.entries[0].key).to.equal('bad-variants')
       expect(skipped!.entries[0].reason).to.match(/variant.*mismatch|double|string/i)
     })
+
+    // qfg-p74d: schema conversion failures (unconvertable Zod source) used to
+    // throw a plain Error and abort the entire push. They now soft-skip and
+    // surface in MIGRATION_REPORT.md alongside variant mismatches.
+    it('soft-skips a SCHEMA config whose Zod source cannot be converted', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () =>
+          HttpResponse.json({envs: [{id: 1, name: 'prod'}], projectId: 1}),
+        ),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchSource.validateAuth('key')
+      await launchSource.listEnvironments()
+
+      const files = launchSource.translate({
+        key: 'bad-zod',
+        raw: {
+          changedAt: 1,
+          changedBy: USER,
+          deleted: false,
+          key: 'bad-zod',
+          newConfig: {
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {value: {schema: 'f', schemaType: 'ZOD'}},
+                },
+              ],
+            },
+            environments: [],
+            id: '1',
+            key: 'bad-zod',
+            projectId: 'p',
+            type: 'schema',
+          },
+          newConfigId: 1,
+          type: 'SCHEMA',
+        },
+        source: 'launch',
+      })
+      expect(files).to.deep.equal([])
+
+      const skipped = launchSource.getSkippedConfigs?.()
+      expect(skipped).to.not.equal(null)
+      expect(skipped!.total).to.equal(1)
+      expect(skipped!.entries[0].key).to.equal('bad-zod')
+      expect(skipped!.entries[0].reason).to.match(/Schema conversion failed.*Unsupported Zod expression/)
+    })
+
+    it('soft-skips a SCHEMA config with a non-ZOD payload (Unsupported schema payload)', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/project-environments`, () =>
+          HttpResponse.json({envs: [{id: 1, name: 'prod'}], projectId: 1}),
+        ),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchSource.validateAuth('key')
+      await launchSource.listEnvironments()
+
+      const files = launchSource.translate({
+        key: 'openapi-schema',
+        raw: {
+          changedAt: 1,
+          changedBy: USER,
+          deleted: false,
+          key: 'openapi-schema',
+          newConfig: {
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {value: {schema: '{}', schemaType: 'OPENAPI'}},
+                },
+              ],
+            },
+            environments: [],
+            id: '1',
+            key: 'openapi-schema',
+            projectId: 'p',
+            type: 'schema',
+          },
+          newConfigId: 1,
+          type: 'SCHEMA',
+        },
+        source: 'launch',
+      })
+      expect(files).to.deep.equal([])
+
+      const skipped = launchSource.getSkippedConfigs?.()
+      expect(skipped).to.not.equal(null)
+      expect(skipped!.total).to.equal(1)
+      expect(skipped!.entries[0].key).to.equal('openapi-schema')
+      expect(skipped!.entries[0].reason).to.match(/Unsupported schema payload/)
+    })
   })
 })
