@@ -2123,7 +2123,7 @@ __metadata:
     "@oclif/plugin-plugins": "npm:^4"
     "@oclif/prettier-config": "npm:^0.2.1"
     "@oclif/test": "npm:^3"
-    "@quonfig/node": "npm:^0.0.11"
+    "@quonfig/node": "npm:^0.0.20"
     "@types/chai": "npm:^4"
     "@types/common-tags": "npm:^1.8.4"
     "@types/lodash.camelcase": "npm:^4.3.9"
@@ -2161,13 +2161,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@quonfig/node@npm:^0.0.11":
-  version: 0.0.11
-  resolution: "@quonfig/node@npm:0.0.11"
+"@quonfig/node@npm:^0.0.20":
+  version: 0.0.20
+  resolution: "@quonfig/node@npm:0.0.20"
   dependencies:
     eventsource: "npm:^2.0.2"
     murmurhash: "npm:^2.0.1"
-  checksum: 10c0/cf02835c716876c18c08641d2fd1ef7b81d14cf2e1b23dbc330ef353b2709486940ee2b7fcaa94eb1458991b911bb2a8bedabb550a94c081c7969087c8cbb45c
+  peerDependencies:
+    pino: ">=7.0.0"
+    winston: ">=3.0.0"
+  peerDependenciesMeta:
+    pino:
+      optional: true
+    winston:
+      optional: true
+  checksum: 10c0/c5efc378e575363d9f86fd460e7c93a15c094854f0e62e5449391ee2f178b1e707c7429b822b93c793517b7c7b5b775f76cf1cfd86e114a5c2400c9b91156d2c
   languageName: node
   linkType: hard
 
