@@ -750,7 +750,7 @@ USAGE
 FLAGS
   --api-key=<value>    API key for the legacy source (or set LAUNCH_API_KEY)
   --dir=<value>        Target local workspace directory. Defaults to cwd if it looks like a Quonfig workspace, otherwise
-                       ./quonfig-config.
+                       ./quonfig-repo.
   --dry-run            Fetch and summarize changes without writing anything
   --from=<option>      (required) Legacy source to migrate from
                        <options: launch|launchdarkly|flagsmith>
@@ -778,15 +778,15 @@ DESCRIPTION
   and https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.
 
 EXAMPLES
-  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo
 
   $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --workspace acme-prod --push
 
-  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --reset
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset
 
-  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --dry-run
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --dry-run
 
-  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --staging
+  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --staging
 ```
 
 _See code: [src/commands/migrate.ts](https://github.com/quonfig/cli/blob/v0.0.20/src/commands/migrate.ts)_

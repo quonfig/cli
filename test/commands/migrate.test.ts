@@ -141,12 +141,12 @@ describe('migrate', () => {
       .do(() => mockLaunchApi(LAUNCH_PROD_URL))
       .stdout()
       .command(['migrate', '--from', 'launch', '--api-key', 'k', '--dry-run', '--json'])
-      .it('dry run with no --dir uses ./quonfig-config when cwd is not a workspace', (ctx) => {
+      .it('dry run with no --dir uses ./quonfig-repo when cwd is not a workspace', (ctx) => {
         const payload = JSON.parse(ctx.stdout)
         expect(payload.from).to.equal('launch')
         expect(payload.dryRun).to.equal(true)
         expect(payload.fetched).to.equal(1)
-        expect(payload.dir).to.equal(path.resolve(tmpdir, 'quonfig-config'))
+        expect(payload.dir).to.equal(path.resolve(tmpdir, 'quonfig-repo'))
       })
 
     test

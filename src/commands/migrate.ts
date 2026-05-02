@@ -24,7 +24,7 @@ import {displayUrl} from '../util/git-ops.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {type AuthConfig, loadAuthConfig} from '../util/token-storage.js'
 
-const DEFAULT_DIR = 'quonfig-config'
+const DEFAULT_DIR = 'quonfig-repo'
 
 export default class Migrate extends BaseCommand {
   static description =
@@ -35,11 +35,11 @@ export default class Migrate extends BaseCommand {
     'and https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.'
 
   static examples = [
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config',
+    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo',
     '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --workspace acme-prod --push',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --reset',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --dry-run',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-config --staging',
+    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset',
+    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --dry-run',
+    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --staging',
   ]
 
   static flags = {
@@ -49,7 +49,7 @@ export default class Migrate extends BaseCommand {
     }),
     dir: Flags.string({
       description:
-        'Target local workspace directory. Defaults to cwd if it looks like a Quonfig workspace, otherwise ./quonfig-config.',
+        'Target local workspace directory. Defaults to cwd if it looks like a Quonfig workspace, otherwise ./quonfig-repo.',
     }),
     'dry-run': Flags.boolean({
       default: false,
