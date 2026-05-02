@@ -67,12 +67,12 @@ CLI shortcuts (no JSON editing needed for simple cases):
     // Resolve workspace ID — supports both OAuth and QUONFIG_API_KEY paths,
     // mirroring what APICommand does via get-client.ts so `qfg pull` behaves
     // the same in CI as `qfg create` or `qfg push`.
-    const workspaceId = await resolveWorkspaceUuid(this, flags.workspace)
+    const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this, flags.workspace)
 
-    this.verboseLog('Pull', {workspaceId, dir: resolvedDir})
+    this.verboseLog('Pull', {workspaceId, orgSlug, dir: resolvedDir})
 
     // Get or mint Gitea read token
-    const tokenEntry = await this.resolveTokenEntry(workspaceId)
+    const tokenEntry = await this.resolveTokenEntry(workspaceId, orgSlug)
     const repoUrl = tokenEntry.repoUrl
 
     // Perform git operation
@@ -106,7 +106,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
       } catch (error: unknown) {
         if (this.looksLike401(error)) {
           this.verboseLog('Pull', 'Got 401 on fetch, refreshing Gitea token...')
-          const freshUrl = await this.refreshAndGetUrl(workspaceId)
+          const freshUrl = await this.refreshAndGetUrl(workspaceId, orgSlug)
           await gitSetRemote(resolvedDir, freshUrl)
           await gitFetch(resolvedDir)
         } else {
@@ -145,7 +145,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
         // On 401, refresh token and retry once
         if (this.looksLike401(error)) {
           this.verboseLog('Pull', 'Got 401, refreshing Gitea token...')
-          const freshUrl = await this.refreshAndGetUrl(workspaceId)
+          const freshUrl = await this.refreshAndGetUrl(workspaceId, orgSlug)
           await gitClone(freshUrl, resolvedDir)
         } else {
           throw error
@@ -163,7 +163,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
     // is a git repo, we also commit the new pin so it's included in the
     // user's next `qfg push` delta — push diffs HEAD vs origin, so a
     // working-tree-only write would never reach the server (qfg-0fn).
-    await this.backfillWorkspacePin(resolvedDir, tokenEntry, workspaceId)
+    await this.backfillWorkspacePin(resolvedDir, tokenEntry, workspaceId, orgSlug)
 
     return {dir: resolvedDir, workspaceId}
   }
@@ -184,13 +184,14 @@ CLI shortcuts (no JSON editing needed for simple cases):
     dir: string,
     tokenEntry: {workspaceSlug?: string},
     workspaceId: string,
+    orgSlug: string,
   ): Promise<void> {
     let backendSlug = tokenEntry.workspaceSlug
     if (!backendSlug) {
       // Older cached entries lack the slug. Mint a fresh one solely to learn the
       // slug. Cheap (one API call), and the refresh updates the cache for next time.
       try {
-        const fresh = await mintAndStoreGiteaReadToken(workspaceId)
+        const fresh = await mintAndStoreGiteaReadToken(workspaceId, orgSlug)
         backendSlug = fresh.workspaceSlug
       } catch (error: unknown) {
         this.verboseLog('Pull', `Could not mint token to learn workspace slug: ${String(error)}`)
@@ -297,8 +298,8 @@ CLI shortcuts (no JSON editing needed for simple cases):
     }
   }
 
-  private async refreshAndGetUrl(workspaceId: string): Promise<string> {
-    const data = await mintGiteaToken(workspaceId, 'read', 'pull')
+  private async refreshAndGetUrl(workspaceId: string, orgSlug: string): Promise<string> {
+    const data = await mintGiteaToken(workspaceId, orgSlug, 'read', 'pull')
     const entry = {
       token: data.token,
       repoUrl: data.repoUrl,
@@ -309,12 +310,15 @@ CLI shortcuts (no JSON editing needed for simple cases):
     return entry.repoUrl
   }
 
-  private async resolveTokenEntry(workspaceId: string): Promise<{repoUrl: string; workspaceSlug?: string}> {
+  private async resolveTokenEntry(
+    workspaceId: string,
+    orgSlug: string,
+  ): Promise<{repoUrl: string; workspaceSlug?: string}> {
     let entry = await loadGiteaToken(workspaceId)
 
     if (!entry || isGiteaTokenExpired(entry)) {
       this.verboseLog('Pull', 'Minting new Gitea read token...')
-      entry = await mintAndStoreGiteaReadToken(workspaceId)
+      entry = await mintAndStoreGiteaReadToken(workspaceId, orgSlug)
     }
 
     return entry

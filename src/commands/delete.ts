@@ -69,7 +69,8 @@ Examples
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Delete)
 
-    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+    // Auth happens through APICommand's apiClient (used below). This is just
+    // a "logged in?" gate — any cached token answers that.
     const store = await loadTokens()
     const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
     if (!tokens?.access_token) {

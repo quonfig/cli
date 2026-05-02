@@ -10,25 +10,35 @@
  */
 
 import {authenticateWithOrg, decodeJWT} from './oauth-client.js'
-import {getTokenForOrg, loadTokens, saveTokens} from './token-storage.js'
+import {findOrgIdBySlug, getTokenForOrg, loadTokens, saveTokens} from './token-storage.js'
 
 type Logger = (msg: string, data?: unknown) => void
 const noopLog: Logger = () => {}
 
 /**
- * Transitional helper: pick a default workosOrgId from the token store.
- * Returns '' if no store exists (fine for the QUONFIG_API_KEY short-circuit
- * path, which ignores the orgId argument).
+ * Slug-based wrapper around getValidAccessToken. Commands talk in
+ * `<org-slug>` (the user-vocabulary form); the slug → workosOrgId
+ * mapping is contained here so the rest of the CLI doesn't see WorkOS
+ * identifiers.
  *
- * TODO(qfg-kr7.5/7/8/9): callers should pass through the workosOrgId resolved
- * from the workspace address (org-slug/workspace-slug parsing). This helper
- * is the stopgap until each caller's resolution lands in its own bead.
+ * The `QUONFIG_API_KEY` short-circuit fires before any disk lookup, so
+ * an empty/unknown slug is fine in CI mode.
  */
-export async function resolveDefaultOrgId(): Promise<string> {
+export async function getValidAccessTokenForOrgSlug(orgSlug: string, log: Logger = noopLog): Promise<string> {
+  const envKey = process.env.QUONFIG_API_KEY
+  if (envKey && envKey.length > 0) return getValidAccessToken('', log)
+
   const store = await loadTokens()
-  if (!store) return ''
-  if (store.defaultOrgId && store.tokensByOrg[store.defaultOrgId]) return store.defaultOrgId
-  return Object.keys(store.tokensByOrg)[0] ?? ''
+  if (!store) {
+    throw new Error('Not logged in. Run `qfg login` first.')
+  }
+
+  const workosOrgId = findOrgIdBySlug(store, orgSlug)
+  if (!workosOrgId) {
+    throw new Error(`No token for org \`${orgSlug}\`. Run \`qfg login\` to add this org.`)
+  }
+
+  return getValidAccessToken(workosOrgId, log)
 }
 
 export async function getValidAccessToken(workosOrgId: string, log: Logger = noopLog): Promise<string> {

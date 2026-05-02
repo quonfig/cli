@@ -9,6 +9,7 @@ import {BaseCommand} from '../../index.js'
 import {getActiveProfile, loadAuthConfig} from '../../util/token-storage.js'
 import {mintGiteaToken} from '../../util/gitea-api.js'
 import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../../util/quonfig-json.js'
+import {resolveWorkspaceUuid} from '../../util/resolve-workspace.js'
 import {
   isGitRepo,
   hasAtLeastOneCommit,
@@ -51,22 +52,16 @@ export default class WorkspaceBootstrap extends BaseCommand {
     const dir = flags.dir || process.env.QUONFIG_DIR || process.cwd()
     const resolvedDir = path.resolve(dir)
 
-    // Load auth
+    const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this)
+
+    // The display name is best-effort; we still want it for the confirmation
+    // prompt. Fall back through saved profile → workspaceId UUID.
     const authConfig = await loadAuthConfig()
-    if (!authConfig) {
-      return this.err('Not logged in. Run `qfg login` first.')
-    }
-
     const activeProfile = getActiveProfile()
-    const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
-    if (!profile) {
-      return this.err('No active profile found. Run `qfg login` first.')
-    }
+    const profile = authConfig?.profiles[activeProfile] || authConfig?.profiles[authConfig?.defaultProfile || 'default']
+    const workspaceName = profile?.workspaceSlug || profile?.workspaceName || workspaceId
 
-    const workspaceId = profile.workspace
-    const workspaceName = profile.workspaceSlug || profile.workspaceName || workspaceId
-
-    this.verboseLog('WorkspaceBootstrap', {workspaceId, dir: resolvedDir})
+    this.verboseLog('WorkspaceBootstrap', {workspaceId, orgSlug, dir: resolvedDir})
 
     // Validate: must be a git repo with at least one commit
     const isRepo = await isGitRepo(resolvedDir)
@@ -129,7 +124,7 @@ export default class WorkspaceBootstrap extends BaseCommand {
     this.log('Connecting to Gitea...')
     let tokenData: {token: string; repoUrl: string; expiresAt: string | null; workspaceSlug: string}
     try {
-      tokenData = await mintGiteaToken(workspaceId, 'write', 'bootstrap')
+      tokenData = await mintGiteaToken(workspaceId, orgSlug, 'write', 'bootstrap')
     } catch (error: unknown) {
       return this.err(
         `Could not get Gitea credentials: ${String(error)}\n\nMake sure the workspace is fully provisioned in the Quonfig app before bootstrapping.`,

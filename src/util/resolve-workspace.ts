@@ -1,7 +1,7 @@
 import type {BaseCommand} from '../index.js'
 
 import {getApiUrl} from './domain-urls.js'
-import {getValidAccessToken, resolveDefaultOrgId} from './get-valid-token.js'
+import {getValidAccessToken} from './get-valid-token.js'
 import {tryParseWorkspacePin} from './quonfig-json.js'
 import {
   type AuthConfig,
@@ -18,10 +18,21 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
   'QUONFIG_WORKSPACE must be in org/workspace form (e.g. acme/foo). ' +
   'Bare workspace slugs are no longer accepted. Update your .env and run `qfg login` if you have not yet migrated.'
 
+export interface ResolvedWorkspace {
+  workspaceId: string
+  /**
+   * Org slug that owns workspaceId. Empty string in the QUONFIG_API_KEY
+   * path because API keys are workspace-scoped and the slug is never
+   * needed downstream — `getValidAccessTokenForOrgSlug` short-circuits
+   * on the env key before consulting it.
+   */
+  orgSlug: string
+}
+
 /**
- * Resolve the target workspace UUID for commands that don't extend APICommand
- * (e.g. pull, push — which talk to Gitea, not the oRPC API, but still need to
- * know which workspace to mint a Gitea token for).
+ * Resolve the target workspace UUID + owning org slug for commands that
+ * don't extend APICommand (e.g. pull, push — which talk to Gitea, not the
+ * oRPC API, but still need to mint a Gitea token for the right org).
  *
  * Handles all three auth paths in the same order as util/get-client.ts:
  *   1. QUONFIG_API_KEY + QUONFIG_WORKSPACE (or --workspace flag) — CI/headless.
@@ -30,7 +41,10 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
  * Mirrors the error messages from get-client.ts so behavior feels identical
  * whether you're hitting the API directly or going through Gitea.
  */
-export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: string): Promise<string> {
+export async function resolveWorkspaceUuid(
+  command: BaseCommand,
+  flagOverride?: string,
+): Promise<ResolvedWorkspace> {
   const override = flagOverride ?? process.env.QUONFIG_WORKSPACE
   const apiKey = process.env.QUONFIG_API_KEY
 
@@ -44,7 +58,7 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
 
     if (UUID_PATTERN.test(override)) {
       command.verboseLog('ApiKey auth', {source: 'uuid', workspaceId: override})
-      return override
+      return {workspaceId: override, orgSlug: ''}
     }
 
     // Slug — resolve via the server since there's no local auth config in CI mode.
@@ -83,13 +97,10 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     }
 
     command.verboseLog('ApiKey auth', {source: 'slug', slug: override, workspaceId: match.workspaceId})
-    return match.workspaceId
+    return {workspaceId: match.workspaceId, orgSlug: ''}
   }
 
-  // OAuth path with an explicit override → must be in org/ws form. Parse,
-  // look up the workosOrgId for that org slug in the local token store, and
-  // resolve the workspaceSlug *within that org*. Bare slug is rejected with
-  // a migration message (the API-key branch above is the one exception).
+  // OAuth path with an explicit override → must be in org/ws form.
   if (override) {
     return resolveOrgScopedWorkspace(command, override)
   }
@@ -98,11 +109,6 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
   // auth config from tokens if the config file is absent.
   let authConfig = await loadAuthConfig()
   if (!authConfig) {
-    // Auth config can be missing while tokens.json still holds a valid
-    // refresh_token — e.g. after the domain-scoped config split (commit
-    // 0f8bee6) or a partial login that wrote tokens but never the config
-    // (qfg-2qj). getValidAccessToken already knows how to refresh, so try
-    // that path before declaring "Not logged in".
     const store = await loadTokens()
     const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
     if (!tokens?.refresh_token) {
@@ -121,7 +127,14 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
     )
   }
 
-  return profileData.workspace
+  if (!profileData.organizationSlug) {
+    command.error(
+      'Saved profile is missing organization_slug. Run `qfg login` to refresh, or `qfg workspace switch <org>/<ws>`.',
+      {exit: 1},
+    )
+  }
+
+  return {workspaceId: profileData.workspace, orgSlug: profileData.organizationSlug}
 }
 
 /**
@@ -133,7 +146,7 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
  * 3. Mint/refresh an org-scoped JWT for that org, call /userWorkspaces/list,
  *    and pick the entry whose (workosOrgId, workspaceSlug) matches.
  */
-async function resolveOrgScopedWorkspace(command: BaseCommand, override: string): Promise<string> {
+async function resolveOrgScopedWorkspace(command: BaseCommand, override: string): Promise<ResolvedWorkspace> {
   const pin = tryParseWorkspacePin(override)
   if (!pin) {
     command.error(BARE_SLUG_ENV_MIGRATION_MESSAGE, {exit: 1})
@@ -192,7 +205,7 @@ async function resolveOrgScopedWorkspace(command: BaseCommand, override: string)
   }
 
   command.verboseLog('OAuth workspace lookup', {orgSlug, workspaceSlug, workosOrgId, workspaceId: match.workspaceId})
-  return match.workspaceId
+  return {workspaceId: match.workspaceId, orgSlug}
 }
 
 /**
@@ -204,11 +217,23 @@ async function resolveOrgScopedWorkspace(command: BaseCommand, override: string)
  * a message that points the user at `qfg login`.
  */
 async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthConfig> {
+  const store = await loadTokens()
+  if (!store) {
+    command.error('Not logged in. Run `qfg login` first.', {exit: 401})
+  }
+
+  // Pick any logged-in org's tokens to call /userWorkspaces/list. The list is
+  // org-scoped, so a single first-org JWT only sees that org's workspaces —
+  // but we only need one workspace to seed the default profile, and the user
+  // can always `qfg workspace switch` to a different one afterwards.
+  const [seedOrgId, seedTokens] = Object.entries(store.tokensByOrg)[0] ?? []
+  if (!seedOrgId || !seedTokens) {
+    command.error('Not logged in. Run `qfg login` first.', {exit: 401})
+  }
+
   let jwt: string
   try {
-    // TODO(qfg-kr7.5): pick the orgId resolved from the workspace address.
-    const orgId = await resolveDefaultOrgId()
-    jwt = await getValidAccessToken(orgId, command.verboseLog)
+    jwt = await getValidAccessToken(seedOrgId, command.verboseLog)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     command.error(`Tokens found but refresh failed: ${detail}. Run \`qfg login\` to repopulate.`, {exit: 401})
@@ -216,6 +241,7 @@ async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthCo
 
   type WorkspaceEntry = {
     organizationName?: string
+    organizationSlug?: string
     workosOrgId?: string
     workspaceId: string
     workspaceSlug: string
@@ -249,6 +275,16 @@ async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthCo
   }
 
   const match = candidates[0]
+  // Prefer the slug the server returned; fall back to the slug we have
+  // cached on the seed token (qfg-kr7 stores this on every login).
+  const orgSlug = match.organizationSlug ?? seedTokens.org_slug
+  if (!orgSlug) {
+    command.error(
+      'Tokens found but org slug is missing. Run `qfg login` to repopulate.',
+      {exit: 401},
+    )
+  }
+
   const recovered: AuthConfig = {
     defaultProfile: 'default',
     profiles: {
@@ -257,6 +293,7 @@ async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthCo
         workspaceName: match.workspaceSlug,
         workspaceSlug: match.workspaceSlug,
         organizationName: match.organizationName,
+        organizationSlug: orgSlug,
       },
     },
   }

@@ -6,7 +6,7 @@ import {getApiUrl} from '../util/domain-urls.js'
 import jsonMaybe from '../util/json-maybe.js'
 import {tryParseWorkspacePin} from '../util/quonfig-json.js'
 import {findOrgIdBySlug, getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
-import {getValidAccessToken, resolveDefaultOrgId} from '../util/get-valid-token.js'
+import {getValidAccessToken, getValidAccessTokenForOrgSlug} from '../util/get-valid-token.js'
 import version from '../version.js'
 
 const BARE_SLUG_ENV_MIGRATION_MESSAGE =
@@ -169,15 +169,6 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
 
       command.verboseLog('OAuth auth', {hasAuthConfig: true})
 
-      try {
-        const orgId = await resolveDefaultOrgId()
-        jwt = await getValidAccessToken(orgId, command.verboseLog)
-        command.verboseLog('Token valid (or refreshed)')
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error)
-        command.error(`Session expired. Please run \`qfg login\` to re-authenticate. (${detail})`, {exit: 401})
-      }
-
       const activeProfile = getActiveProfile(profileNameOverride)
       const profileData =
         authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
@@ -189,9 +180,22 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
         workspaceId: profileData?.workspace,
       })
 
-      if (profileData) {
-        workspaceId = profileData.workspace
+      if (!profileData?.organizationSlug) {
+        command.error(
+          'Saved profile is missing organization_slug. Run `qfg login` to refresh, or `qfg workspace switch <org>/<ws>`.',
+          {exit: 1},
+        )
       }
+
+      try {
+        jwt = await getValidAccessTokenForOrgSlug(profileData.organizationSlug, command.verboseLog)
+        command.verboseLog('Token valid (or refreshed)')
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        command.error(`Session expired. Please run \`qfg login\` to re-authenticate. (${detail})`, {exit: 401})
+      }
+
+      workspaceId = profileData.workspace
     }
   }
 

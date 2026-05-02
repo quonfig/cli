@@ -107,17 +107,19 @@ describe('workspace switch — kr7.9 multi-org pinning', () => {
       fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
     })
     .command(['workspace switch', 'beta/production'])
-    .it('disambiguates two orgs sharing a workspace slug, picks the right one, and persists workosOrgId', (ctx) => {
+    .it('disambiguates two orgs sharing a workspace slug and persists organization_slug', (ctx) => {
       // Specific mechanism: the saved profile must point at ws-beta-prod
-      // and store workosOrgId=org_beta — not the acme entry that has the
+      // and store organization_slug=beta — not the acme entry that has the
       // same workspaceSlug. If the matcher fell back to slug-only it would
-      // pick whichever happened to come first.
+      // pick whichever happened to come first. organization_slug is the
+      // user-vocabulary identifier downstream commands use to look up the
+      // per-org WorkOS token (via findOrgIdBySlug).
       expect(ctx.stdout).to.contain('Switched to: beta/production')
       expect(ctx.stdout).to.contain('QUONFIG_WORKSPACE=beta/production')
       const saved = fs.readFileSync(configPath(), 'utf8')
       expect(saved).to.match(/workspace\s*=\s*ws-beta-prod/)
-      expect(saved).to.match(/workos_org_id\s*=\s*org_beta/)
       expect(saved).to.match(/organization_slug\s*=\s*beta/)
+      expect(saved).to.not.match(/workos_org_id/)
     })
 
   test

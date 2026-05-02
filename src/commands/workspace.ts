@@ -38,15 +38,10 @@ export default class Workspace extends BaseCommand {
       .map(([orgId, t]) => t.org_slug ?? orgId)
       .sort((a, b) => a.localeCompare(b))
 
-    const firstOrgId = orgEntries[0][0]
-    let jwt: string
-    try {
-      jwt = await getValidAccessToken(firstOrgId, this.verboseLog)
-    } catch (error) {
-      return this.err(error instanceof Error ? error.message : String(error))
-    }
-
-    const allWorkspaces = await this.fetchWorkspaces(jwt)
+    // /userWorkspaces/list is per-token-org-scoped — a single org's JWT
+    // only sees that org's workspaces. Iterate every cached org so the
+    // listing is comprehensive in multi-org accounts.
+    const allWorkspaces = await this.fetchAllOrgsWorkspaces(orgEntries)
 
     const defaultProfilePin = this.profilePin(authConfig, allWorkspaces)
     const activePin = this.activePin(store, authConfig, allWorkspaces, defaultProfilePin)
@@ -168,6 +163,34 @@ export default class Workspace extends BaseCommand {
       this.verboseLog('workspace: userWorkspaces/list failed', {error: String(error)})
       return []
     }
+  }
+
+  /**
+   * Fan out across every cached org's token and merge the results. One org's
+   * stale token doesn't block the others — we verbose-log and continue.
+   */
+  private async fetchAllOrgsWorkspaces(
+    orgEntries: [string, unknown][],
+  ): Promise<WorkspaceEntry[]> {
+    const merged = new Map<string, WorkspaceEntry>()
+    for (const [orgId] of orgEntries) {
+      let jwt: string
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        jwt = await getValidAccessToken(orgId, this.verboseLog)
+      } catch (error) {
+        this.verboseLog('workspace: token refresh failed for org', {orgId, error: String(error)})
+        continue
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const list = await this.fetchWorkspaces(jwt)
+      for (const w of list) {
+        merged.set(w.workspaceId, w)
+      }
+    }
+
+    return [...merged.values()]
   }
 
   private async runApiKeyMode(): Promise<JsonObj | void> {

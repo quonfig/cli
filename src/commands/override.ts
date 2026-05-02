@@ -138,7 +138,7 @@ Examples
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Override)
 
-    // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+    // user_email is the same across all org-scoped tokens, so any one will do.
     const store = await loadTokens()
     const tokens = store ? Object.values(store.tokensByOrg)[0] : undefined
     const userEmail = tokens?.user_email

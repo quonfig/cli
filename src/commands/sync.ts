@@ -5,9 +5,9 @@ import {Flags} from '@oclif/core'
 import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
-import {getActiveProfile, loadAuthConfig} from '../util/token-storage.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
+import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
   isWorkingTreeClean,
@@ -48,6 +48,7 @@ export default class Sync extends BaseCommand {
 
   private resolvedDir!: string
   private workspaceId!: string
+  private orgSlug!: string
 
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Sync)
@@ -60,19 +61,9 @@ export default class Sync extends BaseCommand {
 
     this.resolvedDir = path.resolve(dir)
 
-    // Resolve workspace ID
-    const authConfig = await loadAuthConfig()
-    if (!authConfig) {
-      return this.err('Not logged in. Please run `qfg login` first.')
-    }
-
-    const activeProfile = getActiveProfile()
-    const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
-    if (!profile) {
-      return this.err('No active profile found. Please run `qfg login` first.')
-    }
-
-    this.workspaceId = profile.workspace
+    const resolved = await resolveWorkspaceUuid(this)
+    this.workspaceId = resolved.workspaceId
+    this.orgSlug = resolved.orgSlug
 
     // Validate the directory is a git repo
     const isRepo = await isGitRepo(this.resolvedDir)
@@ -116,7 +107,7 @@ export default class Sync extends BaseCommand {
   }
 
   private async refreshToken(): Promise<void> {
-    const data = await mintGiteaToken(this.workspaceId, 'read', 'pull')
+    const data = await mintGiteaToken(this.workspaceId, this.orgSlug, 'read', 'pull')
     const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
     await saveGiteaToken(this.workspaceId, entry)
     await gitSetRemote(this.resolvedDir, entry.repoUrl)

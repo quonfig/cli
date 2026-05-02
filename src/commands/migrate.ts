@@ -21,7 +21,8 @@ import {
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
-import {type AuthConfig, getActiveProfile, loadAuthConfig, resolveWorkspaceId} from '../util/token-storage.js'
+import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
+import {type AuthConfig, loadAuthConfig} from '../util/token-storage.js'
 
 const DEFAULT_DIR = 'quonfig-config'
 
@@ -97,7 +98,7 @@ export default class Migrate extends BaseCommand {
       return this.err('--api-key is required. For --from launch you can also set LAUNCH_API_KEY in your environment.')
     }
 
-    let workspaceContext: {authConfig: AuthConfig; workspaceId: string} | null = null
+    let workspaceContext: {authConfig: AuthConfig; workspaceId: string; orgSlug: string} | null = null
     if (flags.push) {
       const resolved = await this.resolvePushWorkspace(flags.workspace)
       if (typeof resolved === 'string') return this.err(resolved)
@@ -157,11 +158,11 @@ export default class Migrate extends BaseCommand {
       }
 
       if (flags.push && workspaceContext) {
-        const {workspaceId} = workspaceContext
+        const {workspaceId, orgSlug} = workspaceContext
         this.log('Connecting to Gitea...')
         let repoUrl: string
         try {
-          const tokenData = await mintGiteaToken(workspaceId, 'write', 'bootstrap')
+          const tokenData = await mintGiteaToken(workspaceId, orgSlug, 'write', 'bootstrap')
           repoUrl = tokenData.repoUrl
         } catch (error) {
           return this.err(
@@ -260,22 +261,16 @@ export default class Migrate extends BaseCommand {
 
   private async resolvePushWorkspace(
     slugOrId: string | undefined,
-  ): Promise<{authConfig: AuthConfig; workspaceId: string} | string> {
+  ): Promise<{authConfig: AuthConfig; workspaceId: string; orgSlug: string} | string> {
     const authConfig = await loadAuthConfig()
     if (!authConfig) return 'Not logged in. Run `qfg login` first, then re-run with --push.'
 
-    if (slugOrId) {
-      const resolved = resolveWorkspaceId(authConfig, slugOrId)
-      return {authConfig, workspaceId: resolved ?? slugOrId}
-    }
-
-    const activeProfile = getActiveProfile()
-    const profile = authConfig.profiles[activeProfile] || authConfig.profiles[authConfig.defaultProfile || 'default']
-    if (!profile) {
-      return 'No active profile found. Pass --workspace <slug> or run `qfg login` first.'
-    }
-
-    return {authConfig, workspaceId: profile.workspace}
+    // For migrate --push we need both the workspaceId and the owning org's
+    // slug (so mintGiteaToken can pick the right per-org WorkOS token).
+    // resolveWorkspaceUuid handles both --workspace (org/ws form) and the
+    // saved-profile fallback uniformly.
+    const resolved = await resolveWorkspaceUuid(this, slugOrId)
+    return {authConfig, workspaceId: resolved.workspaceId, orgSlug: resolved.orgSlug}
   }
 }
 

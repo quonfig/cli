@@ -2,10 +2,10 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {getApiUrl} from '../util/domain-urls.js'
-import {getValidAccessToken, resolveDefaultOrgId} from '../util/get-valid-token.js'
+import {getValidAccessToken} from '../util/get-valid-token.js'
 import {decodeJWT} from '../util/oauth-client.js'
 import {tryParseWorkspacePin} from '../util/quonfig-json.js'
-import {findOrgIdBySlug, loadTokens} from '../util/token-storage.js'
+import {findOrgIdBySlug, loadTokens, type TokenStore} from '../util/token-storage.js'
 
 type OrgMembership = {workosOrgId: string; slug: string; name: string; role: string}
 
@@ -92,7 +92,11 @@ export default class Whoami extends BaseCommand {
     }
 
     if (defaultOrgId) return defaultOrgId
-    return resolveDefaultOrgId().then((id) => id || undefined)
+
+    // Fall back to the first token entry — gives a stable marker rather than nothing.
+    const store = await loadTokens()
+    if (!store) return undefined
+    return Object.keys(store.tokensByOrg)[0]
   }
 
   /**
@@ -103,7 +107,9 @@ export default class Whoami extends BaseCommand {
   private async fetchOrganizations(): Promise<OrgMembership[]> {
     let jwt: string
     try {
-      const orgId = await resolveDefaultOrgId()
+      const store = await loadTokens()
+      if (!store) return []
+      const orgId = pickAnyOrgId(store)
       if (!orgId) return []
       jwt = await getValidAccessToken(orgId, this.verboseLog)
     } catch (error) {
@@ -144,4 +150,9 @@ function mergeMemberships(local: OrgMembership[], server: OrgMembership[]): OrgM
   for (const o of local) merged.set(o.workosOrgId, o)
   for (const o of server) merged.set(o.workosOrgId, o)
   return [...merged.values()].sort((a, b) => a.slug.localeCompare(b.slug))
+}
+
+function pickAnyOrgId(store: TokenStore): string | undefined {
+  if (store.defaultOrgId && store.tokensByOrg[store.defaultOrgId]) return store.defaultOrgId
+  return Object.keys(store.tokensByOrg)[0]
 }

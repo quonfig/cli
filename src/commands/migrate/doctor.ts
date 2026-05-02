@@ -7,7 +7,9 @@ import {loadTokens} from '../../util/token-storage.js'
 const SUPPORTED_SOURCES = new Set(['launch'])
 
 const defaultLoadSession = async (): Promise<DoctorSession | null> => {
-  // TODO(qfg-kr7.5): pick the token set keyed by the resolved workosOrgId.
+  // Doctor only checks token freshness, which is identical across the user's
+  // per-org tokens (they all expire on the same WorkOS clock). Reading the
+  // first one is sufficient.
   let store
   try {
     store = await loadTokens()

@@ -84,11 +84,12 @@ export default class WorkspaceCreate extends BaseCommand {
     }
 
     const apiUrl = getApiUrl()
-    const body: Record<string, string> = {slug, organizationId: workosOrgId}
+    // The server expects organizationSlug (it resolves to the local org
+    // UUID) — not the WorkOS org id, which is what we have keyed in the
+    // token store. resolveOrgFromTokens guarantees orgSlug is populated.
+    const body: Record<string, string> = {slug, organizationSlug: orgSlug}
     if (flags.name) body.name = flags.name
-    if (orgSlug) {
-      this.log(`Creating workspace in org: ${orgSlug}`)
-    }
+    this.log(`Creating workspace in org: ${orgSlug}`)
 
     this.verboseLog('WorkspaceCreate', {apiUrl, body})
 
@@ -166,21 +167,32 @@ export default class WorkspaceCreate extends BaseCommand {
    * Pick the org for the new workspace from the per-org token store.
    *
    * - 0 orgs → "No orgs found. Run `qfg login` first."
-   * - 1 org → auto-select that org's workosOrgId.
+   * - 1 org → auto-select that org.
    * - 2+ orgs → require `--org <slug-or-uuid>`. Slug is matched against
    *   `org_slug` in the token store; UUID is matched against the token
    *   store key. Either way the org must exist locally — we never invent
    *   an orgId we don't have a token for.
+   *
+   * Always returns BOTH the WorkOS org id (needed to mint the JWT) and the
+   * org slug (needed for the create-workspace request body). If the token
+   * lacks `org_slug`, errors with a `qfg login` hint.
    */
   private async resolveOrgFromTokens(
     flagOrg: string | undefined,
-  ): Promise<{workosOrgId: string; orgSlug?: string} | {error: string}> {
+  ): Promise<{workosOrgId: string; orgSlug: string} | {error: string}> {
     const store = await loadTokens()
     if (!store || Object.keys(store.tokensByOrg).length === 0) {
       return {error: 'No orgs found. Run `qfg login` first.'}
     }
 
     const entries = Object.entries(store.tokensByOrg)
+
+    const requireSlug = (workosOrgId: string, orgSlug: string | undefined): {workosOrgId: string; orgSlug: string} | {error: string} => {
+      if (!orgSlug) {
+        return {error: `Org \`${workosOrgId}\` is missing its slug locally. Run \`qfg login\` to refresh your org list.`}
+      }
+      return {workosOrgId, orgSlug}
+    }
 
     if (flagOrg) {
       if (UUID_PATTERN.test(flagOrg)) {
@@ -189,7 +201,7 @@ export default class WorkspaceCreate extends BaseCommand {
           return {error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`}
         }
 
-        return {workosOrgId: flagOrg, orgSlug: tokens.org_slug}
+        return requireSlug(flagOrg, tokens.org_slug)
       }
 
       const matchedId = findOrgIdBySlug(store, flagOrg)
@@ -202,7 +214,7 @@ export default class WorkspaceCreate extends BaseCommand {
 
     if (entries.length === 1) {
       const [orgId, tokens] = entries[0]
-      return {workosOrgId: orgId, orgSlug: tokens.org_slug}
+      return requireSlug(orgId, tokens.org_slug)
     }
 
     const slugList = entries

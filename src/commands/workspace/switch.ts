@@ -39,16 +39,10 @@ export default class WorkspaceSwitch extends BaseCommand {
       return this.err('Not logged in. Run `qfg login` first.')
     }
 
-    const orgEntries = Object.entries(store.tokensByOrg)
-    const firstOrgId = orgEntries[0][0]
-    let accessToken: string
-    try {
-      accessToken = await getValidAccessToken(firstOrgId, this.verboseLog)
-    } catch {
-      return this.err('Not logged in. Run `qfg login` first.')
-    }
-
-    const candidates = await this.fetchAllWorkspaces(accessToken)
+    // /userWorkspaces/list is per-token-org-scoped — a single org's JWT
+    // only sees that org's workspaces. To support multi-org pickers we
+    // must iterate every cached org and merge.
+    const candidates = await this.fetchAllOrgsWorkspaces(store)
     if (candidates.length === 0) {
       return this.err('No workspaces found for your account.')
     }
@@ -86,7 +80,6 @@ export default class WorkspaceSwitch extends BaseCommand {
           workspaceSlug: match.workspaceSlug,
           organizationName: match.organizationName,
           organizationSlug: orgSlug,
-          workosOrgId: match.workosOrgId,
         },
       },
     })
@@ -101,7 +94,6 @@ export default class WorkspaceSwitch extends BaseCommand {
       activeWorkspace: pin,
       organizationName: match.organizationName,
       organizationSlug: orgSlug,
-      workosOrgId: match.workosOrgId,
       workspaceId: match.workspaceId,
       workspaceSlug: match.workspaceSlug,
     }
@@ -152,24 +144,52 @@ export default class WorkspaceSwitch extends BaseCommand {
     return {match: found}
   }
 
-  private async fetchAllWorkspaces(accessToken: string): Promise<WorkspaceEntry[]> {
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
-        method: 'POST',
-        headers: {Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json'},
-        body: JSON.stringify({json: {}}),
-      })
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch workspaces (${res.status}). Try \`qfg login\` to re-authenticate.`)
+  /**
+   * Iterate every cached org and merge its workspace list. Each org has its
+   * own access token; one token only sees one org's workspaces. We tolerate
+   * a single org's failure (verbose-log it) so a stale token in one org
+   * doesn't block switching into a working one.
+   */
+  private async fetchAllOrgsWorkspaces(
+    store: NonNullable<Awaited<ReturnType<typeof loadTokens>>>,
+  ): Promise<WorkspaceEntry[]> {
+    const merged = new Map<string, WorkspaceEntry>()
+    for (const orgId of Object.keys(store.tokensByOrg)) {
+      let token: string
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        token = await getValidAccessToken(orgId, this.verboseLog)
+      } catch (error) {
+        this.verboseLog('workspace switch: token refresh failed', {orgId, error: String(error)})
+        continue
       }
 
-      const body = (await res.json()) as {json?: WorkspaceEntry[]}
-      const all = (body.json ?? body) as unknown as WorkspaceEntry[]
-      return Array.isArray(all) ? all : []
-    } catch (error) {
-      throw new Error(`Failed to fetch workspaces: ${error instanceof Error ? error.message : String(error)}`)
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
+          method: 'POST',
+          headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
+          body: JSON.stringify({json: {}}),
+        })
+
+        if (!res.ok) {
+          this.verboseLog('workspace switch: list returned non-OK', {orgId, status: res.status})
+          continue
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        const body = (await res.json()) as {json?: WorkspaceEntry[]}
+        const list = (body.json ?? body) as unknown as WorkspaceEntry[]
+        if (!Array.isArray(list)) continue
+        for (const w of list) {
+          merged.set(w.workspaceId, w)
+        }
+      } catch (error) {
+        this.verboseLog('workspace switch: fetch failed', {orgId, error: String(error)})
+      }
     }
+
+    return [...merged.values()]
   }
 }
 

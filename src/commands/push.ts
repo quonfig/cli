@@ -11,6 +11,7 @@ import {getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, runGit} from '../util/g
 import {
   PushFatalError,
   runPush,
+  type ConfigPushInput,
   type GiteaTokenMintResult,
   type GitOps,
 } from '../push/run-push.js'
@@ -78,9 +79,9 @@ Enforces three guards before touching the remote:
     // Resolve requested target. --workspace > QUONFIG_WORKSPACE > active OAuth
     // profile. Supports API-key mode for headless runs so `qfg push` behaves
     // the same way `qfg create` does (both resolve via resolve-workspace.ts).
-    const requestedTarget = await resolveWorkspaceUuid(this, flags.workspace)
+    const {workspaceId: requestedTarget, orgSlug} = await resolveWorkspaceUuid(this, flags.workspace)
 
-    const {deps, cleanup} = buildRealDeps(this)
+    const {deps, cleanup} = buildRealDeps(this, orgSlug)
     try {
       const result = await runPush(
         {
@@ -156,7 +157,10 @@ export function giteaResponseToMintResult(resp: GiteaTokenResponse): GiteaTokenM
  * oRPC procedure. We still mint a READ token to authenticate the bare-path
  * probe-clone and the clone-path `git fetch`.
  */
-export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; cleanup: () => Promise<void>} {
+export function buildRealDeps(
+  cmd: Push,
+  orgSlug: string,
+): {deps: Parameters<typeof runPush>[1]; cleanup: () => Promise<void>} {
   const log = (line: string) => cmd.log(line)
   const errLog = (line: string) => cmd.logToStderr(line)
 
@@ -238,7 +242,7 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
       // fetch. The actual commit goes through the server via configs.push,
       // which is authorized off the user's WorkOS session — no write PAT
       // needed in the push code path (qfg-azk.13).
-      const resp = await mintGiteaToken(requestedTarget, 'read', 'pull')
+      const resp = await mintGiteaToken(requestedTarget, orgSlug, 'read', 'pull')
       authenticatedRepoUrl = resp.repoUrl
       return giteaResponseToMintResult(resp)
     },
@@ -249,7 +253,7 @@ export function buildRealDeps(cmd: Push): {deps: Parameters<typeof runPush>[1]; 
       return {errors}
     },
     gitOps,
-    pushToServer: callConfigsPush,
+    pushToServer: (input: ConfigPushInput) => callConfigsPush(input, orgSlug),
     log,
     errLog,
   }

@@ -47,6 +47,8 @@ export const setupTestAuth = () => {
         refresh_token: 'mock-refresh-token',
         user_email: 'test@example.com',
         user_id: 'user_test-123',
+        org_slug: 'test-organization',
+        org_name: 'Test Organization',
       },
     },
   }
@@ -56,6 +58,7 @@ export const setupTestAuth = () => {
 
 [profile default]
 workspace = workspace-123 # Test Organization - Test Workspace
+organization_slug = test-organization
 
 `
   fs.writeFileSync(configFile, configContent)

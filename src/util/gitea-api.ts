@@ -1,5 +1,5 @@
 import {getApiUrl} from './domain-urls.js'
-import {getValidAccessToken, resolveDefaultOrgId} from './get-valid-token.js'
+import {getValidAccessTokenForOrgSlug} from './get-valid-token.js'
 import {GiteaTokenEntry, saveGiteaToken} from './gitea-token-storage.js'
 
 export interface GiteaTokenResponse {
@@ -24,12 +24,11 @@ export interface GiteaTokenResponse {
 
 export const mintGiteaToken = async (
   workspaceId: string,
+  orgSlug: string,
   scope: 'read' | 'write',
   purpose: 'pull' | 'bootstrap' | 'push',
 ): Promise<GiteaTokenResponse> => {
-  // TODO(qfg-kr7.5): thread workosOrgId through from the resolved workspace address.
-  const orgId = await resolveDefaultOrgId()
-  const accessToken = await getValidAccessToken(orgId)
+  const accessToken = await getValidAccessTokenForOrgSlug(orgSlug)
 
   const apiUrl = getApiUrl()
   const res = await fetch(`${apiUrl}/api/v1/gitea/token`, {
@@ -63,8 +62,11 @@ export const mintGiteaToken = async (
 /**
  * Mint a Gitea read token, store it, and return the entry.
  */
-export const mintAndStoreGiteaReadToken = async (workspaceId: string): Promise<GiteaTokenEntry> => {
-  const data = await mintGiteaToken(workspaceId, 'read', 'pull')
+export const mintAndStoreGiteaReadToken = async (
+  workspaceId: string,
+  orgSlug: string,
+): Promise<GiteaTokenEntry> => {
+  const data = await mintGiteaToken(workspaceId, orgSlug, 'read', 'pull')
   const entry: GiteaTokenEntry = {
     token: data.token,
     repoUrl: data.repoUrl,

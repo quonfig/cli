@@ -33,12 +33,12 @@ export async function fetchWorkspaceSnapshot(
   command: BaseCommand,
   options: {workspace?: string} = {},
 ): Promise<WorkspaceSnapshot> {
-  const workspaceId = await resolveWorkspaceUuid(command, options.workspace)
+  const {workspaceId, orgSlug} = await resolveWorkspaceUuid(command, options.workspace)
 
   let entry = await loadGiteaToken(workspaceId)
   if (!entry || isGiteaTokenExpired(entry)) {
     command.verboseLog('fetchWorkspaceSnapshot', 'Minting new Gitea read token...')
-    entry = await mintAndStoreGiteaReadToken(workspaceId)
+    entry = await mintAndStoreGiteaReadToken(workspaceId, orgSlug)
   }
 
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qfg-codegen-'))
@@ -51,7 +51,7 @@ export async function fetchWorkspaceSnapshot(
     } catch (error) {
       if (looksLike401(error)) {
         command.verboseLog('fetchWorkspaceSnapshot', 'Got 401 on clone, refreshing Gitea token...')
-        const fresh = await mintAndStoreGiteaReadToken(workspaceId)
+        const fresh = await mintAndStoreGiteaReadToken(workspaceId, orgSlug)
         await gitClone(fresh.repoUrl, tmpDir)
       } else {
         throw error

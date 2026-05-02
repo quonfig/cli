@@ -173,7 +173,6 @@ export default class Login extends BaseCommand {
           [profileName]: {
             organizationName: result.defaultOrg.name,
             organizationSlug: result.defaultOrg.slug,
-            workosOrgId: result.defaultOrgId,
             workspace: defaultWorkspace?.workspaceId ?? result.defaultOrgId,
             workspaceName: defaultWorkspace?.workspaceSlug,
             workspaceSlug: defaultWorkspace?.workspaceSlug,

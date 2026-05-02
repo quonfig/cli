@@ -86,6 +86,7 @@ describe('resolve-workspace recovery from tokens', () => {
           access_token: buildJwt(3600),
           expires_at: Date.now() + 3_600_000,
           refresh_token: 'mock-refresh-token',
+          org_slug: 'recovered-org',
         },
       },
     })
@@ -120,7 +121,7 @@ describe('resolve-workspace recovery from tokens', () => {
 
     expect(listCalled, 'must call /userWorkspaces/list during recovery').to.equal(true)
     expect(bearerSent).to.match(/^Bearer /)
-    expect(result).to.equal('ws-recovered-uuid')
+    expect(result.workspaceId).to.equal('ws-recovered-uuid')
 
     // Specific mechanism: the fix must persist the recovered profile so
     // subsequent commands can read it.
@@ -377,8 +378,10 @@ describe('resolve-workspace org/ws addressing', () => {
 
     expect(bearerSent).to.match(/^Bearer /)
     // Specific mechanism assertion: the result must come from the org branch
-    // matching the parsed org slug, not the other one.
-    expect(result).to.equal('ws-beta-prod-uuid')
+    // matching the parsed org slug, not the other one. orgSlug must round-trip
+    // so downstream callers (mintGiteaToken) can pick the right per-org JWT.
+    expect(result.workspaceId).to.equal('ws-beta-prod-uuid')
+    expect(result.orgSlug).to.equal('beta')
   })
 
   it('errors with "No token found for org" when the orgSlug is not in the token store', async () => {
@@ -485,6 +488,10 @@ describe('resolve-workspace org/ws addressing', () => {
     const result = await resolveWorkspaceUuid(cmd)
 
     expect(listCalled).to.equal(true)
-    expect(result).to.equal('ws-ci-uuid')
+    expect(result.workspaceId).to.equal('ws-ci-uuid')
+    // API-key mode has no org concept on the CLI side; the orgSlug is
+    // empty because getValidAccessTokenForOrgSlug short-circuits on the
+    // env key before consulting it.
+    expect(result.orgSlug).to.equal('')
   })
 })
