@@ -32,7 +32,7 @@
     "mustache": "^4.2.0",
     "node-forge": "^1.4.0",
     "typescript": "^5",
-    "zod": "^4.1.12"
+    "zod": "^4.4.2"
   },
   "description": "Quonfig CLI. For arbitrary targeting rules (email, plan, segment, custom property), run `qfg config-schema` then `qfg pull`.",
   "devDependencies": {
