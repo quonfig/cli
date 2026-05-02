@@ -96,6 +96,14 @@ export interface RunPushInput {
   message?: string
   /** `--no-pin-write` — do not offer to write the slug pin into quonfig.json. */
   noPinWrite: boolean
+  /**
+   * Caller's resolved org slug for this workspace. Used to construct the
+   * `<org>/<ws>` pin when the backend's mint-token returns just the bare
+   * workspace component (current backend behavior). Optional in tests; if
+   * omitted, pin backfill only runs when the backend already returns the
+   * slash form.
+   */
+  orgSlug?: string
   /** `--workspace` flag, or the active profile's workspace UUID. Must be non-empty. */
   requestedTarget: string
   /** `--skip-validate` — suppress the validate step. */
@@ -197,7 +205,14 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   // the backend's canonical identity) but we want the pin/origin up front.
   // The pin is `<org>/<ws>`; identity-check still operates on the workspace
   // component until backend responses carry the org slug too (qfg-kr7 epic).
-  const repoPin = await readWorkspaceSlug(input.dir)
+  // A legacy bare-slug pin is treated as "no pin set" so the post-push
+  // backfill can rewrite it to the canonical form.
+  let repoPin: Awaited<ReturnType<typeof readWorkspaceSlug>>
+  try {
+    repoPin = await readWorkspaceSlug(input.dir)
+  } catch {
+    repoPin = undefined
+  }
   const repoPinSlug = repoPin?.workspaceSlug
   const hasGit = await deps.gitOps.isGitRepo(input.dir)
   const remoteOriginUrl = hasGit ? await deps.gitOps.getRemoteOriginUrl(input.dir) : undefined
@@ -351,12 +366,14 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   }
 
   if (unpinned && !input.noPinWrite) {
-    // Backend `workspaceSlug` is just the workspace component today; until
-    // it returns the slash form, we can only write the pin when the
-    // response is already in `<org>/<ws>` form. Otherwise skip — the pin
-    // is advisory and will be backfilled by a later `qfg pull` once the
-    // backend learns the new shape (qfg-kr7 epic).
-    const backendPin = tryParseWorkspacePin(backend.workspaceSlug)
+    // The backend's mint-token still returns the bare workspace component;
+    // combine it with the caller-supplied orgSlug locally. If the backend
+    // ever upgrades to slash form, tryParseWorkspacePin handles that case
+    // and we use its parts directly. Without either signal, skip — the
+    // pin is advisory and a partial slash form would be worse than absent.
+    const parsedBackend = tryParseWorkspacePin(backend.workspaceSlug)
+    const backendPin =
+      parsedBackend ?? (input.orgSlug ? {orgSlug: input.orgSlug, workspaceSlug: backend.workspaceSlug} : undefined)
     if (backendPin) {
       try {
         await writeWorkspaceSlug(input.dir, backendPin)

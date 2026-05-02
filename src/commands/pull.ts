@@ -169,6 +169,25 @@ CLI shortcuts (no JSON editing needed for simple cases):
   }
 
   /**
+   * Wraps `readWorkspaceSlug` so a legacy bare-slug value (`"workspace":
+   * "foo"` instead of `"workspace": "org/foo"`) reads as `undefined`
+   * rather than throwing. The caller then takes the "no pin set" branch
+   * and overwrites with the canonical form, completing the migration.
+   *
+   * Any other parse error still resolves to `undefined` here (and is
+   * verbose-logged) — backfill is non-fatal; the next push surfaces the
+   * real diagnosis.
+   */
+  private async readPinTolerant(dir: string) {
+    try {
+      return await readWorkspaceSlug(dir)
+    } catch (error: unknown) {
+      this.verboseLog('Pull', `quonfig.json workspace pin needs migration: ${String(error)}`)
+      return undefined
+    }
+  }
+
+  /**
    * Local-only backfill of the `workspace` pin in `quonfig.json`.
    *
    * - Missing pin → write it from the token response's `workspaceSlug`.
@@ -205,22 +224,16 @@ CLI shortcuts (no JSON editing needed for simple cases):
     }
 
     // The pin is stored as `<org-slug>/<workspace-slug>`. The backend's
-    // `workspaceSlug` is just the workspace component today; until the
-    // server learns to return the org slug, we can only backfill / compare
-    // when the backend response itself already carries the slash form
-    // (e.g. when later beads in this epic update the API). Otherwise,
-    // skip with a verbose log — pull itself already succeeded.
-    const backendPin = tryParseWorkspacePin(backendSlug)
-    if (!backendPin) {
-      this.verboseLog(
-        'Pull',
-        `Backend workspaceSlug "${backendSlug}" is not in <org>/<ws> form; skipping pin backfill.`,
-      )
-      return
-    }
+    // mint-token still returns the bare workspace component; we already
+    // resolved the org separately during workspace lookup, so combine the
+    // two halves locally. If the backend ever upgrades to returning slash
+    // form, tryParseWorkspacePin handles it; the explicit org overrides
+    // any mismatch in favor of the workspace we actually authenticated as.
+    const parsedBackend = tryParseWorkspacePin(backendSlug)
+    const backendPin = parsedBackend ?? {orgSlug, workspaceSlug: backendSlug}
 
     try {
-      const existingPin = await readWorkspaceSlug(dir)
+      const existingPin = await this.readPinTolerant(dir)
       if (!existingPin) {
         await writeWorkspaceSlug(dir, backendPin)
         const formatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`

@@ -87,6 +87,7 @@ Enforces three guards before touching the remote:
         {
           dir: resolvedDir,
           requestedTarget,
+          orgSlug,
           yes: flags.yes,
           skipValidate: flags['skip-validate'],
           noPinWrite: flags['no-pin-write'],
