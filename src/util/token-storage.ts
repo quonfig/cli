@@ -37,7 +37,18 @@ export interface TokenSet {
   org_name?: string
 }
 
+/**
+ * Schema version of tokens.json. Stamped on every write by saveTokens so a
+ * future CLI can refuse files written by an even-newer CLI with a clear
+ * "upgrade your CLI" error (qfg-7mau). Files written before qfg-7mau (kr7
+ * shipped 0.0.26-0.0.29) lack this field; loadTokens treats a missing
+ * version as the current shape.
+ */
+export const TOKEN_STORE_VERSION = 2
+
 export interface TokenStore {
+  /** Schema version. Optional on read for back-compat with kr7-shipped files. */
+  version?: number
   defaultOrgId?: string
   tokensByOrg: {[workosOrgId: string]: TokenSet}
 }
@@ -124,7 +135,8 @@ export const saveTokens = async (store: TokenStore, options?: TokenStorageOption
   await ensureQuonfigDir(options)
   const targetFile = getTokenFile(options)
   const tmpFile = `${targetFile}.tmp`
-  await fs.promises.writeFile(tmpFile, JSON.stringify(store, null, 2), {encoding: 'utf8', mode: 0o600})
+  const stamped: TokenStore = {...store, version: TOKEN_STORE_VERSION}
+  await fs.promises.writeFile(tmpFile, JSON.stringify(stamped, null, 2), {encoding: 'utf8', mode: 0o600})
   await fs.promises.rename(tmpFile, targetFile)
   await verifyWritten(targetFile, 'tokens')
   // Round-trip parse to confirm the file on disk is the JSON we just wrote.
@@ -151,7 +163,21 @@ export const loadTokens = async (options?: TokenStorageOptions): Promise<TokenSt
 
   const parsed = JSON.parse(data) as unknown
   if (!isTokenStore(parsed)) {
-    throw new Error('Token store format has changed. Run `qfg login` to re-authenticate.')
+    // qfg-7mau: most likely cause is a stale (pre-kr7) CLI that overwrote
+    // the multi-org token file with the old flat shape on `qfg login`.
+    throw new Error(
+      'Token store format has changed. Run `qfg login` to re-authenticate. ' +
+        'If you recently ran `qfg login` with an older CLI, your tokens were overwritten — ' +
+        'upgrade first: `npm i -g @quonfig/cli@latest`',
+    )
+  }
+
+  const fileVersion = parsed.version ?? TOKEN_STORE_VERSION
+  if (fileVersion > TOKEN_STORE_VERSION) {
+    throw new Error(
+      `Token store version ${fileVersion} is from a newer CLI than this one supports (max ${TOKEN_STORE_VERSION}). ` +
+        'Upgrade with `npm i -g @quonfig/cli@latest`.',
+    )
   }
 
   return parsed
