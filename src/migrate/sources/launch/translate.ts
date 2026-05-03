@@ -40,12 +40,14 @@ export function normalizeKey(key: string): string {
 }
 
 /**
- * qfg-l18w: Operators Quonfig accepts in rule criteria. Mirrors the
- * `OperatorSchema` enum in cli/src/verify/validate.ts (and app-quonfig's
- * config-schemas.ts). If we emit an operator outside this set, qfg verify
- * fails — which is what was happening for `PROP_SEMVER_*` in the FormHealth
- * dry-run before this check existed. Keep this list in lockstep with the
- * verify schema; a CI test in this file enforces parity.
+ * qfg-l18w / qfg-0q1f: Operators Quonfig accepts in rule criteria. Mirrors
+ * the `OperatorSchema` enum in cli/src/verify/validate.ts (and app-quonfig's
+ * config-schemas.ts). All currently-known Launch operators are supported;
+ * this allowlist guards against future Launch additions Quonfig hasn't
+ * implemented yet — emitting an unrecognized operator would otherwise be
+ * caught only at qfg verify time, after the migrator has already written
+ * a broken file. Keep this list in lockstep with the verify schema; a CI
+ * test in this file enforces parity.
  */
 export const QUONFIG_SUPPORTED_OPERATORS = new Set<string>([
   'ALWAYS_TRUE',
@@ -61,6 +63,9 @@ export const QUONFIG_SUPPORTED_OPERATORS = new Set<string>([
   'PROP_LESS_THAN_OR_EQUAL',
   'PROP_GREATER_THAN',
   'PROP_GREATER_THAN_OR_EQUAL',
+  'PROP_SEMVER_LESS_THAN',
+  'PROP_SEMVER_EQUAL',
+  'PROP_SEMVER_GREATER_THAN',
   'PROP_BEFORE',
   'PROP_AFTER',
   'PROP_MATCHES',
@@ -74,12 +79,10 @@ export const QUONFIG_SUPPORTED_OPERATORS = new Set<string>([
 
 /**
  * qfg-l18w: Walk every rule criterion in a transformed config and fail-fast at
- * migrate time if it carries an operator Quonfig does not understand. The
- * primary offender today is `PROP_SEMVER_*` (Launch supports semver
- * comparisons; Quonfig does not have a semver operator at all). Without this
- * check the migrator silently writes invalid JSON and the failure surfaces
- * later at qfg-verify — the customer's local file is broken and re-runs
- * re-clobber any manual fix.
+ * migrate time if it carries an operator Quonfig does not understand. Without
+ * this check the migrator would silently write invalid JSON and the failure
+ * would only surface later at qfg-verify — leaving the customer's local file
+ * broken and re-runs re-clobbering any manual fix.
  *
  * Routes through `InvalidSourceConfigError` so the failure is per-config (the
  * rest of the run still produces a usable workspace, and the offending key
