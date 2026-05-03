@@ -7,34 +7,11 @@
  * Derived from the Zod schemas in verify/validate.ts — keep in sync.
  */
 
+import {OPERATORS as operators} from '../verify/validate.js'
+
 const configTypes = ['config', 'feature_flag', 'log_level', 'segment'] as const
 const valueTypes = ['bool', 'string', 'int', 'double', 'json', 'string_list', 'duration', 'log_level'] as const
 const logLevels = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'] as const
-
-const operators = [
-  'ALWAYS_TRUE',
-  'PROP_IS_ONE_OF',
-  'PROP_IS_NOT_ONE_OF',
-  'PROP_STARTS_WITH_ONE_OF',
-  'PROP_DOES_NOT_START_WITH_ONE_OF',
-  'PROP_ENDS_WITH_ONE_OF',
-  'PROP_DOES_NOT_END_WITH_ONE_OF',
-  'PROP_CONTAINS_ONE_OF',
-  'PROP_DOES_NOT_CONTAIN_ONE_OF',
-  'PROP_LESS_THAN',
-  'PROP_LESS_THAN_OR_EQUAL',
-  'PROP_GREATER_THAN',
-  'PROP_GREATER_THAN_OR_EQUAL',
-  'PROP_BEFORE',
-  'PROP_AFTER',
-  'PROP_MATCHES',
-  'PROP_DOES_NOT_MATCH',
-  'IN_SEG',
-  'NOT_IN_SEG',
-  'IN_INT_RANGE',
-  'LOOKUP_KEY_IN',
-  'LOOKUP_KEY_NOT_IN',
-] as const
 
 // ── Value sub-schemas ──────────────────────────────────────────────────
 

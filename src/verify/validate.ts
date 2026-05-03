@@ -34,7 +34,7 @@ const ConfigTypeSchema = z.enum(['feature_flag', 'config', 'log_level', 'segment
 
 const ValueTypeSchema = z.enum(['bool', 'string', 'int', 'double', 'json', 'string_list', 'duration', 'log_level'])
 
-const OperatorSchema = z.enum([
+export const OPERATORS = [
   'ALWAYS_TRUE',
   'PROP_IS_ONE_OF',
   'PROP_IS_NOT_ONE_OF',
@@ -60,7 +60,9 @@ const OperatorSchema = z.enum([
   'IN_INT_RANGE',
   'LOOKUP_KEY_IN',
   'LOOKUP_KEY_NOT_IN',
-])
+] as const
+
+const OperatorSchema = z.enum(OPERATORS)
 
 const LogLevelSchema = z.enum(LOG_LEVELS)
 

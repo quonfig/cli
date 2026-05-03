@@ -4,7 +4,7 @@ import {BaseCommand} from '../index.js'
 import {JsonObj} from '../result.js'
 import {storedConfigJsonSchema} from '../init/schema.js'
 
-const REFERENCE = `
+export const REFERENCE = `
 ────────────────────────────────────────────────────────────
 FILE LAYOUT
 ────────────────────────────────────────────────────────────
@@ -107,6 +107,9 @@ OPERATOR REFERENCE
   PROP_LESS_THAN_OR_EQUAL          int or double
   PROP_GREATER_THAN                int or double
   PROP_GREATER_THAN_OR_EQUAL       int or double
+  PROP_SEMVER_LESS_THAN            string               semver comparison; valueToMatch is a semver string like "4.0.9"
+  PROP_SEMVER_EQUAL                string               semver comparison; valueToMatch is a semver string like "4.0.9"
+  PROP_SEMVER_GREATER_THAN         string               semver comparison; valueToMatch is a semver string like "4.0.9"
   PROP_BEFORE                      string (ISO 8601)    date/time comparison
   PROP_AFTER                       string (ISO 8601)
   PROP_MATCHES                     string               regex match
