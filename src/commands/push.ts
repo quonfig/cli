@@ -7,7 +7,7 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
-import {dirtyTrackedFiles, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote, runGit} from '../util/git-ops.js'
+import {dirtyTrackedFiles, getOriginMainSha, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote, runGit} from '../util/git-ops.js'
 import {
   PushFatalError,
   runPush,
@@ -254,6 +254,13 @@ export function buildRealDeps(
       } catch {
         return []
       }
+    },
+    async getOriginMainSha(dir) {
+      // qfg-gj3i: clone-path returns the local origin/main SHA after
+      // fetch. Bare path has no `.git/` to rev-parse — return undefined
+      // and let the server apply its bare-path lock policy.
+      if (!(await isGitRepo(dir))) return undefined
+      return getOriginMainSha(dir)
     },
   }
 

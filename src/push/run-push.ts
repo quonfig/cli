@@ -68,6 +68,16 @@ export interface GitOps {
    * files are excluded — same rule as `dirtyTrackedFiles` in git-ops.ts.
    */
   dirtyTrackedFiles(dir: string): Promise<string[]>
+  /**
+   * Returns the local SHA of `origin/main` after fetch — the remote tip
+   * the diff was computed against — or undefined if no `origin/main` ref
+   * exists (bare-path push, or repo never fetched).
+   *
+   * Threaded into the `configs.push` call as `expectedSha` so the
+   * server-side optimistic lock (qfg-gj3i) can reject pushes whose
+   * origin moved between fetch and push.
+   */
+  getOriginMainSha(dir: string): Promise<string | undefined>
   /** Set origin to `url` (add if missing, set-url if present). */
   setRemoteOrigin(dir: string, url: string): Promise<void>
 }
@@ -385,11 +395,18 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     ...(d.afterJson === undefined ? {} : {afterJson: d.afterJson}),
   }))
 
+  // qfg-gj3i: pass origin/main SHA as expectedSha so the server-side
+  // optimistic lock can reject the push if origin moved between fetch
+  // and now. Undefined on bare-path; the server treats absence as
+  // "non-clone client" and applies its bare-path policy.
+  const expectedSha = await deps.gitOps.getOriginMainSha(input.dir)
+
   log('Sending push to Quonfig cloud...')
   const result = await deps.pushToServer({
     workspaceId: backend.workspaceId,
     files: serverFiles,
     message: commitMessage,
+    ...(expectedSha === undefined ? {} : {expectedSha}),
   })
 
   if (result.kind === 'denied') {

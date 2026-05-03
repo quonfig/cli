@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.37 - 2026-05-03
+
+- feat: `qfg push` sends `expectedSha = origin/main HEAD sha at fetch time` to the server-side `configs.push` optimistic lock (qfg-gj3i). CLI half of the atomic flip with the upcoming app-quonfig change that makes the server enforce this. Bare-path pushes (no `.git/`) omit the field entirely so the server applies its bare-path lock policy unchanged.
+
 ## 0.0.36 - 2026-05-03
 
 - feat(qfg-0q1f): `qfg verify` accepts `PROP_SEMVER_LESS_THAN`, `PROP_SEMVER_EQUAL`, and `PROP_SEMVER_GREATER_THAN` operators in rule criteria. Schema's `OperatorSchema` extended; parity test asserts the migrator allowlist stays in lockstep.

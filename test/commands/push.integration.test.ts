@@ -257,6 +257,22 @@ function buildTestDeps(args: {
         return []
       }
     },
+    async getOriginMainSha(dir) {
+      // qfg-gj3i: mirror buildRealDeps — return the local origin/main SHA
+      // for clone-path dirs, undefined for bare path. Use execFileSync so
+      // the integration assertion can compare against the same SHA the
+      // bare-repo seeded.
+      if (!(await isGitRepo(dir))) return undefined
+      try {
+        const out = execFileSync('git', ['-C', dir, 'rev-parse', 'origin/main'], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+        return out.length > 0 ? out : undefined
+      } catch {
+        return undefined
+      }
+    },
   }
 
   const deps: RunPushDeps = {
@@ -389,6 +405,11 @@ describe('runPush: integration against real local bare git repos (server-side co
       expect(f.path).to.equal('configs/one.json')
       expect(f.beforeJson).to.equal('{"k":1}\n')
       expect(f.afterJson).to.equal('{"k":99}\n')
+
+      // qfg-gj3i: clone path forwards the local origin/main SHA so the
+      // server can reject the push if origin moved between fetch and now.
+      const expectedOriginSha = git(local, 'rev-parse', 'origin/main')
+      expect(sent.expectedSha).to.equal(expectedOriginSha)
     })
   })
 
@@ -449,6 +470,11 @@ describe('runPush: integration against real local bare git repos (server-side co
       expect(del.kind).to.equal('delete')
       expect(del.beforeJson).to.equal('{"k":9}\n')
       expect(del.afterJson).to.equal(undefined)
+
+      // qfg-gj3i: bare path has no `.git/`, so expectedSha is omitted.
+      // Server treats absence as "non-clone client" and applies its
+      // bare-path lock policy.
+      expect(sent.expectedSha).to.equal(undefined)
     })
   })
 

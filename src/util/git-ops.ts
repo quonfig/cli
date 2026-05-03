@@ -447,3 +447,28 @@ export const gitPullRebase = async (dir: string): Promise<GitPullRebaseResult> =
     return {kind: 'failed', reason}
   }
 }
+
+/**
+ * Returns the local SHA of `origin/main` (i.e. the remote tip we last
+ * fetched), or undefined if the repo has no `origin/main` ref.
+ *
+ * Used as the `expectedSha` passed to the server-side `configs.push`
+ * optimistic lock (qfg-gj3i): the server compares the value we send
+ * against the current Gitea workspace HEAD and rejects the push if
+ * origin advanced between fetch and push. Belt-and-suspenders next to
+ * the CLI-side stale-HEAD guard from qfg-fboj — closes the gap for
+ * non-CLI clients and CLI regressions.
+ *
+ * Returns undefined on bare-path pushes (no `.git/`) and on any git
+ * error so the caller can fall back to other locks rather than aborting
+ * on an opaque rev-parse failure.
+ */
+export const getOriginMainSha = async (dir: string): Promise<string | undefined> => {
+  try {
+    const {stdout} = await runGit(['-C', dir, 'rev-parse', 'origin/main'])
+    const sha = stdout.trim()
+    return sha.length > 0 ? sha : undefined
+  } catch {
+    return undefined
+  }
+}

@@ -85,6 +85,7 @@ function makeDeps(opts: {
     countFilesInRemote: async () => 100,
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
+    getOriginMainSha: async () => undefined,
     ...opts.gitOps,
   }
 
@@ -311,6 +312,82 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         if (result.kind === 'pushed') {
           expect(result.commitSha).to.equal('deadbeef0011223344556677')
         }
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+  })
+
+  describe('expectedSha forwarding (qfg-gj3i)', () => {
+    const FAKE_ORIGIN_SHA = '1234567890abcdef1234567890abcdef12345678'
+
+    it('forwards origin/main SHA from gitOps.getOriginMainSha as expectedSha on the push input', async () => {
+      const dir = tmpDir()
+      try {
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
+        const deltas: FileDelta[] = [
+          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
+        ]
+        const {deps, captured} = makeDeps({
+          deltas,
+          gitOps: {
+            isGitRepo: async () => true,
+            getRemoteOriginUrl: async () => BACKEND.repoUrl,
+            countFilesInRemote: async () => 100,
+            getOriginMainSha: async () => FAKE_ORIGIN_SHA,
+          },
+        })
+
+        const input: RunPushInput = {
+          dir,
+          requestedTarget: BACKEND_UUID,
+          yes: true,
+          skipValidate: true,
+          noPinWrite: true,
+        }
+        await runPush(input, deps)
+
+        expect(captured.pushToServer).to.have.length(1)
+        expect(captured.pushToServer[0].expectedSha).to.equal(FAKE_ORIGIN_SHA)
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('omits expectedSha entirely when gitOps.getOriginMainSha returns undefined (bare path)', async () => {
+      const dir = tmpDir()
+      try {
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
+        const deltas: FileDelta[] = [
+          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
+        ]
+        const {deps, captured} = makeDeps({
+          deltas,
+          gitOps: {
+            isGitRepo: async () => true,
+            getRemoteOriginUrl: async () => BACKEND.repoUrl,
+            countFilesInRemote: async () => 100,
+            getOriginMainSha: async () => undefined,
+          },
+        })
+
+        const input: RunPushInput = {
+          dir,
+          requestedTarget: BACKEND_UUID,
+          yes: true,
+          skipValidate: true,
+          noPinWrite: true,
+        }
+        await runPush(input, deps)
+
+        expect(captured.pushToServer).to.have.length(1)
+        const sent = captured.pushToServer[0]
+        // Distinguish "key omitted" from "key present with value undefined".
+        // The wire shape uses the former — server-side Zod treats `expectedSha?`
+        // as optional, and we want bare-path requests to look identical to a
+        // pre-qfg-gj3i client (no key) rather than carrying a sentinel.
+        expect(sent.expectedSha).to.equal(undefined)
+        expect(Object.prototype.hasOwnProperty.call(sent, 'expectedSha')).to.equal(false)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
