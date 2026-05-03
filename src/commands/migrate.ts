@@ -6,7 +6,7 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {CrossSourceError, type ImportState, assertSourceMatches, readImportState} from '../migrate/import-state.js'
-import {applyLocalMigration} from '../migrate/local-write.js'
+import {applyLocalMigration, MigratorKeyCollisionError} from '../migrate/local-write.js'
 import {buildPushConflictSuggestion} from '../migrate/migrate-suggestion.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
 import {PushConflictError, PushHookRejectedError} from '../util/clone-and-stack-push.js'
@@ -183,12 +183,11 @@ export default class Migrate extends BaseCommand {
         try {
           const result = await pushMigrationToCloud({
             changes: toProcess,
-            commitMessage: buildCommitMessage(flags.from, toProcess.length),
             environments,
             importState,
             localDir: dir,
             remoteUrl: repoUrl,
-            reportData: buildReportData(flags.from, toProcess.length),
+            reportData: buildReportData(flags.from),
             source,
           })
 
@@ -228,6 +227,10 @@ export default class Migrate extends BaseCommand {
             )
           }
 
+          if (error instanceof MigratorKeyCollisionError) {
+            return this.err(error.message)
+          }
+
           throw error
         }
       }
@@ -242,11 +245,10 @@ export default class Migrate extends BaseCommand {
 
       const localResult = await applyLocalMigration({
         changes: toProcess,
-        commitMessage: buildCommitMessage(flags.from, toProcess.length),
         environments,
         importState: localImportState,
         localDir: dir,
-        reportData: buildReportData(flags.from, toProcess.length),
+        reportData: buildReportData(flags.from),
         source,
       })
 
@@ -265,6 +267,7 @@ export default class Migrate extends BaseCommand {
       }
     } catch (error) {
       if (error instanceof NotYetImplementedError) return this.err(error.message)
+      if (error instanceof MigratorKeyCollisionError) return this.err(error.message)
       throw error
     } finally {
       // Surface source-level warnings even if apply/push threw (e.g.
@@ -302,17 +305,20 @@ function latestChangedAtOf(changes: LegacyChange[], fallback: number | undefined
   return latest ?? fallback
 }
 
-function buildCommitMessage(source: string, count: number): string {
-  return `migrator: import ${count} change(s) from ${source}`
-}
-
-function buildReportData(source: string, count: number): MigrationReportData {
+function buildReportData(source: string): MigrationReportData {
+  // Counts are placeholders; applyLocalMigration / pushMigrationToCloud
+  // override `counts` after writing files so they reflect what actually
+  // landed on disk (qfg-7eig). The commit message is also derived from those
+  // counts inside the apply function — it is not built here.
   return {
     cleanMappings: [],
     counts: {
+      configsMigrated: 0,
       environmentsMapped: 0,
-      flagsMigrated: count,
+      flagsMigrated: 0,
       itemsSkipped: 0,
+      logLevelsMigrated: 0,
+      schemasMigrated: 0,
       segmentsMigrated: 0,
     },
     dryRun: false,

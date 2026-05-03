@@ -10,9 +10,12 @@ import type {
 } from './source.js'
 
 export interface MigrationReportCounts {
+  configsMigrated: number
   environmentsMapped: number
   flagsMigrated: number
   itemsSkipped: number
+  logLevelsMigrated: number
+  schemasMigrated: number
   segmentsMigrated: number
 }
 
@@ -84,7 +87,10 @@ const renderCounts = (counts: MigrationReportCounts): string =>
     '## Counts',
     '',
     `- Flags migrated: ${counts.flagsMigrated}`,
+    `- Configs migrated: ${counts.configsMigrated}`,
     `- Segments migrated: ${counts.segmentsMigrated}`,
+    `- Schemas migrated: ${counts.schemasMigrated}`,
+    `- Log levels migrated: ${counts.logLevelsMigrated}`,
     `- Environments mapped: ${counts.environmentsMapped}`,
     `- Items skipped: ${counts.itemsSkipped}`,
   ].join('\n')

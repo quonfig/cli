@@ -103,7 +103,7 @@ function validFeatureFlag(key: string, value = true): string {
 function emptyReport(source = 'fake'): Parameters<typeof pushMigrationToCloud>[0]['reportData'] {
   return {
     cleanMappings: [],
-    counts: {environmentsMapped: 0, flagsMigrated: 0, itemsSkipped: 0, segmentsMigrated: 0},
+    counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 0, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
     dryRun: false,
     environmentMap: [],
     followUp: {mustFixBeforeCutover: [], reviewPostCutover: []},
@@ -137,7 +137,6 @@ describe('pushMigrationToCloud', () => {
 
     const result = await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000), makeChange('flag-b', 2000)],
-      commitMessage: 'migrator: import 2 flags',
       environments: ['production'],
       importState: {lastProcessedAt: 2000, source: 'fake'},
       localDir,
@@ -148,7 +147,7 @@ describe('pushMigrationToCloud', () => {
           {legacyKey: 'flag-a', quonfigKey: 'flag-a'},
           {legacyKey: 'flag-b', quonfigKey: 'flag-b'},
         ],
-        counts: {environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, segmentsMigrated: 0},
+        counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
       },
       source: makeFakeSource(filesByKey),
     })
@@ -169,7 +168,7 @@ describe('pushMigrationToCloud', () => {
     expect(state.source).to.equal('fake')
     expect(state.lastProcessedAt).to.equal(2000)
 
-    expect(logSubjects(reader)).to.deep.equal(['migrator: import 2 flags', 'initial'])
+    expect(logSubjects(reader)).to.deep.equal(['migrator: imported 2 flag(s) from fake', 'initial'])
   })
 
   it('re-run stacks delta on top of a UI commit: flipped flag updated, new flag added, UI-edited flag untouched, linear history, MIGRATION_REPORT.md reflects only the delta', async () => {
@@ -180,14 +179,13 @@ describe('pushMigrationToCloud', () => {
     // First run: import flag-a (v1=true) and flag-b (v1=true)
     await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000), makeChange('flag-b', 2000)],
-      commitMessage: 'migrator: run 1',
       environments: ['production'],
       importState: {lastProcessedAt: 2000, source: 'fake'},
       localDir,
       remoteUrl: remote,
       reportData: {
         ...emptyReport(),
-        counts: {environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, segmentsMigrated: 0},
+        counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
       },
       source: makeFakeSource(
         new Map([
@@ -211,7 +209,6 @@ describe('pushMigrationToCloud', () => {
     // flag-b is NOT re-exported — simulating that Launch did not change it and we only push the delta.
     const result = await pushMigrationToCloud({
       changes: [makeChange('flag-a', 3000), makeChange('flag-c', 4000)],
-      commitMessage: 'migrator: run 2 delta',
       environments: ['production'],
       importState: {lastProcessedAt: 4000, source: 'fake'},
       localDir,
@@ -222,7 +219,7 @@ describe('pushMigrationToCloud', () => {
           {legacyKey: 'flag-a', quonfigKey: 'flag-a'},
           {legacyKey: 'flag-c', quonfigKey: 'flag-c'},
         ],
-        counts: {environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, segmentsMigrated: 0},
+        counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
       },
       source: makeFakeSource(
         new Map([
@@ -239,9 +236,9 @@ describe('pushMigrationToCloud', () => {
 
     // Linear history: initial + run-1 + UI + run-2 (no force-push clobbered anything)
     expect(logSubjects(reader)).to.deep.equal([
-      'migrator: run 2 delta',
+      'migrator: imported 2 flag(s) from fake',
       'ui: flip flag-b',
-      'migrator: run 1',
+      'migrator: imported 2 flag(s) from fake',
       'initial',
     ])
 
@@ -279,7 +276,6 @@ describe('pushMigrationToCloud', () => {
 
     await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000)],
-      commitMessage: 'migrator: import',
       environments: ['production'],
       importState: {lastProcessedAt: 1000, source: 'fake'},
       localDir,
@@ -334,7 +330,6 @@ describe('pushMigrationToCloud', () => {
     try {
       await pushMigrationToCloud({
         changes: [makeChange('flag-bad', 1000)],
-        commitMessage: 'migrator: import broken flag',
         environments: ['production'],
         importState: {lastProcessedAt: 1000, source: 'fake'},
         localDir,
@@ -376,7 +371,6 @@ describe('pushMigrationToCloud', () => {
 
     await pushMigrationToCloud({
       changes: [makeChange('flag-a', 1000)],
-      commitMessage: 'migrator: import',
       environments: ['development', 'production', 'staging1', 'staging2'],
       importState: {lastProcessedAt: 1000, source: 'fake'},
       localDir,

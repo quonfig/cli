@@ -22,11 +22,14 @@ export interface ApplyLocalMigrationOptions {
   /** Initial branch name when initializing a fresh repo. Defaults to `main`. */
   branch?: string
   changes: LegacyChange[]
-  commitMessage: string
   /** Environments discovered from the source (slugified). Written to `quonfig.json` if missing. */
   environments: string[]
   importState: ImportState
   localDir: string
+  /**
+   * Base report data. The migrator overrides `counts` after writing files,
+   * since counts must reflect what was actually written to disk (qfg-7eig).
+   */
   reportData: MigrationReportData
   source: MigrationSource
 }
@@ -75,11 +78,57 @@ const ensureLocalRepo = async (localDir: string, branch: string): Promise<'initi
   return 'initialized'
 }
 
-const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): DuplicateResolution[] => {
+export class MigratorKeyCollisionError extends Error {
+  constructor(
+    public readonly destPath: string,
+    public readonly firstSourceKey: string,
+    public readonly secondSourceKey: string,
+  ) {
+    super(
+      `Two source keys collide on destination ${destPath} after key normalization: ` +
+        `"${firstSourceKey}" and "${secondSourceKey}". Quonfig keys must be globally unique within a type tree. ` +
+        `Rename one in the source system and re-run.`,
+    )
+    this.name = 'MigratorKeyCollisionError'
+  }
+}
+
+const ensureNoNestedPath = (relativePath: string): void => {
+  // qfg-qhk1: every output must be exactly `<type-dir>/<flat-key>.json` —
+  // never nested. If we ever emit a nested path, refuse to write so we surface
+  // it loudly rather than silently producing dirs that lose the flat-file
+  // contract (and break tombstone cleanup on subsequent runs).
+  const parts = relativePath.split('/')
+  if (parts.length !== 2) {
+    throw new Error(
+      `Migrator refusing to write nested path "${relativePath}" — outputs must be flat <type-dir>/<key>.json. ` +
+        `This is a bug in the source's translate() — it should normalize key separators before computing the path.`,
+    )
+  }
+}
+
+const rmdirIfEmpty = (dir: string): void => {
+  try {
+    fs.rmdirSync(dir)
+  } catch (error) {
+    const e = error as NodeJS.ErrnoException
+    // ENOTEMPTY: still has contents (expected, leave alone). ENOENT: already gone.
+    if (e.code !== 'ENOTEMPTY' && e.code !== 'ENOENT') throw error
+  }
+}
+
+export const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): WriteQuonfigFilesResult => {
   const livePaths = new Map<string, true>()
+  // qfg-qhk1: track which source key wrote each destination path. If a second,
+  // different source key tries to write to the same destination, that is a
+  // post-normalization collision (e.g. source had keys `foo/bar` and `foo.bar`,
+  // both normalize to `foo.bar`). Throw with a clear message.
+  const pathOwners = new Map<string, string>()
   for (const change of changes) {
     const files = source.translate(change)
+    const sourceKey = change.key ?? '(unknown)'
     for (const file of files) {
+      ensureNoNestedPath(file.path)
       const full = path.join(dir, file.path)
       if (file.deleted) {
         try {
@@ -89,14 +138,26 @@ const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: Migrati
         }
 
         livePaths.delete(file.path)
+        pathOwners.delete(file.path)
+        // qfg-qhk1: clean up any empty parent dirs left over from prior runs
+        // that wrote under a nested layout. (New runs never create nested
+        // dirs because of normalizeKey + ensureNoNestedPath, but stale dirs
+        // from older versions on disk would otherwise persist.)
+        rmdirIfEmpty(path.dirname(full))
       } else {
         if (file.contents === undefined) {
           throw new Error(`translate() emitted a write op for ${file.path} without contents`)
         }
 
+        const existingOwner = pathOwners.get(file.path)
+        if (existingOwner !== undefined && existingOwner !== sourceKey) {
+          throw new MigratorKeyCollisionError(file.path, existingOwner, sourceKey)
+        }
+
         fs.mkdirSync(path.dirname(full), {recursive: true})
         fs.writeFileSync(full, file.contents)
         livePaths.set(file.path, true)
+        pathOwners.set(file.path, sourceKey)
       }
     }
   }
@@ -114,7 +175,59 @@ const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: Migrati
     }
   }
 
-  return resolutions
+  return {livePaths: [...livePaths.keys()], resolutions}
+}
+
+interface WriteQuonfigFilesResult {
+  livePaths: string[]
+  resolutions: DuplicateResolution[]
+}
+
+const countsFromLivePaths = (livePaths: string[]): {
+  configsMigrated: number
+  flagsMigrated: number
+  logLevelsMigrated: number
+  schemasMigrated: number
+  segmentsMigrated: number
+} => {
+  let flagsMigrated = 0
+  let configsMigrated = 0
+  let segmentsMigrated = 0
+  let schemasMigrated = 0
+  let logLevelsMigrated = 0
+  for (const p of livePaths) {
+    if (p.startsWith('feature-flags/')) flagsMigrated++
+    else if (p.startsWith('configs/')) configsMigrated++
+    else if (p.startsWith('segments/')) segmentsMigrated++
+    else if (p.startsWith('schemas/')) schemasMigrated++
+    else if (p.startsWith('log-levels/')) logLevelsMigrated++
+  }
+
+  return {configsMigrated, flagsMigrated, logLevelsMigrated, schemasMigrated, segmentsMigrated}
+}
+
+export const buildMigrationCounts = (
+  livePaths: string[],
+  environmentsMapped: number,
+  itemsSkipped: number,
+): import('./migration-report.js').MigrationReportCounts => ({
+  ...countsFromLivePaths(livePaths),
+  environmentsMapped,
+  itemsSkipped,
+})
+
+export const buildMigrationCommitMessage = (
+  source: string,
+  counts: import('./migration-report.js').MigrationReportCounts,
+): string => {
+  const parts: string[] = []
+  if (counts.flagsMigrated > 0) parts.push(`${counts.flagsMigrated} flag(s)`)
+  if (counts.configsMigrated > 0) parts.push(`${counts.configsMigrated} config(s)`)
+  if (counts.segmentsMigrated > 0) parts.push(`${counts.segmentsMigrated} segment(s)`)
+  if (counts.schemasMigrated > 0) parts.push(`${counts.schemasMigrated} schema(s)`)
+  if (counts.logLevelsMigrated > 0) parts.push(`${counts.logLevelsMigrated} log-level(s)`)
+  const summary = parts.length === 0 ? 'no objects' : parts.join(', ')
+  return `migrator: imported ${summary} from ${source}`
 }
 
 export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Promise<ApplyLocalMigrationResult> => {
@@ -127,7 +240,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   await runGit(['-C', opts.localDir, 'config', 'user.email', author.email])
 
   ensureQuonfigJson(opts.localDir, opts.environments)
-  const resolutionEntries = writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
+  const {livePaths, resolutions: resolutionEntries} = writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
   removeQfFromGitignore(opts.localDir)
   writeImportState(opts.localDir, opts.importState)
 
@@ -136,8 +249,12 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
   const duplicateResolutions: DuplicateResolutionSummary | null =
     resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
+  const skippedTotal =
+    (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
+  const counts = buildMigrationCounts(livePaths, opts.environments.length, skippedTotal)
   const reportData: MigrationReportData = {
     ...opts.reportData,
+    counts,
     ...(coercedSentinels ? {coercedSentinels} : {}),
     ...(droppedOverrides ? {droppedOverrides} : {}),
     ...(duplicateResolutions ? {duplicateResolutions} : {}),
@@ -159,8 +276,9 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
     }
   }
 
+  const commitMessage = buildMigrationCommitMessage(opts.source.name, counts)
   await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
-    stdin: opts.commitMessage,
+    stdin: commitMessage,
     env: {
       GIT_AUTHOR_EMAIL: author.email,
       GIT_AUTHOR_NAME: author.name,

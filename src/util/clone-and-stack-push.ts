@@ -20,8 +20,12 @@ export interface CloneAndStackPushOptions {
   author?: PushIdentity
   /** Branch to track and push. Defaults to `main`. */
   branch?: string
-  /** Single commit message for the delta. */
-  commitMessage: string
+  /**
+   * Commit message for the delta. Pass a function when the message depends on
+   * counts that are only known after `applyDelta` runs (qfg-7eig). The function
+   * is invoked after applyDelta but before commit.
+   */
+  commitMessage: string | (() => string)
   /** Where to clone into, or an existing clone to reuse. */
   localDir: string
   /** Gitea repo URL (may include token). */
@@ -107,7 +111,13 @@ const ensureCloneOrReuse = async (
     }
 
     throw new Error(
-      `Local dir ${localDir} is a git repo but its origin (${origin ? redactToken(origin) : 'unset'}) does not match the target remote. Refuse to clobber — pass an empty/non-existent path or a matching clone.`,
+      `Local dir ${localDir} is a git repo but its origin (${origin ? redactToken(origin) : 'unset'}) does not match the target remote.\n` +
+        `Refuse to clobber.\n\n` +
+        `Most likely cause: you ran \`qfg migrate --dir ${localDir}\` first (which \`git init\`s a fresh repo with no remote) and are now trying to \`--push\` from the same dir.\n\n` +
+        `Pick one of:\n` +
+        `  - Re-run with \`--push\` against a NEW empty/non-existent path (the canonical flow).\n` +
+        `  - Run \`qfg pull --workspace <org/slug> --dir ${localDir}-clone\` to seed a fresh clone, then \`qfg migrate --dir ${localDir}-clone --workspace <org/slug> --push\`.\n` +
+        `Docs: https://docs.quonfig.com/docs/migrating/from-launch (Flow B).`,
     )
   }
 
@@ -148,8 +158,9 @@ export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise
     return {action, committed: false, commitSha: null}
   }
 
+  const commitMessage = typeof opts.commitMessage === 'function' ? opts.commitMessage() : opts.commitMessage
   await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
-    stdin: opts.commitMessage,
+    stdin: commitMessage,
     env: {
       GIT_AUTHOR_NAME: author.name,
       GIT_AUTHOR_EMAIL: author.email,

@@ -29,6 +29,107 @@ export function normalizeLogLevelKey(key: string): string {
   return key.startsWith('log-level.') ? key : `log-level.${key}`
 }
 
+/**
+ * qfg-qhk1: Quonfig keys cannot contain `/` — keys are stored as flat dotted
+ * filenames, and a `/` in a source key would create a nested directory tree
+ * (data-loss-on-tombstone, cross-key collisions). Normalize `/` to `.` so the
+ * destination is always flat.
+ */
+export function normalizeKey(key: string): string {
+  return key.replaceAll('/', '.')
+}
+
+/**
+ * qfg-l18w: Operators Quonfig accepts in rule criteria. Mirrors the
+ * `OperatorSchema` enum in cli/src/verify/validate.ts (and app-quonfig's
+ * config-schemas.ts). If we emit an operator outside this set, qfg verify
+ * fails — which is what was happening for `PROP_SEMVER_*` in the FormHealth
+ * dry-run before this check existed. Keep this list in lockstep with the
+ * verify schema; a CI test in this file enforces parity.
+ */
+export const QUONFIG_SUPPORTED_OPERATORS = new Set<string>([
+  'ALWAYS_TRUE',
+  'PROP_IS_ONE_OF',
+  'PROP_IS_NOT_ONE_OF',
+  'PROP_STARTS_WITH_ONE_OF',
+  'PROP_DOES_NOT_START_WITH_ONE_OF',
+  'PROP_ENDS_WITH_ONE_OF',
+  'PROP_DOES_NOT_END_WITH_ONE_OF',
+  'PROP_CONTAINS_ONE_OF',
+  'PROP_DOES_NOT_CONTAIN_ONE_OF',
+  'PROP_LESS_THAN',
+  'PROP_LESS_THAN_OR_EQUAL',
+  'PROP_GREATER_THAN',
+  'PROP_GREATER_THAN_OR_EQUAL',
+  'PROP_BEFORE',
+  'PROP_AFTER',
+  'PROP_MATCHES',
+  'PROP_DOES_NOT_MATCH',
+  'IN_SEG',
+  'NOT_IN_SEG',
+  'IN_INT_RANGE',
+  'LOOKUP_KEY_IN',
+  'LOOKUP_KEY_NOT_IN',
+])
+
+/**
+ * qfg-l18w: Walk every rule criterion in a transformed config and fail-fast at
+ * migrate time if it carries an operator Quonfig does not understand. The
+ * primary offender today is `PROP_SEMVER_*` (Launch supports semver
+ * comparisons; Quonfig does not have a semver operator at all). Without this
+ * check the migrator silently writes invalid JSON and the failure surfaces
+ * later at qfg-verify — the customer's local file is broken and re-runs
+ * re-clobber any manual fix.
+ *
+ * Routes through `InvalidSourceConfigError` so the failure is per-config (the
+ * rest of the run still produces a usable workspace, and the offending key
+ * lands in MIGRATION_REPORT.md's "Skipped invalid configs" section with a
+ * specific reason — exactly what the customer needs to take to support).
+ */
+function collectUnsupportedOperators(rules: unknown): string[] {
+  if (!Array.isArray(rules)) return []
+  const found: string[] = []
+  for (const rule of rules) {
+    if (!rule || typeof rule !== 'object') continue
+    const r = rule as {criteria?: unknown}
+    if (!Array.isArray(r.criteria)) continue
+    for (const crit of r.criteria) {
+      if (!crit || typeof crit !== 'object') continue
+      const c = crit as {operator?: unknown}
+      if (typeof c.operator !== 'string') continue
+      if (!QUONFIG_SUPPORTED_OPERATORS.has(c.operator)) {
+        found.push(c.operator)
+      }
+    }
+  }
+
+  return found
+}
+
+function validateOperators(out: Record<string, unknown>): void {
+  const offenders = new Set<string>()
+  const defaultSection = out.default as {rules?: unknown} | undefined
+  if (defaultSection) {
+    for (const op of collectUnsupportedOperators(defaultSection.rules)) offenders.add(op)
+  }
+
+  if (Array.isArray(out.environments)) {
+    for (const env of out.environments as Array<Record<string, unknown>>) {
+      for (const op of collectUnsupportedOperators(env.rules)) offenders.add(op)
+    }
+  }
+
+  if (offenders.size === 0) return
+  const key = String(out.key ?? 'unknown')
+  const sorted = [...offenders].sort()
+  throw new InvalidSourceConfigError(
+    `Unsupported operator(s) for "${key}": ${sorted.join(', ')}. ` +
+      `Quonfig does not currently translate these from the source schema. ` +
+      `Recreate the rule in the source system using a supported operator (see qfg config-schema), ` +
+      `or contact support@quonfig.com if you need this operator added to Quonfig.`,
+  )
+}
+
 function zeroValue(valueType: string): {type: string; value: unknown} {
   switch (valueType) {
     case 'bool': {
@@ -174,6 +275,12 @@ export function transformConfig(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = JSON.parse(JSON.stringify(config))
 
+  // qfg-qhk1: normalize `/` to `.` in the key so the JSON `key` field matches
+  // the flat dotted filename the migrator will write.
+  if (typeof out.key === 'string') {
+    out.key = normalizeKey(out.key)
+  }
+
   delete out.changedBy
   delete out.modifiedAt
   delete out.createdAt
@@ -305,31 +412,34 @@ export function transformConfig(
 
   normalizeJsonValuesInConfig(out)
 
+  validateOperators(out)
+
   return out
 }
 
 export function getOutputPath(type: string, key: string): string {
   const normalizedType = type.toUpperCase()
+  const k = normalizeKey(key)
 
   switch (normalizedType) {
     case 'FEATURE_FLAG': {
-      return `feature-flags/${key}.json`
+      return `feature-flags/${k}.json`
     }
 
     case 'LOG_LEVEL_V2': {
-      return `log-levels/${normalizeLogLevelKey(key)}.json`
+      return `log-levels/${normalizeLogLevelKey(k)}.json`
     }
 
     case 'SCHEMA': {
-      return `schemas/${key}.json`
+      return `schemas/${k}.json`
     }
 
     case 'SEGMENT': {
-      return `segments/${key}.json`
+      return `segments/${k}.json`
     }
 
     default: {
-      return `configs/${key}.json`
+      return `configs/${k}.json`
     }
   }
 }
