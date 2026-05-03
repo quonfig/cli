@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.35 - 2026-05-03
+
+- fix(qfg-7eig): `MIGRATION_REPORT.md` Counts section now reflects what was actually written to disk per type (flags, configs, segments, schemas, log-levels) instead of the source change-event count. The migrator commit message uses the same per-type summary (e.g. `migrator: imported 166 flag(s), 142 config(s), 1 segment(s) from launch`) instead of `migrator: import 5332 change(s)`.
+- fix(qfg-qhk1): migrator now normalizes `/` to `.` in source keys so outputs are always flat `<type-dir>/<key>.json`. Detects post-normalization key collisions and throws `MigratorKeyCollisionError` with both colliding source keys named. Refuses to write nested paths if a translate() emits one. Cleans up empty parent dirs left over from legacy nested layouts on tombstone.
+- fix(qfg-l18w): migrator validates rule operators against the Quonfig schema at migrate time. Configs whose rules use unsupported operators (e.g. `PROP_SEMVER_*`) are now per-config skipped — the offending key lands in `MIGRATION_REPORT.md`'s "Skipped invalid configs" section with the operator name(s) listed, instead of silently writing JSON that fails at qfg-verify. A parity test asserts the migrator's allowlist stays in lockstep with verify's `OperatorSchema`.
+- fix(qfg-fbh0): when `qfg migrate --push` refuses to clobber a local dir whose origin doesn't match the target, the error now names the most likely cause (you ran `qfg migrate --dir` first, which `git init`'d a no-remote repo) and lists two concrete fixes (re-run with `--push` against a NEW empty path, or `qfg pull` first then re-run). Docs at https://docs.quonfig.com/docs/migrating/from-launch updated to use the proven single-command flow.
+
 ## 0.0.34 - 2026-05-03
 
 - fix: `qfg push` refuses to run when local HEAD is behind or has diverged from origin/main. Previously the clone-path push computed `HEAD..origin/main` after fetch and shipped the *reversal* deltas to the server, silently undoing any commits landed since the user's last `qfg pull`. Working-tree edits the user had not committed were also dropped without warning. Now throws `STALE_HEAD` with a "run `qfg pull` first" message, and warns about every dirty tracked file so the user knows their uncommitted edits were not pushed (qfg-fboj). The same guard also covers the delete-vs-edit silent-revival case (qfg-0j59).
