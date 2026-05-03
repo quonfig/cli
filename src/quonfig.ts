@@ -38,7 +38,7 @@ export const initQuonfig = async (_ctx: CommandLike, flagsOrDatafile: FlagsOrDat
     contextUploadMode: 'none',
     datafile,
     enableSSE: false,
-    apiUrl,
+    apiUrls: [apiUrl],
   })
 
   await quonfig.init()

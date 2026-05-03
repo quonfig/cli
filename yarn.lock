@@ -2123,7 +2123,7 @@ __metadata:
     "@oclif/plugin-plugins": "npm:^4"
     "@oclif/prettier-config": "npm:^0.2.1"
     "@oclif/test": "npm:^3"
-    "@quonfig/node": "npm:^0.0.11"
+    "@quonfig/node": "npm:^0.0.24"
     "@types/chai": "npm:^4"
     "@types/common-tags": "npm:^1.8.4"
     "@types/lodash.camelcase": "npm:^4.3.9"
@@ -2161,13 +2161,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@quonfig/node@npm:^0.0.11":
-  version: 0.0.11
-  resolution: "@quonfig/node@npm:0.0.11"
+"@quonfig/node@npm:^0.0.24":
+  version: 0.0.24
+  resolution: "@quonfig/node@npm:0.0.24"
   dependencies:
-    eventsource: "npm:^2.0.2"
+    eventsource: "npm:^3.0.0"
     murmurhash: "npm:^2.0.1"
-  checksum: 10c0/cf02835c716876c18c08641d2fd1ef7b81d14cf2e1b23dbc330ef353b2709486940ee2b7fcaa94eb1458991b911bb2a8bedabb550a94c081c7969087c8cbb45c
+  peerDependencies:
+    pino: ">=7.0.0"
+    winston: ">=3.0.0"
+  peerDependenciesMeta:
+    pino:
+      optional: true
+    winston:
+      optional: true
+  checksum: 10c0/02e86458a25f956b39ff4623b1625d24baf90485f9b54ebb92150ed229a35c6cffdcc80f0cc3eacc5a20cb714729b209bf429d45a9b5a457deab0eecb031668c
   languageName: node
   linkType: hard
 
@@ -5383,10 +5391,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eventsource@npm:^2.0.2":
-  version: 2.0.2
-  resolution: "eventsource@npm:2.0.2"
-  checksum: 10c0/0b8c70b35e45dd20f22ff64b001be9d530e33b92ca8bdbac9e004d0be00d957ab02ef33c917315f59bf2f20b178c56af85c52029bc8e6cc2d61c31d87d943573
+"eventsource-parser@npm:^3.0.1":
+  version: 3.0.8
+  resolution: "eventsource-parser@npm:3.0.8"
+  checksum: 10c0/3a73eee85311f33b12fa558381a477c1bdcf8c024a429a9d48f87b043e328c26d24ed280fd7ca92e2fdd4c8c37f749b758420c1533778aaca2beabf895024efa
+  languageName: node
+  linkType: hard
+
+"eventsource@npm:^3.0.0":
+  version: 3.0.7
+  resolution: "eventsource@npm:3.0.7"
+  dependencies:
+    eventsource-parser: "npm:^3.0.1"
+  checksum: 10c0/c48a73c38f300e33e9f11375d4ee969f25cbb0519608a12378a38068055ae8b55b6e0e8a49c3f91c784068434efe1d9f01eb49b6315b04b0da9157879ce2f67d
   languageName: node
   linkType: hard
 
