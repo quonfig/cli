@@ -23,7 +23,7 @@
     "@oclif/plugin-plugins": "^4",
     "@quonfig/node": "^0.0.24",
     "acorn": "^8.10.0",
-    "acorn-walk": "^8.2.0",
+    "acorn-walk": "^8.3.5",
     "chalk": "^5.4.1",
     "common-tags": "^1.8.2",
     "fuzzy": "^0.1.3",
