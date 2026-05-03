@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.36 - 2026-05-03
+
+- feat(qfg-0q1f): `qfg verify` accepts `PROP_SEMVER_LESS_THAN`, `PROP_SEMVER_EQUAL`, and `PROP_SEMVER_GREATER_THAN` operators in rule criteria. Schema's `OperatorSchema` extended; parity test asserts the migrator allowlist stays in lockstep.
+- feat(qfg-0q1f): Launch migrator now passes `PROP_SEMVER_*` rules through to the output config instead of skipping them as unsupported. Resolves the FormHealth migration blocker on mobile-app-version-gated flags (qfg-l18w).
+
 ## 0.0.35 - 2026-05-03
 
 - fix(qfg-7eig): `MIGRATION_REPORT.md` Counts section now reflects what was actually written to disk per type (flags, configs, segments, schemas, log-levels) instead of the source change-event count. The migrator commit message uses the same per-type summary (e.g. `migrator: imported 166 flag(s), 142 config(s), 1 segment(s) from launch`) instead of `migrator: import 5332 change(s)`.
