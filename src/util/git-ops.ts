@@ -390,3 +390,60 @@ export const hasAtLeastOneCommit = async (dir: string): Promise<boolean> => {
  * Get the URL stripped of credentials for display purposes.
  */
 export const displayUrl = (url: string): string => redactToken(url)
+
+/**
+ * Outcome of `gitPullRebase`. Three branches the caller MUST distinguish
+ * — silent failure here is what made qfg-4tey a P1 (qfg pull exit 0 with
+ * no recovery path).
+ */
+export type GitPullRebaseResult =
+  | {kind: 'clean'; commitsRebased: number}
+  | {kind: 'conflicts'; conflictedFiles: string[]}
+  | {kind: 'failed'; reason: string}
+
+/**
+ * `git pull --rebase origin main`. Replays local commits on top of the
+ * remote tip. On conflicts, leaves the repo in rebase-in-progress state
+ * with `<<<<<<<` / `=======` / `>>>>>>>` markers planted by git so the
+ * user can resolve via standard git tools (`git rebase --continue` /
+ * `git rebase --abort`).
+ *
+ * Caller is responsible for surfacing recovery instructions; this function
+ * only reports the outcome.
+ */
+export const gitPullRebase = async (dir: string): Promise<GitPullRebaseResult> => {
+  // Count local-only commits BEFORE the rebase so the success path can
+  // tell the user how many got moved. After a clean rebase, origin/main
+  // is the merge-base and ahead-count == commits-rebased.
+  let commitsRebased = 0
+  try {
+    const {stdout} = await runGit(['-C', dir, 'rev-list', '--count', 'origin/main..HEAD'])
+    commitsRebased = Number.parseInt(stdout.trim(), 10) || 0
+  } catch {
+    // Non-fatal — counting is for UX, not correctness.
+  }
+
+  try {
+    await runGit(['-C', dir, 'pull', '--rebase', 'origin', 'main'])
+    return {kind: 'clean', commitsRebased}
+  } catch (err: unknown) {
+    // Distinguish "rebase paused on conflicts" from "rebase never started".
+    // Conflicts: `diff --diff-filter=U` lists the unmerged paths and
+    // `.git/rebase-merge/` is present.
+    try {
+      const {stdout} = await runGit(['-C', dir, 'diff', '--name-only', '--diff-filter=U'])
+      const conflictedFiles = stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (conflictedFiles.length > 0) {
+        return {kind: 'conflicts', conflictedFiles}
+      }
+    } catch {
+      // Fall through to 'failed' — diff itself errored.
+    }
+
+    const reason = err instanceof Error ? err.message : String(err)
+    return {kind: 'failed', reason}
+  }
+}

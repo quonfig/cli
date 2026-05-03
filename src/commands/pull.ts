@@ -18,6 +18,7 @@ import {
   canFastForward,
   hasDivergedFromRemote,
   gitMergeFfOnly,
+  gitPullRebase,
   gitClone,
   displayUrl,
   addAndCommitFile,
@@ -47,6 +48,11 @@ CLI shortcuts (no JSON editing needed for simple cases):
   static flags = {
     dir: Flags.string({
       description: 'Local directory to clone/update (defaults to QUONFIG_DIR env var)',
+    }),
+    rebase: Flags.boolean({
+      default: false,
+      description:
+        'Replay local commits on top of origin/main when the two have diverged. Conflicts are surfaced via standard git markers; resolve with `git rebase --continue`.',
     }),
     workspace: Flags.string({
       description: 'Workspace ID (defaults to active profile)',
@@ -118,7 +124,45 @@ CLI shortcuts (no JSON editing needed for simple cases):
       const diverged = !ff && (await hasDivergedFromRemote(resolvedDir))
 
       if (diverged) {
-        return this.err('Local commits diverge from remote — resolve manually.')
+        if (flags.rebase) {
+          this.log('Local and origin/main have diverged. Rebasing local commits on top of origin/main...')
+          const result = await gitPullRebase(resolvedDir)
+          if (result.kind === 'clean') {
+            this.log(
+              `Rebased ${result.commitsRebased} local commit(s) onto origin/main. Run \`qfg push\` to publish.`,
+            )
+            // Fall through to post-pull work (QUONFIG_DIR write, pin backfill).
+          } else if (result.kind === 'conflicts') {
+            this.log('')
+            this.log('Rebase paused with conflicts in:')
+            for (const f of result.conflictedFiles) this.log(`  ${f}`)
+            this.log('')
+            this.log('To finish the rebase:')
+            this.log(`  1. Edit each file above and pick the values you want; remove the git conflict markers.`)
+            this.log(`  2. git -C ${resolvedDir} add <files>`)
+            this.log(`  3. git -C ${resolvedDir} rebase --continue`)
+            this.log(`  4. qfg push`)
+            this.log('')
+            this.log('To abort the rebase and try a different approach:')
+            this.log(`  git -C ${resolvedDir} rebase --abort`)
+            return this.err('Rebase paused on conflicts — see instructions above.')
+          } else {
+            return this.err(
+              `Rebase could not start: ${result.reason}\n\n` +
+                `Most likely the working tree has uncommitted edits. Commit or stash them, then re-run \`qfg pull --rebase\`.`,
+            )
+          }
+        } else {
+          return this.err(
+            `Local commits diverge from origin/main.\n\n` +
+              `Your local branch has commits that are not on origin, and origin has commits that are not local. ` +
+              `qfg pull will not merge automatically. Pick one:\n\n` +
+              `  Replay your local commits on top of origin/main:\n` +
+              `    qfg pull --rebase --dir ${resolvedDir}\n\n` +
+              `  Discard your local commits and take origin/main as-is (LOSES local work):\n` +
+              `    git -C ${resolvedDir} reset --hard origin/main`,
+          )
+        }
       }
 
       if (ff) {
