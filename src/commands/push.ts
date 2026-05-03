@@ -7,7 +7,7 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
-import {getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, runGit} from '../util/git-ops.js'
+import {dirtyTrackedFiles, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote, runGit} from '../util/git-ops.js'
 import {
   PushFatalError,
   runPush,
@@ -234,6 +234,26 @@ export function buildRealDeps(
 
       const probe = await ensureBarePathProbe(dir)
       return probe.totalRemoteFiles
+    },
+    async isLocalBehindRemote(dir) {
+      // qfg-fboj: stale-HEAD guard for the clone path. Implementation
+      // lives in git-ops.ts so it can be unit-tested against a real
+      // local git repo. We still gate on isGitRepo here because the
+      // helper does not (it returns false on any error, but we want to
+      // skip the rev-parse cost on the bare path entirely).
+      if (!(await isGitRepo(dir))) return false
+      return isLocalBehindOrDivergedFromRemote(dir)
+    },
+    async dirtyTrackedFiles(dir) {
+      // qfg-fboj: surface uncommitted edits so the user sees they were
+      // not included in this push. Only meaningful on the clone path —
+      // bare path doesn't have a .git/ to status.
+      if (!(await isGitRepo(dir))) return []
+      try {
+        return await dirtyTrackedFiles(dir)
+      } catch {
+        return []
+      }
     },
   }
 

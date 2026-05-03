@@ -83,6 +83,8 @@ function makeDeps(opts: {
     async fetch() {},
     diffHeadVsOrigin: async () => opts.deltas,
     countFilesInRemote: async () => 100,
+    isLocalBehindRemote: async () => false,
+    dirtyTrackedFiles: async () => [],
     ...opts.gitOps,
   }
 

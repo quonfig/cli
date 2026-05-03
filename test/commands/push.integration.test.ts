@@ -44,7 +44,7 @@ import {
   type RunPushInput,
 } from '../../src/push/run-push.js'
 import {FileDelta} from '../../src/push/diff-summary.js'
-import {getRemoteUrl, gitFetch, gitSetRemote, isGitRepo} from '../../src/util/git-ops.js'
+import {dirtyTrackedFiles, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote} from '../../src/util/git-ops.js'
 
 // Stable test identity so commits are reproducible across hosts.
 const TEST_ENV = {
@@ -244,6 +244,18 @@ function buildTestDeps(args: {
 
       const probe = await ensureBarePathProbe(dir)
       return probe.totalRemoteFiles
+    },
+    async isLocalBehindRemote(dir) {
+      if (!(await isGitRepo(dir))) return false
+      return isLocalBehindOrDivergedFromRemote(dir)
+    },
+    async dirtyTrackedFiles(dir) {
+      if (!(await isGitRepo(dir))) return []
+      try {
+        return await dirtyTrackedFiles(dir)
+      } catch {
+        return []
+      }
     },
   }
 

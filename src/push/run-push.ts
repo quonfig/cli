@@ -51,6 +51,23 @@ export interface GitOps {
   getRemoteOriginUrl(dir: string): Promise<string | undefined>
   /** Returns true if the dir has a `.git/` (worktree or repo). */
   isGitRepo(dir: string): Promise<boolean>
+  /**
+   * Returns true if origin/main has commits the local HEAD does not have
+   * (local strictly behind, or diverged). False when local is up-to-date
+   * or strictly ahead of origin/main, or when origin/main is unknown.
+   *
+   * The clone-path stale-HEAD guard (qfg-fboj) refuses to push in either
+   * "behind" or "diverged" state because both produce a diff that ships
+   * REVERSAL deltas to the server, silently undoing remote-newer commits.
+   */
+  isLocalBehindRemote(dir: string): Promise<boolean>
+  /**
+   * Tracked files (relative paths) with working-tree or staged changes.
+   * Used by the clone-path dirty-tree warning to surface uncommitted
+   * edits the user may believe are being pushed (qfg-fboj). Untracked
+   * files are excluded — same rule as `dirtyTrackedFiles` in git-ops.ts.
+   */
+  dirtyTrackedFiles(dir: string): Promise<string[]>
   /** Set origin to `url` (add if missing, set-url if present). */
   setRemoteOrigin(dir: string, url: string): Promise<void>
 }
@@ -276,6 +293,19 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     log('Fetching from remote...')
     await deps.gitOps.fetch(input.dir)
 
+    // Guard 4 (qfg-fboj): refuse to push when local HEAD is behind or has
+    // diverged from origin/main. Without this guard the HEAD-vs-origin
+    // diff produces REVERSAL deltas that silently undo whatever was
+    // committed to the cloud since the user last pulled. Tell the user
+    // to run `qfg pull` first; the standalone `--ff-only` step keeps
+    // push from doing surprising merges on the user's behalf.
+    if (await deps.gitOps.isLocalBehindRemote(input.dir)) {
+      throw new PushFatalError(
+        'Local HEAD is behind origin/main. Run `qfg pull` first to merge remote changes, then re-run `qfg push`.',
+        'STALE_HEAD',
+      )
+    }
+
     // Migration cleanup (qfg-0fn): older `qfg pull` runs wrote the
     // workspace pin to the working tree without committing. The next
     // diff would miss it. Sweep up that legacy state IF the only dirty
@@ -287,6 +317,26 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
         log(`Committed workspace pin "${pinFix.slug}" to quonfig.json (legacy backfill from prior qfg pull).`)
       } else if (pinFix.kind === 'skipped') {
         log(`Note: quonfig.json has uncommitted changes (${pinFix.reason}). They will not be included in this push.`)
+      }
+    } catch {
+      /* non-fatal */
+    }
+
+    // Guard 5 (qfg-fboj): warn loudly about any tracked file with
+    // uncommitted edits beyond the workspace pin. The clone path pushes
+    // HEAD content, not the working tree, so these edits are silently
+    // dropped from the push. Listing them in the log gives the user a
+    // chance to ctrl-C, commit, and retry instead of believing they
+    // shipped what's on disk. Untracked files are intentionally not
+    // included — same rule as dirtyTrackedFiles in git-ops.ts.
+    try {
+      const dirty = await deps.gitOps.dirtyTrackedFiles(input.dir)
+      const noisyDirty = dirty.filter((f) => f !== 'quonfig.json')
+      if (noisyDirty.length > 0) {
+        log('')
+        log('Warning: working tree has uncommitted changes that will NOT be included in this push:')
+        for (const f of noisyDirty) log(`  ${f}`)
+        log('Commit them with `git add` + `git commit` and re-run `qfg push` if you meant to ship them.')
       }
     } catch {
       /* non-fatal */

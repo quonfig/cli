@@ -267,6 +267,39 @@ export const canFastForward = async (dir: string): Promise<boolean> => {
 }
 
 /**
+ * Returns true iff origin/main is NOT an ancestor of the local HEAD —
+ * covering both "local strictly behind" and "diverged" in one boolean.
+ *
+ * Used by the clone-path stale-HEAD guard in `qfg push` (qfg-fboj):
+ * either of those two states would otherwise produce a `HEAD..origin/main`
+ * diff that ships REVERSAL deltas to the server, silently undoing
+ * remote-newer commits. Both must refuse.
+ *
+ * Returns false on any git failure (no `origin/main` ref yet, no `.git/`,
+ * etc.) so the caller falls through to its other guards rather than
+ * aborting on an opaque error.
+ */
+export const isLocalBehindOrDivergedFromRemote = async (dir: string): Promise<boolean> => {
+  try {
+    const {stdout: localSha} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
+    const {stdout: remoteSha} = await runGit(['-C', dir, 'rev-parse', 'origin/main'])
+    const local = localSha.trim()
+    const remote = remoteSha.trim()
+    if (local === remote) return false
+    try {
+      // exit 0 → remote is an ancestor of local → local is strictly ahead, fine.
+      await runGit(['-C', dir, 'merge-base', '--is-ancestor', remote, local])
+      return false
+    } catch {
+      // non-zero exit → remote is NOT an ancestor → behind or diverged.
+      return true
+    }
+  } catch {
+    return false
+  }
+}
+
+/**
  * Returns true if local has commits not reachable from origin/main (diverged).
  */
 export const hasDivergedFromRemote = async (dir: string): Promise<boolean> => {

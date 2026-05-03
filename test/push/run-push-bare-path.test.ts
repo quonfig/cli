@@ -102,6 +102,8 @@ function buildBarePathDepsForTest(
       const p = await ensureProbe(dir)
       return p.totalRemoteFiles
     },
+    isLocalBehindRemote: async () => false,
+    dirtyTrackedFiles: async () => [],
   }
 
   const backend: GiteaTokenMintResult = {
