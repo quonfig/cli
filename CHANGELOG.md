@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.34 - 2026-05-03
+
+- fix: `qfg push` refuses to run when local HEAD is behind or has diverged from origin/main. Previously the clone-path push computed `HEAD..origin/main` after fetch and shipped the *reversal* deltas to the server, silently undoing any commits landed since the user's last `qfg pull`. Working-tree edits the user had not committed were also dropped without warning. Now throws `STALE_HEAD` with a "run `qfg pull` first" message, and warns about every dirty tracked file so the user knows their uncommitted edits were not pushed (qfg-fboj). The same guard also covers the delete-vs-edit silent-revival case (qfg-0j59).
+- feat: `qfg pull --rebase` invokes `git pull --rebase origin main` to replay local commits on top of origin. Conflicts are surfaced via standard git markers with a step-by-step recovery recipe (resolve markers → `git add` → `git rebase --continue` → `qfg push`, plus `git rebase --abort` as the escape hatch) (qfg-4tey).
+- fix: `qfg pull` divergence error now lists concrete recovery options (rebase vs `git reset --hard origin/main`) with the directory path filled in, instead of the previous "resolve manually" message that left non-git-savvy users stranded.
+
 ## 0.0.24 - 2026-04-28
 
 - feat: `qfg login` now opens the WorkOS verification URL in the browser when the user presses Enter. Polling for the device-code token continues regardless, so manual paste still works exactly as before.
