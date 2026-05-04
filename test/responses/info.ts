@@ -233,17 +233,26 @@ const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environmen
   }),
 )
 
+// Captured evaluationStats request bodies for assertions (cleared per-test by server.resetHandlers)
+export const evaluationStatsRequests: Array<Record<string, unknown>> = []
+
 // POST /api/v1/analytics/evaluationStats - evaluation stats (oRPC wrapped)
+//
+// The real server forwards `environment` straight into a ClickHouse query that
+// matches on the environment NAME (see app-quonfig/src/lib/clickhouse/queries.ts).
+// We mirror that here so the CLI's behavior is verified against the real
+// backend semantics — passing the env UUID returns []. (qfg-kemk)
 const evaluationStatsHandler = http.post(
   'https://app.quonfig.com/api/v1/analytics/evaluationStats',
   async ({request}) => {
     const body = (await request.json()) as any
     const configKey = body?.json?.configKey
     const environment = body?.json?.environment
+    evaluationStatsRequests.push(body?.json as Record<string, unknown>)
 
     // For keyWithEvaluations, return stats
     if (configKey === keyWithEvaluations) {
-      if (environment === '143') {
+      if (environment === 'Production') {
         // Production environment - return actual stats
         return HttpResponse.json({
           json: [
@@ -263,7 +272,7 @@ const evaluationStatsHandler = http.post(
         })
       }
 
-      if (environment === '588') {
+      if (environment === 'jeffrey') {
         // jeffrey environment
         return HttpResponse.json({
           json: [

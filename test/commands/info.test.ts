@@ -3,6 +3,7 @@ import {expect, test} from '@oclif/test'
 import {resetClientCache} from '../../src/util/get-client.js'
 import {
   confidentialKey,
+  evaluationStatsRequests,
   jsonKey,
   keyWithEvaluations,
   keyWithNoEvaluations,
@@ -22,6 +23,7 @@ describe('info', () => {
   afterEach(() => {
     server.resetHandlers()
     resetClientCache()
+    evaluationStatsRequests.length = 0
   })
   after(() => {
     server.close()
@@ -167,6 +169,23 @@ No evaluations found for the past 24 hours
       .it('renders JSON default as JSON (not [object Object])', (ctx) => {
         expect(ctx.stdout).not.contains('[object Object]')
         expect(ctx.stdout).contains('Default: {"maxTokens":500,"model":"claude"}')
+      })
+  })
+
+  describe('analytics request body (qfg-kemk regression)', () => {
+    test
+      .stdout()
+      .command(['info', keyWithEvaluations])
+      .it('passes environment NAME (not UUID) to /api/v1/analytics/evaluationStats', () => {
+        // Backstop for qfg-kemk: ClickHouse stores environment NAME, so the
+        // CLI must send the name. Sending env.id (UUID) silently returns [].
+        expect(evaluationStatsRequests.length).to.be.greaterThan(0)
+        const sentEnvironments = evaluationStatsRequests.map((r) => r.environment)
+        expect(sentEnvironments).to.include('Production')
+        expect(sentEnvironments).to.include('jeffrey')
+        // And explicitly: no UUID/id values leaked through.
+        expect(sentEnvironments).to.not.include('143')
+        expect(sentEnvironments).to.not.include('588')
       })
   })
 

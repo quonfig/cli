@@ -261,7 +261,7 @@ Related commands:
       // eslint-disable-next-line no-await-in-loop
       const request = await this.apiClient.post('/api/v1/analytics/evaluationStats', {
         workspaceId: this.workspaceId,
-        environment: env.id,
+        environment: env.name,
         configKey: key,
         days: 1,
       })
