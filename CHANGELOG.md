@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.38 - 2026-05-05
+
+- feat(qfg-d6cn): new `qfg activity` namespace surfaces audit-log / history events, with `qfg audit-log`, `qfg history`, and `qfg log` aliases pointing at the same command.
+- fix(qfg-kemk): `qfg info` now passes the environment **name** (not UUID) to `evaluationStats`, fixing the empty-stats output users saw when scoping `qfg info` to a specific environment.
+
 ## 0.0.37 - 2026-05-03
 
 - feat: `qfg push` sends `expectedSha = origin/main HEAD sha at fetch time` to the server-side `configs.push` optimistic lock (qfg-gj3i). CLI half of the atomic flip with the upcoming app-quonfig change that makes the server enforce this. Bare-path pushes (no `.git/`) omit the field entirely so the server applies its bare-path lock policy unchanged.
