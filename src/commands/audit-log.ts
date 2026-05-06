@@ -18,7 +18,8 @@ export default class AuditLog extends BaseCommand {
     }),
   }
 
-  static description = 'Alias: `qfg audit-log` → `qfg activity feed`; `qfg audit-log NAME` → `qfg activity history NAME`.'
+  static description =
+    'Alias: `qfg audit-log` → `qfg activity feed`; `qfg audit-log NAME` → `qfg activity history NAME`.'
 
   static examples = ['<%= config.bin %> <%= command.id %>', '<%= config.bin %> <%= command.id %> my.flag']
 

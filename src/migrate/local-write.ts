@@ -117,7 +117,11 @@ const rmdirIfEmpty = (dir: string): void => {
   }
 }
 
-export const writeQuonfigFiles = (dir: string, changes: LegacyChange[], source: MigrationSource): WriteQuonfigFilesResult => {
+export const writeQuonfigFiles = (
+  dir: string,
+  changes: LegacyChange[],
+  source: MigrationSource,
+): WriteQuonfigFilesResult => {
   const livePaths = new Map<string, true>()
   // qfg-qhk1: track which source key wrote each destination path. If a second,
   // different source key tries to write to the same destination, that is a
@@ -183,7 +187,9 @@ interface WriteQuonfigFilesResult {
   resolutions: DuplicateResolution[]
 }
 
-const countsFromLivePaths = (livePaths: string[]): {
+const countsFromLivePaths = (
+  livePaths: string[],
+): {
   configsMigrated: number
   flagsMigrated: number
   logLevelsMigrated: number
@@ -249,8 +255,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
   const duplicateResolutions: DuplicateResolutionSummary | null =
     resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
-  const skippedTotal =
-    (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
+  const skippedTotal = (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
   const counts = buildMigrationCounts(livePaths, opts.environments.length, skippedTotal)
   const reportData: MigrationReportData = {
     ...opts.reportData,

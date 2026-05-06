@@ -44,7 +44,14 @@ import {
   type RunPushInput,
 } from '../../src/push/run-push.js'
 import {FileDelta} from '../../src/push/diff-summary.js'
-import {dirtyTrackedFiles, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote} from '../../src/util/git-ops.js'
+import {
+  dirtyTrackedFiles,
+  getRemoteUrl,
+  gitFetch,
+  gitSetRemote,
+  isGitRepo,
+  isLocalBehindOrDivergedFromRemote,
+} from '../../src/util/git-ops.js'
 
 // Stable test identity so commits are reproducible across hosts.
 const TEST_ENV = {

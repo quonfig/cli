@@ -118,36 +118,28 @@ export const richHistoryRequests: Array<Record<string, unknown>> = []
 export const restoreRequests: Array<Record<string, unknown>> = []
 export const deletionForKeyRequests: Array<Record<string, unknown>> = []
 
-const feedHandler = http.post(
-  'https://app.quonfig.com/api/v1/activity/getWorkspaceFeed',
-  async ({request}) => {
-    const body = (await request.json()) as {json?: Record<string, unknown>}
-    feedRequests.push(body?.json ?? {})
-    return HttpResponse.json({json: FEED_ITEMS})
-  },
+const feedHandler = http.post('https://app.quonfig.com/api/v1/activity/getWorkspaceFeed', async ({request}) => {
+  const body = (await request.json()) as {json?: Record<string, unknown>}
+  feedRequests.push(body?.json ?? {})
+  return HttpResponse.json({json: FEED_ITEMS})
+})
+
+const richHistoryHandler = http.post('https://app.quonfig.com/api/v1/activity/getRichHistory', async ({request}) => {
+  const body = (await request.json()) as {json?: Record<string, unknown>}
+  const input = (body?.json as Record<string, unknown>) ?? {}
+  richHistoryRequests.push(input)
+  if (input.configKey === knownConfigKey) {
+    return HttpResponse.json({json: RICH_HISTORY_ITEMS})
+  }
+  return HttpResponse.json({json: []})
+})
+
+const deletedHandler = http.post('https://app.quonfig.com/api/v1/activity/getDeletedItems', () =>
+  HttpResponse.json({json: DELETED_ITEMS}),
 )
 
-const richHistoryHandler = http.post(
-  'https://app.quonfig.com/api/v1/activity/getRichHistory',
-  async ({request}) => {
-    const body = (await request.json()) as {json?: Record<string, unknown>}
-    const input = (body?.json as Record<string, unknown>) ?? {}
-    richHistoryRequests.push(input)
-    if (input.configKey === knownConfigKey) {
-      return HttpResponse.json({json: RICH_HISTORY_ITEMS})
-    }
-    return HttpResponse.json({json: []})
-  },
-)
-
-const deletedHandler = http.post(
-  'https://app.quonfig.com/api/v1/activity/getDeletedItems',
-  () => HttpResponse.json({json: DELETED_ITEMS}),
-)
-
-const metadataListHandler = http.post(
-  'https://app.quonfig.com/api/v1/metadata/list',
-  () => HttpResponse.json({json: METADATA_LIST_RESPONSE}),
+const metadataListHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
+  HttpResponse.json({json: METADATA_LIST_RESPONSE}),
 )
 
 const deletionForKeyHandler = http.post(
@@ -172,20 +164,17 @@ const deletionForKeyHandler = http.post(
   },
 )
 
-const restoreHandler = http.post(
-  'https://app.quonfig.com/api/v1/activity/restoreItem',
-  async ({request}) => {
-    const body = (await request.json()) as {json?: Record<string, unknown>}
-    restoreRequests.push((body?.json as Record<string, unknown>) ?? {})
-    return HttpResponse.json({
-      json: {
-        configType: 'feature_flag',
-        configKey: restoreOnlyDeletedKey,
-        commitSha: 'ffffffffffffffff',
-      },
-    })
-  },
-)
+const restoreHandler = http.post('https://app.quonfig.com/api/v1/activity/restoreItem', async ({request}) => {
+  const body = (await request.json()) as {json?: Record<string, unknown>}
+  restoreRequests.push((body?.json as Record<string, unknown>) ?? {})
+  return HttpResponse.json({
+    json: {
+      configType: 'feature_flag',
+      configKey: restoreOnlyDeletedKey,
+      commitSha: 'ffffffffffffffff',
+    },
+  })
+})
 
 export const server = setupServer(
   feedHandler,

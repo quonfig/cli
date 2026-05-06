@@ -18,9 +18,7 @@ const buildFlagDetail = (key: string, defaultBoolValue: boolean) => ({
   access: 'standard',
   tags: [],
   default: {
-    rules: [
-      {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: defaultBoolValue}},
-    ],
+    rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: defaultBoolValue}}],
   },
   environments: [],
   variants: [

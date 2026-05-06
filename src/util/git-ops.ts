@@ -36,10 +36,7 @@ export interface RunGitOptions {
  * `GIT_SAFE_ARGS` and merges `GIT_SAFE_ENV` so credential prompts never leak
  * to the user. Errors are re-thrown with tokens redacted from message/stderr.
  */
-export const runGit = async (
-  args: string[],
-  options?: RunGitOptions,
-): Promise<{stdout: string; stderr: string}> => {
+export const runGit = async (args: string[], options?: RunGitOptions): Promise<{stdout: string; stderr: string}> => {
   const env = {...process.env, ...GIT_SAFE_ENV, ...options?.env}
   try {
     return await execFile('git', [...GIT_SAFE_ARGS, ...args], {cwd: options?.cwd, env})
@@ -165,10 +162,7 @@ export const readFileAtHead = async (dir: string, file: string): Promise<string 
  * made and, if not, why — useful for verbose logging without throwing on
  * the migration path.
  */
-export type PinFixResult =
-  | {kind: 'committed'; slug: string}
-  | {kind: 'clean'}
-  | {kind: 'skipped'; reason: string}
+export type PinFixResult = {kind: 'committed'; slug: string} | {kind: 'clean'} | {kind: 'skipped'; reason: string}
 
 /**
  * Migration helper for legacy state where `qfg pull` wrote the workspace
@@ -181,11 +175,7 @@ export type PinFixResult =
  * changes, when the pin doesn't match the backend slug, or when JSON
  * parsing fails — leaving the user's working tree alone.
  */
-export const commitPinFixIfPinOnly = async (
-  dir: string,
-  file: string,
-  expectedSlug: string,
-): Promise<PinFixResult> => {
+export const commitPinFixIfPinOnly = async (dir: string, file: string, expectedSlug: string): Promise<PinFixResult> => {
   if (!(await hasFileChanges(dir, file))) return {kind: 'clean'}
 
   let workingTreeRaw: string
@@ -338,13 +328,7 @@ export const gitMergeFfOnly = async (dir: string): Promise<string[]> => {
   let newCommits: string[] = []
   try {
     const {stdout: localSha} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
-    const {stdout: log} = await runGit([
-      '-C',
-      dir,
-      'log',
-      '--pretty=format:%s',
-      `${localSha.trim()}..origin/main`,
-    ])
+    const {stdout: log} = await runGit(['-C', dir, 'log', '--pretty=format:%s', `${localSha.trim()}..origin/main`])
     newCommits = log
       .split('\n')
       .map((s) => s.trim())

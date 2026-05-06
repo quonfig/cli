@@ -32,8 +32,7 @@ export default class Init extends BaseCommand {
       description: 'Include sample configs (default: yes on first init, no on update)',
     }),
     workspace: Flags.string({
-      description:
-        'Workspace pin in <org-slug>/<workspace-slug> form (Guard 1). If omitted, no pin is written.',
+      description: 'Workspace pin in <org-slug>/<workspace-slug> form (Guard 1). If omitted, no pin is written.',
       required: false,
     }),
   }
