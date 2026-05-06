@@ -5,17 +5,17 @@ import {resolveConfigByKey} from '../../util/activity-lookup.js'
 import nameArg from '../../util/name-arg.js'
 
 interface AuditMessage {
-  scope: string
   message: string
+  scope: string
 }
 
 interface HistoryEntry {
-  sha: string
-  authorName: string
-  authorEmail: string
-  date: string
   action: string
+  authorEmail: string
+  authorName: string
+  date: string
   messages: AuditMessage[]
+  sha: string
 }
 
 function authorLabel(entry: HistoryEntry): string {

@@ -23,9 +23,8 @@ const getConfigFile = (options?: TokenStorageOptions) => {
 export interface TokenSet {
   access_token: string
   expires_at: number
-  refresh_token: string
-  user_email?: string
-  user_id?: string
+  /** Org display name for `qfg whoami` / `qfg workspace`. */
+  org_name?: string
   /**
    * Human-readable org slug (e.g. "acme") — populated by the per-org login
    * flow so the CLI can resolve `acme/foo`-form workspace addresses against
@@ -33,8 +32,9 @@ export interface TokenSet {
    * project/plans/multi-org-cli-auth.md (qfg-kr7).
    */
   org_slug?: string
-  /** Org display name for `qfg whoami` / `qfg workspace`. */
-  org_name?: string
+  refresh_token: string
+  user_email?: string
+  user_id?: string
 }
 
 /**
@@ -45,9 +45,9 @@ export interface TokenSet {
 export const TOKEN_STORE_VERSION = 2
 
 export interface TokenStore {
-  version?: number
   defaultOrgId?: string
   tokensByOrg: {[workosOrgId: string]: TokenSet}
+  version?: number
 }
 
 export const getTokenForOrg = (store: TokenStore, workosOrgId: string): TokenSet | undefined =>

@@ -224,7 +224,7 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
 // Capture the most recent body posted to /api/v1/configs/update so tests can
 // assert on the exact payload the CLI sent (e.g. that a --secret write
 // includes confidential + decryptWith fields — see qfg-ytw).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const configsUpdateCapture: {body: any} = {body: null}
 
 // POST /api/v1/configs/update — update a config via oRPC

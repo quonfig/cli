@@ -11,17 +11,14 @@ const SKILL_NAME = 'qfg-migrate-code'
 const SUPPORTED_SOURCES = new Set(['launch'])
 
 function findIdentifierMap(startDir: string): {dir: string; map: IdentifierMap} | null {
-  let dir = path.resolve(startDir)
-  while (true) {
+  for (let dir = path.resolve(startDir); ; dir = path.dirname(dir)) {
     const candidate = path.join(dir, '.qf', 'identifier-map.json')
     if (fs.existsSync(candidate)) {
       const raw = fs.readFileSync(candidate, 'utf8')
       return {dir, map: JSON.parse(raw) as IdentifierMap}
     }
 
-    const parent = path.dirname(dir)
-    if (parent === dir) return null
-    dir = parent
+    if (path.dirname(dir) === dir) return null
   }
 }
 

@@ -3,10 +3,10 @@ import type {JsonObj} from '../../result.js'
 import {APICommand} from '../../index.js'
 
 interface DeletedItem {
-  configType: string
   configKey: string
-  deletedBy: string
+  configType: string
   deletedAt: string
+  deletedBy: string
 }
 
 export default class ActivityDeleted extends APICommand {

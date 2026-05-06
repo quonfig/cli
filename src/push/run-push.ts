@@ -45,8 +45,25 @@ export interface GitOps {
    * HEAD vs origin/main; for the bare path it's local vs probe-clone.
    */
   diffHeadVsOrigin(dir: string): Promise<FileDelta[]>
+  /**
+   * Tracked files (relative paths) with working-tree or staged changes.
+   * Used by the clone-path dirty-tree warning to surface uncommitted
+   * edits the user may believe are being pushed (qfg-fboj). Untracked
+   * files are excluded — same rule as `dirtyTrackedFiles` in git-ops.ts.
+   */
+  dirtyTrackedFiles(dir: string): Promise<string[]>
   /** `git fetch origin` in the given dir. */
   fetch(dir: string): Promise<void>
+  /**
+   * Returns the local SHA of `origin/main` after fetch — the remote tip
+   * the diff was computed against — or undefined if no `origin/main` ref
+   * exists (bare-path push, or repo never fetched).
+   *
+   * Threaded into the `configs.push` call as `expectedSha` so the
+   * server-side optimistic lock (qfg-gj3i) can reject pushes whose
+   * origin moved between fetch and push.
+   */
+  getOriginMainSha(dir: string): Promise<string | undefined>
   /** Returns the `remote.origin.url` for the repo, or undefined if unset / not a repo. */
   getRemoteOriginUrl(dir: string): Promise<string | undefined>
   /** Returns true if the dir has a `.git/` (worktree or repo). */
@@ -61,23 +78,6 @@ export interface GitOps {
    * REVERSAL deltas to the server, silently undoing remote-newer commits.
    */
   isLocalBehindRemote(dir: string): Promise<boolean>
-  /**
-   * Tracked files (relative paths) with working-tree or staged changes.
-   * Used by the clone-path dirty-tree warning to surface uncommitted
-   * edits the user may believe are being pushed (qfg-fboj). Untracked
-   * files are excluded — same rule as `dirtyTrackedFiles` in git-ops.ts.
-   */
-  dirtyTrackedFiles(dir: string): Promise<string[]>
-  /**
-   * Returns the local SHA of `origin/main` after fetch — the remote tip
-   * the diff was computed against — or undefined if no `origin/main` ref
-   * exists (bare-path push, or repo never fetched).
-   *
-   * Threaded into the `configs.push` call as `expectedSha` so the
-   * server-side optimistic lock (qfg-gj3i) can reject pushes whose
-   * origin moved between fetch and push.
-   */
-  getOriginMainSha(dir: string): Promise<string | undefined>
   /** Set origin to `url` (add if missing, set-url if present). */
   setRemoteOrigin(dir: string, url: string): Promise<void>
 }

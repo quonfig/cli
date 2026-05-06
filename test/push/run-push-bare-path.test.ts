@@ -104,7 +104,7 @@ function buildBarePathDepsForTest(
     },
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
-    getOriginMainSha: async () => undefined,
+    getOriginMainSha: async (): Promise<string | undefined> => undefined,
   }
 
   const backend: GiteaTokenMintResult = {

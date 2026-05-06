@@ -62,9 +62,9 @@ function makeIo(input?: string) {
 }
 
 interface Captured {
-  pushToServer: ConfigPushInput[]
-  logs: string[]
   errs: string[]
+  logs: string[]
+  pushToServer: ConfigPushInput[]
 }
 
 function makeDeps(opts: {
@@ -84,7 +84,7 @@ function makeDeps(opts: {
     countFilesInRemote: async () => 100,
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
-    getOriginMainSha: async () => undefined,
+    getOriginMainSha: async (): Promise<string | undefined> => undefined,
     ...opts.gitOps,
   }
 
@@ -165,7 +165,7 @@ describe('runPush stale-HEAD guard (qfg-fboj)', () => {
           deltas,
           gitOps: {
             isGitRepo: async () => false,
-            getRemoteOriginUrl: async () => undefined,
+            getRemoteOriginUrl: async (): Promise<string | undefined> => undefined,
             isLocalBehindRemote: async () => true,
           },
         })

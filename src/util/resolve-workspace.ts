@@ -19,7 +19,6 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
   'Bare workspace slugs are no longer accepted. Update your .env and run `qfg login` if you have not yet migrated.'
 
 export interface ResolvedWorkspace {
-  workspaceId: string
   /**
    * Org slug that owns workspaceId. Empty string in the QUONFIG_API_KEY
    * path because API keys are workspace-scoped and the slug is never
@@ -27,6 +26,7 @@ export interface ResolvedWorkspace {
    * on the env key before consulting it.
    */
   orgSlug: string
+  workspaceId: string
 }
 
 /**

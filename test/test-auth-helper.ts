@@ -19,7 +19,7 @@ let prevConfigHomeWasSet = false
 export const setupTestAuth = () => {
   const quonfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-test-'))
 
-  prevConfigHomeWasSet = Object.prototype.hasOwnProperty.call(process.env, 'QUONFIG_CONFIG_HOME')
+  prevConfigHomeWasSet = Object.hasOwn(process.env, 'QUONFIG_CONFIG_HOME')
   prevConfigHome = process.env.QUONFIG_CONFIG_HOME
   process.env.QUONFIG_CONFIG_HOME = quonfigDir
   activeTmpDir = quonfigDir

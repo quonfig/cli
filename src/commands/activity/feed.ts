@@ -5,19 +5,19 @@ import type {JsonObj} from '../../result.js'
 import {APICommand} from '../../index.js'
 
 interface AuditMessage {
-  scope: string
   message: string
+  scope: string
 }
 
 interface FeedItem {
-  sha: string
-  authorName: string
-  authorEmail: string
-  date: string
   action: string
-  configType: string | null
+  authorEmail: string
+  authorName: string
   configKey: string | null
+  configType: string | null
+  date: string
   messages: AuditMessage[]
+  sha: string
 }
 
 const MS_PER_MINUTE = 60_000

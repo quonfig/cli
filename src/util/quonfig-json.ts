@@ -212,13 +212,13 @@ export function upsertWorkspaceKey(raw: string, slug: string): string | undefine
   const hasOtherKeys = Object.keys(parsed).length > 0
 
   // Detect indent from the first nested key. Default to two spaces.
-  const indentMatch = raw.match(/\n([ \t]+)"/)
+  const indentMatch = raw.match(/\n([\t ]+)"/)
   const indent = indentMatch ? indentMatch[1] : '  '
 
   // If the original used a multi-line object (closing brace on its own
   // line), keep that shape. Otherwise the original was a single-line
   // object like `{}` or `{"k":v}` — emit on one line.
-  const isMultiline = /\n\s*\}\s*$/.test(raw) || /\n/.test(raw.slice(0, closingIdx))
+  const isMultiline = /\n\s*}\s*$/.test(raw) || /\n/.test(raw.slice(0, closingIdx))
 
   let insertion: string
   if (isMultiline) {

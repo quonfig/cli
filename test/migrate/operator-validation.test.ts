@@ -144,7 +144,7 @@ describe('QUONFIG_SUPPORTED_OPERATORS parity with verify schema', () => {
     const sourcePath = new URL('../../src/verify/validate.ts', import.meta.url).pathname
     const fs = await import('node:fs')
     const src = fs.readFileSync(sourcePath, 'utf8')
-    const enumMatch = src.match(/const OperatorSchema = z\.enum\(\[([\s\S]*?)\]\)/)
+    const enumMatch = src.match(/const OperatorSchema = z\.enum\(\[([\S\s]*?)]\)/)
     expect(enumMatch, 'OperatorSchema enum must exist in src/verify/validate.ts').to.not.equal(null)
     const verifyOperators = new Set([...enumMatch![1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]))
     expect(QUONFIG_SUPPORTED_OPERATORS, 'migrator allowlist == verify enum').to.deep.equal(verifyOperators)

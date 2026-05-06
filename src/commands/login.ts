@@ -59,7 +59,7 @@ export default class Login extends BaseCommand {
     let browserOpened = false
     const onEnter = (chunk: Buffer): void => {
       if (browserOpened) return
-      if (!chunk.toString().match(/[\r\n]/)) return
+      if (!/[\n\r]/.test(chunk.toString())) return
       browserOpened = true
       openBrowser(deviceAuth.verification_uri_complete)
       this.log('Opening browser...')

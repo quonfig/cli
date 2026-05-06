@@ -313,14 +313,14 @@ workspace = workspace-work # Work Org - Work Workspace
       }
 
       expect(caught).to.exist
-      expect(caught!.message).to.match(/newer CLI/i)
+      expect(caught!.message).to.match(/newer cli/i)
       expect(caught!.message).to.include('npm i -g @quonfig/cli@latest')
     })
 
     it('saveTokens stamps a version field on the file', async () => {
       const store: TokenStore = {tokensByOrg: {org_A: orgA}}
       await saveTokens(store, options)
-      const onDisk = JSON.parse(fs.readFileSync(tokenFile, 'utf8')) as TokenStore & {version?: number}
+      const onDisk = JSON.parse(fs.readFileSync(tokenFile, 'utf8')) as {version?: number} & TokenStore
       expect(onDisk.version).to.equal(2)
     })
 

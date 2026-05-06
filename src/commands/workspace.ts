@@ -92,28 +92,6 @@ export default class Workspace extends BaseCommand {
   }
 
   /**
-   * Pin the default-profile workspaceId to org/ws form by looking it up in
-   * the workspaces list. Returns undefined if the auth config is empty or
-   * the saved workspace doesn't appear in the listing.
-   */
-  private profilePin(
-    authConfig: Awaited<ReturnType<typeof loadAuthConfig>>,
-    allWorkspaces: WorkspaceEntry[],
-  ): string | undefined {
-    if (!authConfig) return undefined
-    const activeProfileName = getActiveProfile()
-    const profile =
-      authConfig.profiles[activeProfileName] || authConfig.profiles[authConfig.defaultProfile || 'default']
-    if (!profile) return undefined
-
-    const match = allWorkspaces.find((w) => w.workspaceId === profile.workspace)
-    if (!match) return undefined
-    const orgSlug = match.organizationSlug ?? slugFromName(match.organizationName)
-    if (!orgSlug) return undefined
-    return `${orgSlug}/${match.workspaceSlug}`
-  }
-
-  /**
    * QUONFIG_WORKSPACE wins over the default profile (matches the resolution
    * order in get-client.ts/resolve-workspace.ts). Bare slugs are ignored
    * here — the status command does NOT throw on a stale env-var, just
@@ -140,27 +118,6 @@ export default class Workspace extends BaseCommand {
     return fallback
   }
 
-  private async fetchWorkspaces(jwt: string): Promise<WorkspaceEntry[]> {
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
-        method: 'POST',
-        headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
-        body: JSON.stringify({json: {}}),
-      })
-      if (!res.ok) {
-        this.verboseLog('workspace: userWorkspaces/list non-OK', {status: res.status})
-        return []
-      }
-
-      const body = (await res.json()) as {json?: WorkspaceEntry[]}
-      const list = (body.json ?? body) as unknown as WorkspaceEntry[]
-      return Array.isArray(list) ? list : []
-    } catch (error) {
-      this.verboseLog('workspace: userWorkspaces/list failed', {error: String(error)})
-      return []
-    }
-  }
-
   /**
    * Fan out across every cached org's token and merge the results. One org's
    * stale token doesn't block the others — we verbose-log and continue.
@@ -185,6 +142,49 @@ export default class Workspace extends BaseCommand {
     }
 
     return [...merged.values()]
+  }
+
+  private async fetchWorkspaces(jwt: string): Promise<WorkspaceEntry[]> {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
+        method: 'POST',
+        headers: {Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json'},
+        body: JSON.stringify({json: {}}),
+      })
+      if (!res.ok) {
+        this.verboseLog('workspace: userWorkspaces/list non-OK', {status: res.status})
+        return []
+      }
+
+      const body = (await res.json()) as {json?: WorkspaceEntry[]}
+      const list = (body.json ?? body) as unknown as WorkspaceEntry[]
+      return Array.isArray(list) ? list : []
+    } catch (error) {
+      this.verboseLog('workspace: userWorkspaces/list failed', {error: String(error)})
+      return []
+    }
+  }
+
+  /**
+   * Pin the default-profile workspaceId to org/ws form by looking it up in
+   * the workspaces list. Returns undefined if the auth config is empty or
+   * the saved workspace doesn't appear in the listing.
+   */
+  private profilePin(
+    authConfig: Awaited<ReturnType<typeof loadAuthConfig>>,
+    allWorkspaces: WorkspaceEntry[],
+  ): string | undefined {
+    if (!authConfig) return undefined
+    const activeProfileName = getActiveProfile()
+    const profile =
+      authConfig.profiles[activeProfileName] || authConfig.profiles[authConfig.defaultProfile || 'default']
+    if (!profile) return undefined
+
+    const match = allWorkspaces.find((w) => w.workspaceId === profile.workspace)
+    if (!match) return undefined
+    const orgSlug = match.organizationSlug ?? slugFromName(match.organizationName)
+    if (!orgSlug) return undefined
+    return `${orgSlug}/${match.workspaceSlug}`
   }
 
   private async runApiKeyMode(): Promise<JsonObj | void> {

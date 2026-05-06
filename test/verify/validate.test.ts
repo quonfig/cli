@@ -645,7 +645,7 @@ describe('validate', () => {
   })
 
   describe('access enum validation (qfg-azk.1)', () => {
-    function configWithAccess(access: unknown): Map<string, string> {
+    function configWithAccess(access?: unknown): Map<string, string> {
       const config: Record<string, unknown> = {
         key: 'my-config',
         type: 'config',
@@ -683,7 +683,7 @@ describe('validate', () => {
     }
 
     it('accepts a config with no access field (defaults apply)', () => {
-      const result = validateFileMap(configWithAccess(undefined))
+      const result = validateFileMap(configWithAccess())
       expect(result.valid, JSON.stringify(result.issues)).to.be.true
       expect(result.issues).to.be.empty
     })
