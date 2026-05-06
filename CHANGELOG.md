@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.40 - 2026-05-06
+
+- feat(qfg-4jya): new `qfg run` command wraps a child process with Quonfig values resolved into env vars — for build steps, migrations, and one-shot scripts that read config from `process.env` before user code runs (e.g. `drizzle-kit migrate`, `next-auth`'s `AUTH_SECRET`). Inline form `qfg run --env DATABASE_URL=db.url -- drizzle-kit migrate` and env-file form `qfg run --env-file=.qfg.env -- next build`. Required `--` separates qfg flags from the child command. Default behavior overrides parent env (`--preserve-env` to skip already-set vars). Fail-fast on missing keys before spawning the child. Auth/environment uses a binary mutually-exclusive rule: Mode A (`QUONFIG_BACKEND_SDK_KEY` set, env encoded in key — error if `--environment` or `QUONFIG_ENVIRONMENT` is also set, even if they would agree) or Mode B (no SDK key, requires exactly one of `--environment` or `QUONFIG_ENVIRONMENT`). Companion docs site update tracked separately (qfg-kj0e).
+
 ## 0.0.39 - 2026-05-06
 
 - fix(qfg-57q): `qfg generate` no longer crashes with `template.match is not a function` on workspaces that contain a `weighted_values` rule. The `local-config-reader.mapGitValue` default branch was casting the weighted-values wrapper object into `valueObj.value.string`, and downstream codegen called `.match()` on the object from `MustacheExtractor`. The fix expands `weighted_values` rules into N row values (one per variant) so codegen sees real strings, drops unknown rule types instead of corrupting `value.string`, and adds defensive type guards in `MustacheExtractor.extractSchema` and `SchemaExtractor.getAllStringsAtLocation` so a future malformed row can't crash codegen. JSON-typed configs were always handled correctly via `resolveUserSchema` + `jsonSchemaToZod`; the original bug report's diagnosis ("JSON configs break codegen") was a misattribution — the actual trigger was a sibling string config with a weighted-values rule.
