@@ -1,0 +1,34 @@
+{
+  "key": "my.weighted-string-config",
+  "type": "config",
+  "valueType": "string",
+  "sendToClientSdk": false,
+  "default": {
+    "rules": [
+      {
+        "criteria": [],
+        "value": {"type": "string", "value": "default"}
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "weightedValues": [
+                {"value": {"type": "string", "value": "Hello, {{name}}!"}, "weight": 50000},
+                {"value": {"type": "string", "value": "Hi {{firstName}}"}, "weight": 50000}
+              ],
+              "hashByPropertyName": "user.key"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

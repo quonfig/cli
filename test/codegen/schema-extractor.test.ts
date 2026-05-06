@@ -268,6 +268,90 @@ describe('SchemaExtractor', () => {
       )
     })
 
+    it('does not crash when a string row value is non-string (defensive guard)', () => {
+      // Regression for "template.match is not a function": prior to the fix,
+      // local-config-reader.mapGitValue's default branch could stuff a
+      // weighted_values wrapper object into valueObj.value.string. The
+      // extractor must refuse non-string entries instead of passing them to
+      // MustacheExtractor.extractSchema, which calls .match() on the input.
+      const config: Config = {
+        configType: 'CONFIG',
+        key: 'string_config_with_bad_row',
+        rows: [
+          {values: [{value: {string: 'Hello, {{name}}!'}}]},
+          {
+            values: [
+              {
+                value: {
+                  string: {weightedValues: [{value: {type: 'string', value: 'X'}, weight: 1}]} as unknown as string,
+                },
+              },
+            ],
+          },
+        ],
+        valueType: 'STRING',
+      }
+      const configFile: ConfigFile = {configs: [config]}
+
+      const result = schemaExtractor.execute({config, configFile})
+
+      // The mustache template from the well-formed row still wins; the
+      // malformed row is silently dropped instead of crashing.
+      expectSchemaMatchesString(
+        result,
+        `
+          z.function({
+            input: z.tuple([z.object({name: z.string()})]),
+            output: z.string()
+          })
+        `,
+      )
+    })
+
+    it('infers a JSON config schema from a JSON Schema document referenced by schemaKey', () => {
+      // Regression for the user-reported "qfg generate crash on JSON configs"
+      // (qfg-yvgx): JSON-typed configs with a schemaKey should derive their
+      // type from the JSON Schema document, not template-extraction. The
+      // emitted Zod object preserves number/boolean/integer leaf types.
+      const config: Config = {
+        configType: 'CONFIG',
+        key: 'plan.limit',
+        rows: [{values: [{value: {json: {json: '{"maxResponsesPerQuestion":5,"csvExport":false}'}}}]}],
+        schemaKey: 'plan.limit.schema.v0',
+        valueType: 'JSON',
+      }
+      const configFile: ConfigFile = {
+        configs: [config],
+        schemas: [
+          {
+            path: 'schemas/plan.limit.schema.v0.json',
+            schema: {
+              $schema: 'http://json-schema.org/draft-07/schema#',
+              type: 'object',
+              additionalProperties: false,
+              required: ['maxResponsesPerQuestion', 'csvExport'],
+              properties: {
+                maxResponsesPerQuestion: {type: 'integer', minimum: 0},
+                csvExport: {type: 'boolean'},
+              },
+            },
+          },
+        ],
+      }
+
+      const result = schemaExtractor.execute({config, configFile})
+
+      expectSchemaMatchesString(
+        result,
+        `
+          z.object({
+            maxResponsesPerQuestion: z.number().int();
+            csvExport: z.boolean()
+          })
+        `,
+      )
+    })
+
     it('should replace strings with a union of Mustache templates when found', () => {
       // Create a config with a Mustache template
       const config: Config = {

@@ -113,9 +113,11 @@ export class SchemaExtractor {
    */
   private getAllStringsAtLocation(config: Config, location: string[]): string[] {
     if (location.length === 0) {
-      // For empty location, just get direct string values
+      // For empty location, just get direct string values. Defensive type
+      // check: a malformed reader could put a non-string here, and downstream
+      // mustache extraction calls .match() on whatever lands in this list.
       return config.rows.flatMap((row) =>
-        row.values.flatMap((valueObj) => (valueObj.value.string ? [valueObj.value.string] : [])),
+        row.values.flatMap((valueObj) => (typeof valueObj.value.string === 'string' ? [valueObj.value.string] : [])),
       )
     }
 
