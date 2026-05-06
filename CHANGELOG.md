@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.41 - 2026-05-06
+
+- fix(qfg-84df): `qfg create … --env-var=X` and `qfg set-default … --env-var=X` no longer fail with `defaultValue.value: Invalid input: expected string, received undefined`. The CLI was emitting `{type: '<scalar>', provided: {…}}`, but the API's `ProvidedValueSchema` is a Zod discriminated union expecting `{type: 'provided', value: {source, lookup}}`. Both write paths now emit the correct shape via the shared `mapConfigValueToDto` helper. Unblocks the encryption-key bootstrap (`qfg create quonfig.secrets.encryption.key --type string --env-var=QUONFIG_ENCRYPTION_KEY`).
+
 ## 0.0.40 - 2026-05-06
 
 - feat(qfg-4jya): new `qfg run` command wraps a child process with Quonfig values resolved into env vars — for build steps, migrations, and one-shot scripts that read config from `process.env` before user code runs (e.g. `drizzle-kit migrate`, `next-auth`'s `AUTH_SECRET`). Inline form `qfg run --env DATABASE_URL=db.url -- drizzle-kit migrate` and env-file form `qfg run --env-file=.qfg.env -- next build`. Required `--` separates qfg flags from the child command. Default behavior overrides parent env (`--preserve-env` to skip already-set vars). Fail-fast on missing keys before spawning the child. Auth/environment uses a binary mutually-exclusive rule: Mode A (`QUONFIG_BACKEND_SDK_KEY` set, env encoded in key — error if `--environment` or `QUONFIG_ENVIRONMENT` is also set, even if they would agree) or Mode B (no SDK key, requires exactly one of `--environment` or `QUONFIG_ENVIRONMENT`). Companion docs site update tracked separately (qfg-kj0e).
