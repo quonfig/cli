@@ -81,33 +81,6 @@ export default class Whoami extends BaseCommand {
   }
 
   /**
-   * Pick the "active" org for display. Order:
-   *   1. QUONFIG_WORKSPACE in `org/ws` form → look up org by slug in the store.
-   *   2. The token store's defaultOrgId, if it points at an entry we have.
-   *   3. The first token entry — gives a stable marker rather than nothing.
-   */
-  private async resolveActiveOrgId(defaultOrgId: string | undefined): Promise<string | undefined> {
-    const env = process.env.QUONFIG_WORKSPACE
-    if (env) {
-      const pin = tryParseWorkspacePin(env)
-      if (pin) {
-        const store = await loadTokens()
-        if (store) {
-          const matched = findOrgIdBySlug(store, pin.orgSlug)
-          if (matched) return matched
-        }
-      }
-    }
-
-    if (defaultOrgId) return defaultOrgId
-
-    // Fall back to the first token entry — gives a stable marker rather than nothing.
-    const store = await loadTokens()
-    if (!store) return undefined
-    return Object.keys(store.tokensByOrg)[0]
-  }
-
-  /**
    * Best-effort fetch of `me.organizations` for role enrichment. Failure
    * (network, unauthenticated) is non-fatal — whoami still works from the
    * local store, just without role labels.
@@ -143,6 +116,33 @@ export default class Whoami extends BaseCommand {
       this.verboseLog('whoami: me.organizations fetch failed', {error: String(error)})
       return []
     }
+  }
+
+  /**
+   * Pick the "active" org for display. Order:
+   *   1. QUONFIG_WORKSPACE in `org/ws` form → look up org by slug in the store.
+   *   2. The token store's defaultOrgId, if it points at an entry we have.
+   *   3. The first token entry — gives a stable marker rather than nothing.
+   */
+  private async resolveActiveOrgId(defaultOrgId: string | undefined): Promise<string | undefined> {
+    const env = process.env.QUONFIG_WORKSPACE
+    if (env) {
+      const pin = tryParseWorkspacePin(env)
+      if (pin) {
+        const store = await loadTokens()
+        if (store) {
+          const matched = findOrgIdBySlug(store, pin.orgSlug)
+          if (matched) return matched
+        }
+      }
+    }
+
+    if (defaultOrgId) return defaultOrgId
+
+    // Fall back to the first token entry — gives a stable marker rather than nothing.
+    const store = await loadTokens()
+    if (!store) return undefined
+    return Object.keys(store.tokensByOrg)[0]
   }
 }
 

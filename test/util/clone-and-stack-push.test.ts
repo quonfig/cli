@@ -196,7 +196,7 @@ describe('cloneAndStackPush', () => {
     expect(caught, 'expected push to fail when hook rejects').to.be.instanceOf(PushHookRejectedError)
     // Misleading framing must NOT appear — that sends the user down the fast-forward debug path.
     expect(caught!.message).to.not.match(/remote has changes we do not have locally/i)
-    expect(caught!.message).to.not.match(/Re-run the migrator to pick up those changes/i)
+    expect(caught!.message).to.not.match(/re-run the migrator to pick up those changes/i)
     // The hook output must still surface so the user sees the real failure.
     expect(caught!.message).to.match(/FAILED: 2 error\(s\)/)
     // And the new framing should mention the hook/validation rejection.

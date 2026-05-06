@@ -264,21 +264,22 @@ function buildTestDeps(args: {
         return []
       }
     },
-    async getOriginMainSha(dir) {
+    async getOriginMainSha(dir): Promise<string | undefined> {
       // qfg-gj3i: mirror buildRealDeps — return the local origin/main SHA
       // for clone-path dirs, undefined for bare path. Use execFileSync so
       // the integration assertion can compare against the same SHA the
       // bare-repo seeded.
-      if (!(await isGitRepo(dir))) return undefined
+      if (!(await isGitRepo(dir))) return
+      let out: string | undefined
       try {
-        const out = execFileSync('git', ['-C', dir, 'rev-parse', 'origin/main'], {
+        out = execFileSync('git', ['-C', dir, 'rev-parse', 'origin/main'], {
           encoding: 'utf8',
           env: TEST_ENV,
         }).trim()
-        return out.length > 0 ? out : undefined
       } catch {
-        return undefined
+        // bare-path dirs may not have origin/main
       }
+      return out && out.length > 0 ? out : undefined
     },
   }
 

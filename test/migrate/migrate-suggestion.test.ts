@@ -13,7 +13,7 @@ describe('migrate/migrate-suggestion', () => {
       expect(suggestion).to.equal(
         'Re-run `qfg migrate --from launch --workspace test-organization/semgrep-test-1 --push` to pick up remote changes before retrying.',
       )
-      expect(suggestion).to.not.match(/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}/i)
+      expect(suggestion).to.not.match(/[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}/i)
     })
 
     it('omits --workspace when the user did not pass --workspace (saved-profile fallback)', () => {

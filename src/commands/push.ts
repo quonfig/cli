@@ -268,7 +268,7 @@ export function buildRealDeps(
       // qfg-gj3i: clone-path returns the local origin/main SHA after
       // fetch. Bare path has no `.git/` to rev-parse — return undefined
       // and let the server apply its bare-path lock policy.
-      if (!(await isGitRepo(dir))) return undefined
+      if (!(await isGitRepo(dir))) return
       return getOriginMainSha(dir)
     },
   }

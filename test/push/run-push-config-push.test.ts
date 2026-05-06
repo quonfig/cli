@@ -85,7 +85,7 @@ function makeDeps(opts: {
     countFilesInRemote: async () => 100,
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
-    getOriginMainSha: async () => undefined,
+    getOriginMainSha: async (): Promise<string | undefined> => undefined,
     ...opts.gitOps,
   }
 
@@ -359,7 +359,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
             isGitRepo: async () => true,
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
-            getOriginMainSha: async () => undefined,
+            getOriginMainSha: async (): Promise<string | undefined> => undefined,
           },
         })
 
@@ -379,7 +379,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         // as optional, and we want bare-path requests to look identical to a
         // pre-qfg-gj3i client (no key) rather than carrying a sentinel.
         expect(sent.expectedSha).to.equal(undefined)
-        expect(Object.prototype.hasOwnProperty.call(sent, 'expectedSha')).to.equal(false)
+        expect(Object.hasOwn(sent, 'expectedSha')).to.equal(false)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }

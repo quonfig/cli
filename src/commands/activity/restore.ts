@@ -10,17 +10,17 @@ import isInteractive from '../../util/is-interactive.js'
 import nameArg from '../../util/name-arg.js'
 
 interface DeletionTombstone {
-  configType: string
-  configKey: string
-  deletedBy: string
-  deletedAt: string
   commitSha: string
+  configKey: string
+  configType: string
+  deletedAt: string
+  deletedBy: string
 }
 
 interface RestoreResponse {
-  configType: string
-  configKey: string
   commitSha: string
+  configKey: string
+  configType: string
 }
 
 const RESTORABLE_TYPES = ['feature_flag', 'config', 'log_level', 'segment']

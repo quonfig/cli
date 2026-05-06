@@ -8,7 +8,7 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
-import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../util/quonfig-json.js'
+import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug, type WorkspacePin} from '../util/quonfig-json.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
@@ -211,25 +211,6 @@ CLI shortcuts (no JSON editing needed for simple cases):
   }
 
   /**
-   * Wraps `readWorkspaceSlug` so a legacy bare-slug value (`"workspace":
-   * "foo"` instead of `"workspace": "org/foo"`) reads as `undefined`
-   * rather than throwing. The caller then takes the "no pin set" branch
-   * and overwrites with the canonical form, completing the migration.
-   *
-   * Any other parse error still resolves to `undefined` here (and is
-   * verbose-logged) — backfill is non-fatal; the next push surfaces the
-   * real diagnosis.
-   */
-  private async readPinTolerant(dir: string) {
-    try {
-      return await readWorkspaceSlug(dir)
-    } catch (error: unknown) {
-      this.verboseLog('Pull', `quonfig.json workspace pin needs migration: ${String(error)}`)
-      return undefined
-    }
-  }
-
-  /**
    * Local-only backfill of the `workspace` pin in `quonfig.json`.
    *
    * - Missing pin → write it from the token response's `workspaceSlug`.
@@ -351,6 +332,26 @@ CLI shortcuts (no JSON editing needed for simple cases):
     } catch {
       // Non-fatal
     }
+  }
+
+  /**
+   * Wraps `readWorkspaceSlug` so a legacy bare-slug value (`"workspace":
+   * "foo"` instead of `"workspace": "org/foo"`) reads as `undefined`
+   * rather than throwing. The caller then takes the "no pin set" branch
+   * and overwrites with the canonical form, completing the migration.
+   *
+   * Any other parse error still resolves to `undefined` here (and is
+   * verbose-logged) — backfill is non-fatal; the next push surfaces the
+   * real diagnosis.
+   */
+  private async readPinTolerant(dir: string): Promise<WorkspacePin | undefined> {
+    let pin: WorkspacePin | undefined
+    try {
+      pin = await readWorkspaceSlug(dir)
+    } catch (error: unknown) {
+      this.verboseLog('Pull', `quonfig.json workspace pin needs migration: ${String(error)}`)
+    }
+    return pin
   }
 
   private async refreshAndGetUrl(workspaceId: string, orgSlug: string): Promise<string> {

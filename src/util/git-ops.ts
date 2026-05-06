@@ -212,7 +212,8 @@ export const commitPinFixIfPinOnly = async (dir: string, file: string, expectedS
   // Compare working tree vs HEAD ignoring `workspace`. If anything else
   // differs, the user has additional uncommitted edits — leave alone.
   const stripped = (o: Record<string, unknown>): Record<string, unknown> => {
-    const {workspace: _ignored, ...rest} = o
+    const rest = {...o}
+    delete rest.workspace
     return rest
   }
   const a = JSON.stringify(stripped(workingParsed), Object.keys(stripped(workingParsed)).sort())
@@ -410,7 +411,7 @@ export const gitPullRebase = async (dir: string): Promise<GitPullRebaseResult> =
   try {
     await runGit(['-C', dir, 'pull', '--rebase', 'origin', 'main'])
     return {kind: 'clean', commitsRebased}
-  } catch (err: unknown) {
+  } catch (error: unknown) {
     // Distinguish "rebase paused on conflicts" from "rebase never started".
     // Conflicts: `diff --diff-filter=U` lists the unmerged paths and
     // `.git/rebase-merge/` is present.
@@ -427,7 +428,7 @@ export const gitPullRebase = async (dir: string): Promise<GitPullRebaseResult> =
       // Fall through to 'failed' — diff itself errored.
     }
 
-    const reason = err instanceof Error ? err.message : String(err)
+    const reason = error instanceof Error ? error.message : String(error)
     return {kind: 'failed', reason}
   }
 }

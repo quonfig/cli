@@ -46,9 +46,9 @@ export default class Sync extends BaseCommand {
     }),
   }
 
+  private orgSlug!: string
   private resolvedDir!: string
   private workspaceId!: string
-  private orgSlug!: string
 
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Sync)
