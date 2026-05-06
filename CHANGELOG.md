@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.39 - 2026-05-06
+
+- fix(qfg-57q): `qfg generate` no longer crashes with `template.match is not a function` on workspaces that contain a `weighted_values` rule. The `local-config-reader.mapGitValue` default branch was casting the weighted-values wrapper object into `valueObj.value.string`, and downstream codegen called `.match()` on the object from `MustacheExtractor`. The fix expands `weighted_values` rules into N row values (one per variant) so codegen sees real strings, drops unknown rule types instead of corrupting `value.string`, and adds defensive type guards in `MustacheExtractor.extractSchema` and `SchemaExtractor.getAllStringsAtLocation` so a future malformed row can't crash codegen. JSON-typed configs were always handled correctly via `resolveUserSchema` + `jsonSchemaToZod`; the original bug report's diagnosis ("JSON configs break codegen") was a misattribution — the actual trigger was a sibling string config with a weighted-values rule.
+
 ## 0.0.38 - 2026-05-05
 
 - feat(qfg-d6cn): new `qfg activity` namespace surfaces audit-log / history events, with `qfg audit-log`, `qfg history`, and `qfg log` aliases pointing at the same command.
@@ -23,7 +27,7 @@
 
 ## 0.0.34 - 2026-05-03
 
-- fix: `qfg push` refuses to run when local HEAD is behind or has diverged from origin/main. Previously the clone-path push computed `HEAD..origin/main` after fetch and shipped the *reversal* deltas to the server, silently undoing any commits landed since the user's last `qfg pull`. Working-tree edits the user had not committed were also dropped without warning. Now throws `STALE_HEAD` with a "run `qfg pull` first" message, and warns about every dirty tracked file so the user knows their uncommitted edits were not pushed (qfg-fboj). The same guard also covers the delete-vs-edit silent-revival case (qfg-0j59).
+- fix: `qfg push` refuses to run when local HEAD is behind or has diverged from origin/main. Previously the clone-path push computed `HEAD..origin/main` after fetch and shipped the _reversal_ deltas to the server, silently undoing any commits landed since the user's last `qfg pull`. Working-tree edits the user had not committed were also dropped without warning. Now throws `STALE_HEAD` with a "run `qfg pull` first" message, and warns about every dirty tracked file so the user knows their uncommitted edits were not pushed (qfg-fboj). The same guard also covers the delete-vs-edit silent-revival case (qfg-0j59).
 - feat: `qfg pull --rebase` invokes `git pull --rebase origin main` to replay local commits on top of origin. Conflicts are surfaced via standard git markers with a step-by-step recovery recipe (resolve markers → `git add` → `git rebase --continue` → `qfg push`, plus `git rebase --abort` as the escape hatch) (qfg-4tey).
 - fix: `qfg pull` divergence error now lists concrete recovery options (rebase vs `git reset --hard origin/main`) with the directory path filled in, instead of the previous "resolve manually" message that left non-git-savvy users stranded.
 
