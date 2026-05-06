@@ -196,7 +196,18 @@ describe('orchestrateMultiOrgLogin (qfg-mol-k27)', () => {
       // Specific mechanism: the cap is 10, not 13 (drops 'kkk', 'lll', 'mmm').
       expect(captured.length).to.equal(10)
       expect(Object.keys(result.tokenStore.tokensByOrg).length).to.equal(10)
-      expect(result.mintedOrgSlugs).to.deep.equal(['aaa', 'bbb', 'ccc', 'ddd', 'eee', 'fff', 'ggg', 'hhh', 'iii', 'jjj'])
+      expect(result.mintedOrgSlugs).to.deep.equal([
+        'aaa',
+        'bbb',
+        'ccc',
+        'ddd',
+        'eee',
+        'fff',
+        'ggg',
+        'hhh',
+        'iii',
+        'jjj',
+      ])
       expect(result.skippedOrgSlugs).to.deep.equal(['kkk', 'lll', 'mmm'])
     })
   })

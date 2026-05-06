@@ -146,9 +146,7 @@ export default class Login extends BaseCommand {
       if (res.ok) {
         const body = (await res.json()) as {json?: WorkspaceEntry[]}
         const list = (body.json ?? body) as unknown as WorkspaceEntry[]
-        const candidates = (Array.isArray(list) ? list : []).filter(
-          (w) => w.workosOrgId === result.defaultOrgId,
-        )
+        const candidates = (Array.isArray(list) ? list : []).filter((w) => w.workosOrgId === result.defaultOrgId)
         candidates.sort((a, b) => a.workspaceSlug.localeCompare(b.workspaceSlug))
         defaultWorkspace = candidates[0]
       } else {

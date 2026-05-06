@@ -208,10 +208,7 @@ describe('git-ops pin helpers', () => {
     it('skips when the working tree has changes beyond the pin', async () => {
       await seedHead('quonfig.json', '{"environments":["prod"]}\n')
       // Pin matches AND environments was edited — too risky to commit silently.
-      fs.writeFileSync(
-        path.join(tmpDir, 'quonfig.json'),
-        '{"environments":["prod","stage"],"workspace":"acme"}\n',
-      )
+      fs.writeFileSync(path.join(tmpDir, 'quonfig.json'), '{"environments":["prod","stage"],"workspace":"acme"}\n')
 
       const result = await commitPinFixIfPinOnly(tmpDir, 'quonfig.json', 'acme')
       expect(result.kind).to.equal('skipped')

@@ -68,9 +68,7 @@ Schemas cannot be restored — use git history instead.`
     if (!configType) {
       const candidates = await this.findCandidateTypes(key)
       if (candidates.length === 0) {
-        return this.err(
-          `Cannot infer config type for "${key}". Pass --type=<feature_flag|config|log_level|segment>.`,
-        )
+        return this.err(`Cannot infer config type for "${key}". Pass --type=<feature_flag|config|log_level|segment>.`)
       }
 
       if (candidates.length > 1) {
@@ -107,9 +105,7 @@ Schemas cannot be restored — use git history instead.`
 
     if (!flags.yes) {
       if (!isInteractive(flags)) {
-        return this.err(
-          `Refusing to restore ${key} without confirmation. Pass --yes or run interactively.`,
-        )
+        return this.err(`Refusing to restore ${key} without confirmation. Pass --yes or run interactively.`)
       }
 
       const shortSha = tombstone.commitSha.slice(0, 8)

@@ -193,9 +193,14 @@ export default class WorkspaceCreate extends BaseCommand {
 
     const entries = Object.entries(store.tokensByOrg)
 
-    const requireSlug = (workosOrgId: string, orgSlug: string | undefined): {workosOrgId: string; orgSlug: string} | {error: string} => {
+    const requireSlug = (
+      workosOrgId: string,
+      orgSlug: string | undefined,
+    ): {workosOrgId: string; orgSlug: string} | {error: string} => {
       if (!orgSlug) {
-        return {error: `Org \`${workosOrgId}\` is missing its slug locally. Run \`qfg login\` to refresh your org list.`}
+        return {
+          error: `Org \`${workosOrgId}\` is missing its slug locally. Run \`qfg login\` to refresh your org list.`,
+        }
       }
       return {workosOrgId, orgSlug}
     }
@@ -204,7 +209,9 @@ export default class WorkspaceCreate extends BaseCommand {
       if (UUID_PATTERN.test(flagOrg)) {
         const tokens = store.tokensByOrg[flagOrg]
         if (!tokens) {
-          return {error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`}
+          return {
+            error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`,
+          }
         }
 
         return requireSlug(flagOrg, tokens.org_slug)

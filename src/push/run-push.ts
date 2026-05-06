@@ -415,10 +415,7 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       errLog(`  ${d.path}: missing permission ${d.requiredPermission}`)
     }
 
-    throw new PushFatalError(
-      `Push denied for ${result.denials.length} file(s). See errors above.`,
-      'PUSH_DENIED',
-    )
+    throw new PushFatalError(`Push denied for ${result.denials.length} file(s). See errors above.`, 'PUSH_DENIED')
   }
 
   if (result.kind === 'conflict') {

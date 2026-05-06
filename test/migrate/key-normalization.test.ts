@@ -22,18 +22,14 @@ describe('normalizeKey (qfg-qhk1)', () => {
 
 describe('getOutputPath (qfg-qhk1)', () => {
   it('emits a flat path for a feature_flag key with /', () => {
-    expect(getOutputPath('feature_flag', 'patient.faq.account')).to.equal(
-      'feature-flags/patient.faq.account.json',
-    )
+    expect(getOutputPath('feature_flag', 'patient.faq.account')).to.equal('feature-flags/patient.faq.account.json')
     expect(getOutputPath('feature_flag', 'patient.faq.account/legacy')).to.equal(
       'feature-flags/patient.faq.account.legacy.json',
     )
   })
 
   it('emits a flat path for a config key with /', () => {
-    expect(getOutputPath('config', 'patient.faq.account/billing')).to.equal(
-      'configs/patient.faq.account.billing.json',
-    )
+    expect(getOutputPath('config', 'patient.faq.account/billing')).to.equal('configs/patient.faq.account.billing.json')
   })
 
   it('never produces a nested path even from a deeply-slashed source key', () => {
@@ -68,9 +64,7 @@ describe('writeQuonfigFiles (qfg-qhk1)', () => {
 
   it('refuses to write nested paths emitted from a buggy translate()', () => {
     const source = fakeSource({
-      'patient.faq.account/legacy': [
-        {contents: '{}', path: 'feature-flags/patient.faq.account/legacy.json'},
-      ],
+      'patient.faq.account/legacy': [{contents: '{}', path: 'feature-flags/patient.faq.account/legacy.json'}],
     })
     const changes: LegacyChange[] = [{key: 'patient.faq.account/legacy', raw: {}, source: 'fake'}]
     expect(() => writeQuonfigFiles(dir, changes, source)).to.throw(/refusing to write nested path/i)

@@ -301,9 +301,7 @@ describe('runPush (core)', () => {
         const {deps, calls} = makeDeps({
           gitOps: {
             isGitRepo: async () => false,
-            diffHeadVsOrigin: async () => [
-              {kind: 'added', path: 'configs/new.json', afterJson: '{"k":1}'},
-            ],
+            diffHeadVsOrigin: async () => [{kind: 'added', path: 'configs/new.json', afterJson: '{"k":1}'}],
             countFilesInRemote: async () => 4,
           },
           userInput: 'y\n',

@@ -128,9 +128,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
           this.log('Local and origin/main have diverged. Rebasing local commits on top of origin/main...')
           const result = await gitPullRebase(resolvedDir)
           if (result.kind === 'clean') {
-            this.log(
-              `Rebased ${result.commitsRebased} local commit(s) onto origin/main. Run \`qfg push\` to publish.`,
-            )
+            this.log(`Rebased ${result.commitsRebased} local commit(s) onto origin/main. Run \`qfg push\` to publish.`)
             // Fall through to post-pull work (QUONFIG_DIR write, pin backfill).
           } else if (result.kind === 'conflicts') {
             this.log('')

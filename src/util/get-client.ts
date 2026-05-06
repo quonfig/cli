@@ -130,7 +130,12 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
         })
       }
 
-      type WorkspaceEntry = {organizationName?: string; workosOrgId?: string; workspaceId: string; workspaceSlug: string}
+      type WorkspaceEntry = {
+        organizationName?: string
+        workosOrgId?: string
+        workspaceId: string
+        workspaceSlug: string
+      }
       let res: Response
       try {
         res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {

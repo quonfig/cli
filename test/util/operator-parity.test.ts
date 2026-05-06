@@ -40,11 +40,7 @@ function findOperatorEnumInJsonSchema(node: unknown): string[] | undefined {
 
   if (node && typeof node === 'object') {
     const obj = node as Record<string, unknown>
-    if (
-      'enum' in obj &&
-      Array.isArray(obj.enum) &&
-      (obj.enum as unknown[]).includes('ALWAYS_TRUE')
-    ) {
+    if ('enum' in obj && Array.isArray(obj.enum) && (obj.enum as unknown[]).includes('ALWAYS_TRUE')) {
       return obj.enum as string[]
     }
 

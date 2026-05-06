@@ -7,7 +7,16 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
-import {dirtyTrackedFiles, getOriginMainSha, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote, runGit} from '../util/git-ops.js'
+import {
+  dirtyTrackedFiles,
+  getOriginMainSha,
+  getRemoteUrl,
+  gitFetch,
+  gitSetRemote,
+  isGitRepo,
+  isLocalBehindOrDivergedFromRemote,
+  runGit,
+} from '../util/git-ops.js'
 import {
   PushFatalError,
   runPush,

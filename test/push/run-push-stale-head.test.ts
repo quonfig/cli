@@ -160,9 +160,7 @@ describe('runPush stale-HEAD guard (qfg-fboj)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
@@ -186,9 +184,7 @@ describe('runPush stale-HEAD guard (qfg-fboj)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {

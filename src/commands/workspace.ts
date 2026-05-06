@@ -34,9 +34,7 @@ export default class Workspace extends BaseCommand {
     const authConfig = await loadAuthConfig()
 
     const orgEntries = Object.entries(store.tokensByOrg)
-    const orgSlugsWithTokens = orgEntries
-      .map(([orgId, t]) => t.org_slug ?? orgId)
-      .sort((a, b) => a.localeCompare(b))
+    const orgSlugsWithTokens = orgEntries.map(([orgId, t]) => t.org_slug ?? orgId).sort((a, b) => a.localeCompare(b))
 
     // /userWorkspaces/list is per-token-org-scoped — a single org's JWT
     // only sees that org's workspaces. Iterate every cached org so the
@@ -133,9 +131,7 @@ export default class Workspace extends BaseCommand {
       if (pin) {
         const orgId = findOrgIdBySlug(store, pin.orgSlug)
         if (orgId) {
-          const match = allWorkspaces.find(
-            (w) => w.workosOrgId === orgId && w.workspaceSlug === pin.workspaceSlug,
-          )
+          const match = allWorkspaces.find((w) => w.workosOrgId === orgId && w.workspaceSlug === pin.workspaceSlug)
           if (match) return `${pin.orgSlug}/${pin.workspaceSlug}`
         }
       }
@@ -169,9 +165,7 @@ export default class Workspace extends BaseCommand {
    * Fan out across every cached org's token and merge the results. One org's
    * stale token doesn't block the others — we verbose-log and continue.
    */
-  private async fetchAllOrgsWorkspaces(
-    orgEntries: [string, unknown][],
-  ): Promise<WorkspaceEntry[]> {
+  private async fetchAllOrgsWorkspaces(orgEntries: [string, unknown][]): Promise<WorkspaceEntry[]> {
     const merged = new Map<string, WorkspaceEntry>()
     for (const [orgId] of orgEntries) {
       let jwt: string

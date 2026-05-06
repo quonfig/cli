@@ -62,10 +62,7 @@ export const mintGiteaToken = async (
 /**
  * Mint a Gitea read token, store it, and return the entry.
  */
-export const mintAndStoreGiteaReadToken = async (
-  workspaceId: string,
-  orgSlug: string,
-): Promise<GiteaTokenEntry> => {
+export const mintAndStoreGiteaReadToken = async (workspaceId: string, orgSlug: string): Promise<GiteaTokenEntry> => {
   const data = await mintGiteaToken(workspaceId, orgSlug, 'read', 'pull')
   const entry: GiteaTokenEntry = {
     token: data.token,
