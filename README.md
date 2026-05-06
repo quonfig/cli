@@ -22,6 +22,98 @@ USAGE
 ```
 <!-- usagestop -->
 
+# Running commands with injected env
+
+Some workflows need Quonfig values to land in `process.env` **before** application
+code runs — Drizzle migrations read `DATABASE_URL` at module import, `next-auth`
+reads `AUTH_SECRET` automatically, and arbitrary build steps / one-shot scripts
+can't always go through `instrumentation.ts`. Use `qfg run` to resolve configs
+and exec the child with those vars merged into its environment.
+
+The flag separator `--` is **required** between `qfg run` flags and the child
+command — without it, oclif tries to parse the child's flags as its own.
+
+## Inline form
+
+```sh
+qfg run \
+  --env DATABASE_URL=db.url \
+  --env AUTH_SECRET=auth.secret \
+  --environment=staging \
+  -- \
+  npm run migrate
+```
+
+The grammar is `VAR=key.path` (uses `=`, not `:`, to match `docker -e VAR=value`
+muscle memory). `--env` is repeatable.
+
+## File form
+
+```sh
+# .qfg.env
+DATABASE_URL=db.url
+AUTH_SECRET=auth.secret
+# blank lines and # comments are skipped
+```
+
+```sh
+qfg run --env-file=.qfg.env --environment=staging -- npm run migrate
+```
+
+## Auth / environment is binary
+
+`qfg run` enforces a strict either/or rule, never a precedence chain. This is
+intentional — a "match-only" exception drifts silently in CI and masks
+misconfiguration.
+
+| Mode  | When                                    | Provides                                                  |
+|-------|-----------------------------------------|-----------------------------------------------------------|
+| **A** | `QUONFIG_BACKEND_SDK_KEY` is set        | env + workspace from the SDK key                          |
+| **B** | No SDK key — uses `qfg login` user auth | `--environment` _or_ `QUONFIG_ENVIRONMENT` (exactly one)  |
+
+Mixing the two is an error:
+
+- Mode A + `--environment` (or `QUONFIG_ENVIRONMENT`) → exits non-zero before
+  spawning, even if they would agree.
+- Mode B with neither → exits non-zero.
+- Mode B with both `--environment` and `QUONFIG_ENVIRONMENT` → exits non-zero.
+
+There is **no interactive prompt**. `qfg run` is meant for scripts and CI;
+prompting mid-`&&`-chain would be worse UX than failing loud.
+
+## Override vs preserve
+
+By default `qfg run` **overrides** any value already set in the parent env —
+the whole point is "make these vars come from Quonfig." Pass `--preserve-env`
+to flip that: vars already set in the parent are kept, and only unset vars
+are filled in.
+
+```sh
+qfg run --env DATABASE_URL=db.url --preserve-env --environment=staging -- npm test
+```
+
+## Missing keys fail before the child spawns
+
+If any requested config key is missing from the workspace, `qfg run` exits
+non-zero with a list of the missing keys and never spawns the child. This
+avoids the trap where the child blows up later with an empty value and the
+real cause is buried under unrelated stack traces.
+
+## package.json example
+
+```json
+{
+  "scripts": {
+    "migrate": "qfg run --env-file=.qfg.env --environment=staging -- drizzle-kit migrate",
+    "migrate:prod": "qfg run --env-file=.qfg.env -- drizzle-kit migrate"
+  }
+}
+```
+
+The first uses Mode B (`--environment=staging` flag). The second relies on
+`QUONFIG_BACKEND_SDK_KEY` being set in the prod environment (Mode A) so the
+script doesn't need to know which env it's running in.
+
 # Commands
 
 <!-- commands -->
