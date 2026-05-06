@@ -101,6 +101,15 @@ describe('create', () => {
       .command(['create', 'greeting.from.env', '--type=string', '--env-var=GREETING'])
       .it('can create a string provided by an env var', (ctx) => {
         expect(ctx.stdout).to.contain(`Created config: greeting.from.env`)
+        // qfg-84df: defaultValue must match the API's ProvidedValueSchema
+        // ({type: 'provided', value: {source, lookup}}) — NOT the legacy
+        // {type: 'string', provided: {…}} shape, which fails Zod validation.
+        const input = createResponses.capturedCreateConfigInput
+        expect(input?.config?.valueType).to.equal('string')
+        expect(input?.config?.defaultValue).to.deep.equal({
+          type: 'provided',
+          value: {source: 'ENV_VAR', lookup: 'GREETING'},
+        })
       })
 
     test
@@ -183,6 +192,14 @@ describe('create', () => {
       .command(['create', 'int.from.env', '--type=int', '--env-var=MY_INT'])
       .it('can create an int provided by an env var', (ctx) => {
         expect(ctx.stdout).to.contain(`Created config: int.from.env`)
+        // qfg-84df: outer valueType stays 'int'; defaultValue uses the
+        // 'provided' discriminator regardless of the underlying scalar type.
+        const input = createResponses.capturedCreateConfigInput
+        expect(input?.config?.valueType).to.equal('int')
+        expect(input?.config?.defaultValue).to.deep.equal({
+          type: 'provided',
+          value: {source: 'ENV_VAR', lookup: 'MY_INT'},
+        })
       })
   })
 

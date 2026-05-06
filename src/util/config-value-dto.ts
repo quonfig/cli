@@ -9,19 +9,23 @@ import {ConfigValueType} from '@quonfig/node'
  * @returns The DTO representation of the config value
  */
 export function mapConfigValueToDto(configValue: ConfigValue, valueType: ConfigValueType): Record<string, unknown> {
-  const dto: Record<string, unknown> = {
-    type: mapValueTypeToString(valueType),
-  }
-
-  // Handle provided (env-var) values
+  // Handle provided (env-var) values. The API's ValueSchema discriminates on
+  // `type`, so a provided value is `{type: 'provided', value: {source, lookup}}`
+  // — NOT `{type: '<scalar>', provided: {…}}`. The outer config.valueType still
+  // describes the resolved type (e.g. "string"); only the defaultValue flips
+  // to `provided`. See qfg-84df for the original repro.
   if (configValue.provided) {
     return {
-      ...dto,
-      provided: {
+      type: 'provided',
+      value: {
         source: configValue.provided.source,
         lookup: configValue.provided.lookup,
       },
     }
+  }
+
+  const dto: Record<string, unknown> = {
+    type: mapValueTypeToString(valueType),
   }
 
   // Extract the actual value based on type
