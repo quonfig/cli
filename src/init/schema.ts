@@ -187,15 +187,15 @@ const criterion = {
     operator: {
       enum: [...operators],
       description:
-        'ALWAYS_TRUE needs no extra fields. PROP_* operators require propertyName and valueToMatch. IN_SEG/NOT_IN_SEG require valueToMatch with segment key.',
+        'ALWAYS_TRUE needs no extra fields. PROP_* operators require propertyName and valueToMatch. IS_PRESENT/IS_NOT_PRESENT take only propertyName (no valueToMatch). IN_SEG/NOT_IN_SEG require valueToMatch with segment key.',
     },
     propertyName: {
       type: 'string' as const,
-      description: 'Required for PROP_* operators.',
+      description: 'Required for PROP_* and IS_PRESENT/IS_NOT_PRESENT operators.',
     },
     valueToMatch: {
       ...simpleValue,
-      description: 'Required for all operators except ALWAYS_TRUE.',
+      description: 'Required for all operators except ALWAYS_TRUE / IS_PRESENT / IS_NOT_PRESENT.',
     },
   },
   required: ['operator'],

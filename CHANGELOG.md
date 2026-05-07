@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.42 - 2026-05-07
+
+- feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. These take only `propertyName` and intentionally have no `valueToMatch`. The verify schema's `OperatorSchema` enum, the `PROPERTY_OPERATORS` set (so missing `propertyName` is still flagged), and the Launch migrator allowlist are all extended in lockstep — the existing parity test asserts the migrator and verify enums never drift. The `qfg init` operator-reference table and `qfg config-schema` REFERENCE table both get a new presence-operator row.
+- fix(qfg-7jnb.8): the `QUONFIG_SUPPORTED_OPERATORS` parity test (`test/migrate/operator-validation.test.ts`) now reads the runtime-exported `OPERATORS` tuple from `src/verify/validate.ts` instead of regex-matching an inline `z.enum([...])` literal. The regex hadn't matched since `OPERATORS` was extracted into a `const` (and `z.enum(OPERATORS)` was substituted in its place), so the lockstep guard had been silently failing on `null` — fixed and now actually enforces parity.
+
 ## 0.0.41 - 2026-05-06
 
 - fix(qfg-84df): `qfg create … --env-var=X` and `qfg set-default … --env-var=X` no longer fail with `defaultValue.value: Invalid input: expected string, received undefined`. The CLI was emitting `{type: '<scalar>', provided: {…}}`, but the API's `ProvidedValueSchema` is a Zod discriminated union expecting `{type: 'provided', value: {source, lookup}}`. Both write paths now emit the correct shape via the shared `mapConfigValueToDto` helper. Unblocks the encryption-key bootstrap (`qfg create quonfig.secrets.encryption.key --type string --env-var=QUONFIG_ENCRYPTION_KEY`).

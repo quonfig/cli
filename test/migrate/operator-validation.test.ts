@@ -139,16 +139,11 @@ describe('transformConfig operator validation (qfg-l18w)', () => {
 describe('QUONFIG_SUPPORTED_OPERATORS parity with verify schema', () => {
   it('matches the OperatorSchema enum in src/verify/validate.ts (lockstep guard)', async () => {
     // Pull the enum values from the verify validator to ensure the migrator's
-    // allowlist never drifts from what qfg-verify will accept.
-    const validateModule = await import('../../src/verify/validate.js')
-    const sourcePath = new URL('../../src/verify/validate.ts', import.meta.url).pathname
-    const fs = await import('node:fs')
-    const src = fs.readFileSync(sourcePath, 'utf8')
-    const enumMatch = src.match(/const OperatorSchema = z\.enum\(\[([\S\s]*?)]\)/)
-    expect(enumMatch, 'OperatorSchema enum must exist in src/verify/validate.ts').to.not.equal(null)
-    const verifyOperators = new Set([...enumMatch![1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]))
+    // allowlist never drifts from what qfg-verify will accept. Source of truth
+    // is the exported `OPERATORS` tuple that `OperatorSchema = z.enum(OPERATORS)`
+    // is derived from — importing the runtime value avoids a brittle regex.
+    const {OPERATORS} = await import('../../src/verify/validate.js')
+    const verifyOperators = new Set<string>(OPERATORS)
     expect(QUONFIG_SUPPORTED_OPERATORS, 'migrator allowlist == verify enum').to.deep.equal(verifyOperators)
-    // sanity: validateModule loaded fine
-    expect(typeof validateModule.validateWorkspace).to.equal('function')
   })
 })

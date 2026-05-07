@@ -119,6 +119,7 @@ The \`default\` block (and each environment override) contains a \`rules\` array
 | Property comparison | \`PROP_LESS_THAN\`, \`PROP_LESS_THAN_OR_EQUAL\`, \`PROP_GREATER_THAN\`, \`PROP_GREATER_THAN_OR_EQUAL\` | \`propertyName\`, \`valueToMatch\` |
 | Property date | \`PROP_BEFORE\`, \`PROP_AFTER\` | \`propertyName\`, \`valueToMatch\` |
 | Property regex | \`PROP_MATCHES\`, \`PROP_DOES_NOT_MATCH\` | \`propertyName\`, \`valueToMatch\` |
+| Property presence | \`IS_PRESENT\`, \`IS_NOT_PRESENT\` | takes only \`propertyName\` |
 | Segment | \`IN_SEG\`, \`NOT_IN_SEG\` | \`valueToMatch\` (segment key) |
 | Other | \`IN_INT_RANGE\`, \`LOOKUP_KEY_IN\`, \`LOOKUP_KEY_NOT_IN\` | \`valueToMatch\` |
 

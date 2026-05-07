@@ -55,6 +55,8 @@ export const OPERATORS = [
   'PROP_AFTER',
   'PROP_MATCHES',
   'PROP_DOES_NOT_MATCH',
+  'IS_PRESENT',
+  'IS_NOT_PRESENT',
   'IN_SEG',
   'NOT_IN_SEG',
   'IN_INT_RANGE',
@@ -239,17 +241,20 @@ const PROPERTY_OPERATORS = new Set([
   'PROP_AFTER',
   'PROP_MATCHES',
   'PROP_DOES_NOT_MATCH',
+  'IS_PRESENT',
+  'IS_NOT_PRESENT',
 ])
 
-// Operators that require a valueToMatch
-const VALUE_REQUIRED_OPERATORS = new Set([
-  ...PROPERTY_OPERATORS,
-  'IN_SEG',
-  'NOT_IN_SEG',
-  'IN_INT_RANGE',
-  'LOOKUP_KEY_IN',
-  'LOOKUP_KEY_NOT_IN',
-])
+// Operators that take only `propertyName` — no valueToMatch (qfg-7jnb)
+const PRESENCE_OPERATORS = new Set(['IS_PRESENT', 'IS_NOT_PRESENT'])
+
+// Operators that require a valueToMatch — every property/segment/lookup operator
+// EXCEPT the presence-only ones, which are intentionally value-less.
+const VALUE_REQUIRED_OPERATORS = new Set(
+  [...PROPERTY_OPERATORS, 'IN_SEG', 'NOT_IN_SEG', 'IN_INT_RANGE', 'LOOKUP_KEY_IN', 'LOOKUP_KEY_NOT_IN'].filter(
+    (op) => !PRESENCE_OPERATORS.has(op),
+  ),
+)
 
 /**
  * Reject `sendToClientSdk` on feature_flag rows — the field is config-only.

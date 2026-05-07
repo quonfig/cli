@@ -87,7 +87,7 @@ CRITERION FIELDS
 Each criterion object has:
   operator        (required) — see operator table below
   propertyName    (required for PROP_* operators) — user property, e.g. "user.key", "user.plan"
-  valueToMatch    (required for all except ALWAYS_TRUE) — typed value to compare against
+  valueToMatch    (required for all except ALWAYS_TRUE / IS_PRESENT / IS_NOT_PRESENT) — typed value to compare against
 
 ────────────────────────────────────────────────────────────
 OPERATOR REFERENCE
@@ -114,6 +114,8 @@ OPERATOR REFERENCE
   PROP_AFTER                       string (ISO 8601)
   PROP_MATCHES                     string               regex match
   PROP_DOES_NOT_MATCH              string
+  IS_PRESENT                       (none)               propertyName is set on the evaluation context (no valueToMatch)
+  IS_NOT_PRESENT                   (none)               propertyName is missing from the evaluation context (no valueToMatch)
   IN_SEG                           string               value = segment key (no propertyName needed)
   NOT_IN_SEG                       string               value = segment key (no propertyName needed)
   IN_INT_RANGE                     int_range            value = {min, max}
