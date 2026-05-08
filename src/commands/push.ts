@@ -26,6 +26,7 @@ import {
 } from '../push/run-push.js'
 import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
+import {computeClonePathDiff} from '../push/clone-path-diff.js'
 import {callConfigsPush} from '../push/config-push-client.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 
@@ -223,7 +224,7 @@ export function buildRealDeps(
       // git diff; it is fast and doesn't require a second clone.
       if (await isGitRepo(dir)) {
         try {
-          return await diffHeadVsOrigin(dir)
+          return await computeClonePathDiff(dir)
         } catch {
           // Fall through to the probe-clone path. This can happen if the dir
           // is a git repo but origin doesn't have a main branch fetched, etc.
@@ -305,70 +306,6 @@ export function buildRealDeps(
   }
 
   return {deps, cleanup}
-}
-
-/**
- * Diff the working tree (what we are about to push) against origin/main and
- * fill in before/after JSON content for each delta as required by the
- * `configs.push` wire shape (qfg-azk.13).
- *
- *   Added    — afterJson = working tree
- *   Modified — beforeJson = `git show origin/main:<path>`, afterJson = working tree
- *   Deleted  — beforeJson = `git show origin/main:<path>`
- *
- * `git diff A..B` reports B relative to A. So `HEAD..origin/main` tells us
- * what origin has that we don't. We want "local vs remote" with local as the
- * baseline — i.e. origin/main..HEAD.
- */
-async function diffHeadVsOrigin(dir: string): Promise<FileDelta[]> {
-  const {stdout} = await runGit(['-C', dir, 'diff', '--name-status', 'origin/main..HEAD'])
-  const deltas: FileDelta[] = []
-  for (const raw of stdout.split('\n')) {
-    const line = raw.trim()
-    if (!line) continue
-    const [status, ...rest] = line.split(/\s+/)
-    const pathStr = rest.join(' ')
-    if (!pathStr) continue
-    if (status.startsWith('A')) {
-      // eslint-disable-next-line no-await-in-loop
-      const afterJson = await readWorkingTreeFile(dir, pathStr)
-      deltas.push({kind: 'added', path: pathStr, ...(afterJson === undefined ? {} : {afterJson})})
-    } else if (status.startsWith('D')) {
-      // eslint-disable-next-line no-await-in-loop
-      const beforeJson = await showAtRef(dir, 'origin/main', pathStr)
-      deltas.push({kind: 'deleted', path: pathStr, ...(beforeJson === undefined ? {} : {beforeJson})})
-    } else if (status.startsWith('M') || status.startsWith('R') || status.startsWith('C')) {
-      // eslint-disable-next-line no-await-in-loop
-      const beforeJson = await showAtRef(dir, 'origin/main', pathStr)
-      // eslint-disable-next-line no-await-in-loop
-      const afterJson = await readWorkingTreeFile(dir, pathStr)
-      deltas.push({
-        kind: 'modified',
-        path: pathStr,
-        ...(beforeJson === undefined ? {} : {beforeJson}),
-        ...(afterJson === undefined ? {} : {afterJson}),
-      })
-    }
-  }
-
-  return deltas
-}
-
-async function showAtRef(dir: string, ref: string, relPath: string): Promise<string | undefined> {
-  try {
-    const {stdout} = await runGit(['-C', dir, 'show', `${ref}:${relPath}`])
-    return stdout
-  } catch {
-    return undefined
-  }
-}
-
-async function readWorkingTreeFile(dir: string, relPath: string): Promise<string | undefined> {
-  try {
-    return await fs.promises.readFile(path.join(dir, relPath), 'utf8')
-  } catch {
-    return undefined
-  }
 }
 
 async function countTrackedFilesAtRef(dir: string, ref: string): Promise<number> {

@@ -33,6 +33,7 @@ import * as path from 'node:path'
 import {PassThrough} from 'node:stream'
 
 import {computeBarePathDiff} from '../../src/push/bare-path-diff.js'
+import {computeClonePathDiff} from '../../src/push/clone-path-diff.js'
 import {
   PushFatalError,
   runPush,
@@ -43,7 +44,6 @@ import {
   type RunPushDeps,
   type RunPushInput,
 } from '../../src/push/run-push.js'
-import {FileDelta} from '../../src/push/diff-summary.js'
 import {
   dirtyTrackedFiles,
   getRemoteUrl,
@@ -197,36 +197,9 @@ function buildTestDeps(args: {
     async diffHeadVsOrigin(dir) {
       if (await isGitRepo(dir)) {
         try {
-          const out = execFileSync('git', ['-C', dir, 'diff', '--name-status', 'origin/main..HEAD'], {
-            encoding: 'utf8',
-            env: TEST_ENV,
-          })
-          const deltas: FileDelta[] = []
-          for (const raw of out.split('\n')) {
-            const line = raw.trim()
-            if (!line) continue
-            const [status, ...rest] = line.split(/\s+/)
-            const pathStr = rest.join(' ')
-            if (!pathStr) continue
-            if (status.startsWith('A')) {
-              const afterJson = readWorkingTreeFile(dir, pathStr)
-              deltas.push({kind: 'added', path: pathStr, ...(afterJson === undefined ? {} : {afterJson})})
-            } else if (status.startsWith('D')) {
-              const beforeJson = showAtRef(dir, 'origin/main', pathStr)
-              deltas.push({kind: 'deleted', path: pathStr, ...(beforeJson === undefined ? {} : {beforeJson})})
-            } else if (status.startsWith('M') || status.startsWith('R') || status.startsWith('C')) {
-              const beforeJson = showAtRef(dir, 'origin/main', pathStr)
-              const afterJson = readWorkingTreeFile(dir, pathStr)
-              deltas.push({
-                kind: 'modified',
-                path: pathStr,
-                ...(beforeJson === undefined ? {} : {beforeJson}),
-                ...(afterJson === undefined ? {} : {afterJson}),
-              })
-            }
-          }
-
-          return deltas
+          // Use production clone-path diff so the integration test exercises
+          // real code, not a parallel implementation.
+          return await computeClonePathDiff(dir)
         } catch {
           // fall through to probe clone
         }
@@ -322,22 +295,6 @@ function buildTestDeps(args: {
   return {deps, calls, cleanup}
 }
 
-function showAtRef(dir: string, ref: string, relPath: string): string | undefined {
-  try {
-    return execFileSync('git', ['-C', dir, 'show', `${ref}:${relPath}`], {encoding: 'utf8', env: TEST_ENV})
-  } catch {
-    return undefined
-  }
-}
-
-function readWorkingTreeFile(dir: string, relPath: string): string | undefined {
-  try {
-    return fs.readFileSync(path.join(dir, relPath), 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
 function makeIo(input?: string): {input: PassThrough; output: PassThrough} {
   const io = {input: new PassThrough(), output: new PassThrough()}
   io.output.on('data', () => {})
@@ -418,6 +375,52 @@ describe('runPush: integration against real local bare git repos (server-side co
       // server can reject the push if origin moved between fetch and now.
       const expectedOriginSha = git(local, 'rev-parse', 'origin/main')
       expect(sent.expectedSha).to.equal(expectedOriginSha)
+    })
+
+    // qfg-3fc6: a beta tester dropped a fresh
+    // `configs/quonfig.secrets.encryption.key.json` into a pulled (clone-path)
+    // dir and ran `qfg push`. The file was silently dropped — the diff only
+    // saw committed history, so an untracked working-tree file vanished.
+    // Lock in that untracked, non-ignored files in `configs/` are picked up
+    // as 'add' deltas with their working-tree content.
+    it('picks up an untracked configs/ file as an added FileDelta (qfg-3fc6)', async () => {
+      const {remoteUrl} = createBareRemote(root)
+      seedRemote(remoteUrl, root, {
+        'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
+        'configs/one.json': '{"k":1}\n',
+      })
+
+      const local = path.join(root, 'work')
+      cloneRemoteTo(remoteUrl, local)
+
+      // User drops a NEW config file into the workspace dir. They never run
+      // `git add` / `git commit` — the file is untracked.
+      writeFiles(local, {'configs/quonfig.secrets.encryption.key.json': '{"k":"hex"}\n'})
+
+      const io = makeIo() // --yes bypasses Y/N
+      const {deps, calls, cleanup} = buildTestDeps({remoteUrl, io})
+      try {
+        const input: RunPushInput = {
+          dir: local,
+          requestedTarget: 'acme-prod',
+          yes: true,
+          skipValidate: true,
+          noPinWrite: true,
+        }
+        const result = await runPush(input, deps)
+        expect(result.kind).to.equal('pushed')
+      } finally {
+        cleanup()
+      }
+
+      expect(calls.pushToServer).to.have.length(1)
+      const sent = calls.pushToServer[0]
+      const byPath = new Map(sent.files.map((f) => [f.path, f]))
+      const added = byPath.get('configs/quonfig.secrets.encryption.key.json')
+      expect(added, 'untracked configs/ file must reach pushToServer as an added delta').to.not.equal(undefined)
+      expect(added!.kind).to.equal('add')
+      expect(added!.afterJson).to.equal('{"k":"hex"}\n')
+      expect(added!.beforeJson).to.equal(undefined)
     })
   })
 
