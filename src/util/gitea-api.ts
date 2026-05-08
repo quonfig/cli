@@ -31,7 +31,8 @@ export const mintGiteaToken = async (
   const accessToken = await getValidAccessTokenForOrgSlug(orgSlug)
 
   const apiUrl = getApiUrl()
-  const res = await fetch(`${apiUrl}/api/v1/gitea/token`, {
+  const url = `${apiUrl}/api/v1/gitea/token`
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -40,23 +41,57 @@ export const mintGiteaToken = async (
     body: JSON.stringify({json: {scope, workspaceId, purpose}}),
   })
 
+  // Read once as text so we can give a useful error when the response body
+  // isn't JSON (e.g. an auth-redirect HTML page or a 404 from a mis-routed
+  // request). qfg-3uks Item C: previously the user saw a bare
+  // `SyntaxError: Unexpected token '<'...` with no URL or status.
+  const text = await res.text().catch(() => '')
+
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    let message = `HTTP ${res.status}`
+    let message: string | undefined
     try {
       const body = JSON.parse(text)
       // oRPC error shape
       if (body?.json?.message) message = body.json.message
       else if (body?.message) message = body.message
     } catch {
-      /* use raw text */
+      /* fall through — use a non-JSON error message instead */
     }
-    throw new Error(message || text)
+
+    if (!message) {
+      throw new Error(buildNonJsonResponseError(url, res.status, text))
+    }
+
+    throw new Error(`${message} (HTTP ${res.status} from ${url})`)
   }
 
-  const body = (await res.json()) as {json?: GiteaTokenResponse} | GiteaTokenResponse
+  let body: {json?: GiteaTokenResponse} | GiteaTokenResponse
+  try {
+    body = JSON.parse(text) as {json?: GiteaTokenResponse} | GiteaTokenResponse
+  } catch {
+    throw new Error(buildNonJsonResponseError(url, res.status, text))
+  }
+
   const data = (body as {json?: GiteaTokenResponse}).json ?? (body as GiteaTokenResponse)
   return data
+}
+
+const SNIPPET_LIMIT = 120
+
+/**
+ * Build the error thrown when a mint response body is not JSON. Includes the
+ * URL, the HTTP status, and a short body snippet so callers can tell at a
+ * glance whether the server returned an HTML login page, a 404, or 5xx
+ * boilerplate.
+ */
+const buildNonJsonResponseError = (url: string, status: number, body: string): string => {
+  const trimmed = body.trim()
+  if (trimmed.length === 0) {
+    return `Expected JSON from ${url} but got HTTP ${status} with an empty body — not valid JSON.`
+  }
+
+  const snippet = trimmed.length > SNIPPET_LIMIT ? `${trimmed.slice(0, SNIPPET_LIMIT)}…` : trimmed
+  return `Expected JSON from ${url} but got HTTP ${status} with non-JSON body (not valid JSON): ${snippet}`
 }
 
 /**

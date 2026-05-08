@@ -99,6 +99,10 @@ Enforces three guards before touching the remote:
           requestedTarget,
           orgSlug,
           yes: flags.yes,
+          // Global `--interactive` / `--no-interactive` flag (BaseCommand
+          // baseFlags). Threaded through so runPush can refuse to prompt
+          // and instead abort with a clear --yes-required message.
+          interactive: flags.interactive,
           skipValidate: flags['skip-validate'],
           noPinWrite: flags['no-pin-write'],
           message: flags.message,

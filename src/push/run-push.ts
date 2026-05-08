@@ -119,6 +119,16 @@ export type ConfirmIO = {
 export interface RunPushInput {
   /** Absolute path to the local dir the user is pushing. */
   dir: string
+  /**
+   * Global `--interactive` / `--no-interactive` flag (defaults to `true`
+   * upstream). When explicitly false, runPush refuses to invoke any prompt
+   * and instead aborts with a message that points the user at `--yes` (for
+   * the standard Y/N) or explains that destructive pushes always require
+   * interactive typed-slug confirmation. qfg-3uks Item B: the previous
+   * behaviour was to fall through to the prompt, which immediately resolved
+   * to a decline against a non-TTY stdin.
+   */
+  interactive?: boolean
   /** `--message` — optional commit message override (bare path only). */
   message?: string
   /** `--no-pin-write` — do not offer to write the slug pin into quonfig.json. */
@@ -373,16 +383,17 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     return {kind: 'no-op', reason: 'Local tree matches remote HEAD. Nothing to push.'}
   }
 
-  const ok = await decideConfirm({
+  const decision = await decideConfirm({
     destructive: summary.isDestructive,
     requiresTypedSlug,
     yes: input.yes,
+    interactive: input.interactive,
     workspaceSlug: backend.workspaceSlug,
     confirmIO: deps.confirmIO,
   })
-  if (!ok) {
+  if (!decision.ok) {
     log('Aborted, nothing pushed.')
-    return {kind: 'aborted', reason: 'user declined at confirm prompt'}
+    return {kind: 'aborted', reason: decision.reason}
   }
 
   const baseMessage = input.message ?? `qfg push: ${summary.totals.filesTouched} file change(s)`
@@ -470,29 +481,60 @@ const toServerKind = (kind: FileDelta['kind']): ServerFileKind => {
 interface ConfirmArgs {
   confirmIO?: ConfirmIO
   destructive: boolean
+  /**
+   * Global `--interactive` flag. `false` means the user explicitly passed
+   * `--no-interactive` and we MUST NOT prompt; we abort with a message that
+   * points at `--yes` instead. Anything else (true / undefined) means
+   * prompting is allowed.
+   */
+  interactive?: boolean
   requiresTypedSlug: boolean
   workspaceSlug: string
   yes: boolean
 }
 
+type ConfirmDecision = {ok: false; reason: string} | {ok: true}
+
 /**
  * Map the guard outputs to the right prompt:
  *   - Typed-slug (always, never skipped by --yes) when identity demanded it
- *     OR when the diff is destructive.
- *   - Standard Y/N otherwise, unless --yes is set.
+ *     OR when the diff is destructive. Refused outright in --no-interactive
+ *     mode because there is no way to type a slug headlessly.
+ *   - Standard Y/N otherwise, unless --yes is set. In --no-interactive mode
+ *     without --yes we abort with a clear message pointing the user at
+ *     `--yes`, rather than falling through to a prompt that auto-declines
+ *     against a non-TTY stdin (qfg-3uks Item B).
  */
-async function decideConfirm(args: ConfirmArgs): Promise<boolean> {
+async function decideConfirm(args: ConfirmArgs): Promise<ConfirmDecision> {
+  const nonInteractive = args.interactive === false
   const needsTyped = args.requiresTypedSlug || args.destructive
   if (needsTyped) {
-    return confirmTypedSlug(
+    if (nonInteractive) {
+      return {
+        ok: false,
+        reason:
+          'destructive change requires interactive typed-slug confirmation; refusing in --no-interactive mode (--yes does not bypass the typed-slug prompt)',
+      }
+    }
+
+    const ok = await confirmTypedSlug(
       args.workspaceSlug,
       `Type the workspace slug "${args.workspaceSlug}" to confirm: `,
       args.confirmIO ?? {},
     )
+    return ok ? {ok: true} : {ok: false, reason: 'typed-slug confirmation failed; nothing pushed'}
   }
 
-  if (args.yes) return true
-  return confirmYesNo('Proceed? [y/N] ', args.confirmIO ?? {})
+  if (args.yes) return {ok: true}
+  if (nonInteractive) {
+    return {
+      ok: false,
+      reason: '--no-interactive set without --yes; pass --yes to skip the standard Y/N confirmation prompt',
+    }
+  }
+
+  const ok = await confirmYesNo('Proceed? [y/N] ', args.confirmIO ?? {})
+  return ok ? {ok: true} : {ok: false, reason: 'user declined at confirm prompt'}
 }
 
 const stripAuth = (url: string): string => {
