@@ -15,12 +15,31 @@ import * as path from 'node:path'
 let activeTmpDir: string | undefined
 let prevConfigHome: string | undefined
 let prevConfigHomeWasSet = false
+let prevSaved = false
 
-export const setupTestAuth = () => {
-  const quonfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-test-'))
-
+const savePrevEnv = () => {
+  if (prevSaved) return
   prevConfigHomeWasSet = Object.hasOwn(process.env, 'QUONFIG_CONFIG_HOME')
   prevConfigHome = process.env.QUONFIG_CONFIG_HOME
+  prevSaved = true
+}
+
+const removeActiveTmpDir = () => {
+  if (!activeTmpDir) return
+  try {
+    fs.rmSync(activeTmpDir, {force: true, recursive: true})
+  } catch {
+    // Ignore cleanup errors
+  }
+
+  activeTmpDir = undefined
+}
+
+export const setupTestAuth = () => {
+  savePrevEnv()
+  removeActiveTmpDir()
+
+  const quonfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-test-'))
   process.env.QUONFIG_CONFIG_HOME = quonfigDir
   activeTmpDir = quonfigDir
 
@@ -66,23 +85,38 @@ organization_slug = test-organization
   return {configFile, tokensFile}
 }
 
+/**
+ * Force the CLI's auth lookup to see no tokens, regardless of the developer's
+ * real `~/.quonfig/` or any pre-existing `QUONFIG_CONFIG_HOME`. Use this in
+ * "not logged in" describe blocks instead of `cleanupTestAuth()` — cleanup
+ * restores the *original* env value, which on a dev machine is undefined and
+ * resolves to `~/.quonfig/` where real tokens live, leaking them into the
+ * test process. CI passes because runners have no `~/.quonfig/`.
+ *
+ * The pointed-at directory is fresh and empty (no tokens file), so
+ * `loadTokens()` returns null reliably.
+ */
+export const disableAuth = (): void => {
+  savePrevEnv()
+  removeActiveTmpDir()
+
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-test-noauth-'))
+  process.env.QUONFIG_CONFIG_HOME = emptyDir
+  activeTmpDir = emptyDir
+}
+
 export const cleanupTestAuth = () => {
-  if (activeTmpDir) {
-    try {
-      fs.rmSync(activeTmpDir, {force: true, recursive: true})
-    } catch {
-      // Ignore cleanup errors
+  removeActiveTmpDir()
+
+  if (prevSaved) {
+    if (prevConfigHomeWasSet) {
+      process.env.QUONFIG_CONFIG_HOME = prevConfigHome
+    } else {
+      delete process.env.QUONFIG_CONFIG_HOME
     }
 
-    activeTmpDir = undefined
+    prevConfigHome = undefined
+    prevConfigHomeWasSet = false
+    prevSaved = false
   }
-
-  if (prevConfigHomeWasSet) {
-    process.env.QUONFIG_CONFIG_HOME = prevConfigHome
-  } else {
-    delete process.env.QUONFIG_CONFIG_HOME
-  }
-
-  prevConfigHome = undefined
-  prevConfigHomeWasSet = false
 }

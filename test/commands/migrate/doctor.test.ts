@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import {cleanupTestAuth, setupTestAuth} from '../../test-auth-helper.js'
+import {cleanupTestAuth, disableAuth, setupTestAuth} from '../../test-auth-helper.js'
 
 describe('migrate doctor', () => {
   let tmpdir: string
@@ -60,6 +60,10 @@ describe('migrate doctor', () => {
   })
 
   describe('when not logged in', () => {
+    beforeEach(() => {
+      disableAuth()
+    })
+
     test
       .stdout()
       .command(['migrate:doctor', '--json', '--dir', '.'])
