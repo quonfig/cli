@@ -5,9 +5,11 @@ import * as path from 'node:path'
 
 import {executeInit, planInit} from '../../src/init/init-workspace.js'
 import {SAMPLE_FILES} from '../../src/init/samples.js'
-import {PRE_COMMIT_MARKER} from '../../src/init/templates.js'
+import {agentsMdTemplate, claudeMdTemplate, PRE_COMMIT_MARKER, readmeTemplate} from '../../src/init/templates.js'
 import {writeWorkspaceSlug, readWorkspaceSlug} from '../../src/util/quonfig-json.js'
 import {validateWorkspace} from '../../src/verify/validate.js'
+
+const HOSTED_SCHEMA_URL = 'https://api.quonfig.com/schemas/stored-config.json'
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-init-'))
@@ -324,6 +326,58 @@ describe('qfg init', () => {
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
+    })
+  })
+
+  // ── Hosted JSON Schema (qfg-sv3c) ──────────────────────────────────
+
+  describe('hosted JSON Schema reference', () => {
+    it('does NOT emit quonfig.schema.json on a fresh init', () => {
+      const dir = tmpDir()
+      try {
+        initFresh(dir)
+        expect(fs.existsSync(path.join(dir, 'quonfig.schema.json')), 'quonfig.schema.json should not be created').to.be
+          .false
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('does not regenerate or overwrite a stale quonfig.schema.json on re-init', () => {
+      const dir = tmpDir()
+      try {
+        initFresh(dir)
+
+        // Simulate a customer with a stale schema file from a previous CLI version.
+        const stalePath = path.join(dir, 'quonfig.schema.json')
+        const staleContent = '{"stale": true}'
+        fs.writeFileSync(stalePath, staleContent)
+        const staleMtime = fs.statSync(stalePath).mtimeMs
+
+        // Force enough clock separation that an unintended write would change mtime.
+        const plan = planInit({dir, dryRun: false, samples: undefined})
+        executeInit(plan, dir)
+
+        // File still present (we don't migrate) and untouched (we don't overwrite).
+        expect(fs.existsSync(stalePath)).to.be.true
+        expect(fs.readFileSync(stalePath, 'utf8')).to.equal(staleContent)
+        expect(fs.statSync(stalePath).mtimeMs).to.equal(staleMtime)
+
+        // The plan must not list quonfig.schema.json among its actions at all.
+        const touchesSchema = plan.actions.some((a) => a.path === 'quonfig.schema.json')
+        expect(touchesSchema, 'plan should not contain any quonfig.schema.json action').to.be.false
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('templates point at the hosted URL and never reference ./quonfig.schema.json', () => {
+      for (const tpl of [readmeTemplate(), claudeMdTemplate(), agentsMdTemplate()]) {
+        expect(tpl).to.not.include('./quonfig.schema.json')
+      }
+      // README + CLAUDE prose/snippets must mention the hosted URL.
+      expect(readmeTemplate()).to.include(HOSTED_SCHEMA_URL)
+      expect(claudeMdTemplate()).to.include(HOSTED_SCHEMA_URL)
     })
   })
 
