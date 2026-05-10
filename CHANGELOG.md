@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.43 - 2026-05-10
+
+- chore(qfg-y7xh): bump `engines.node` floor to `>=20.9.0` to align with the rest of the Quonfig SDK family (Node 20.9 is the minimum LTS that supports `fetch`, `--import`, and the global `crypto` shape we rely on).
+- feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. (Also shipped in 0.0.42; included here for the intentional release-commit gap that 0.0.42's tag covered.)
+- fix(qfg-3fc6): `qfg push` on the clone path now picks up untracked files in the working tree instead of silently skipping anything not yet `git add`'d. The clone-path stager was using `git diff --name-only` against `HEAD`, which by definition only sees tracked files; switched to a `git status --porcelain`-based enumeration that includes `??` entries so a brand-new config file gets pushed on first try.
+- ci(qfg-uzoo): the cli repo now runs `lint`, `prettier`, `build`, and `test` on every push to `main` (not just PRs) so an admin-merge through a red PR can't silently land a regression. Three "not logged in" tests were leaking the user's real `~/.quonfig/tokens.json` via process-wide env state and have been migrated to the `setupTestAuth` / `cleanupTestAuth` helpers that redirect `~/.quonfig/` to a per-test tmp dir via `QUONFIG_CONFIG_HOME`.
+- fix(qfg-3uks): `qfg push --no-interactive` now aborts with a specific, actionable error when the gitea token mint step fails (e.g. expired session, missing scope) instead of silently falling back to an interactive prompt that no automation can answer. The same mint-failure path on the bare-token bootstrap now reports the underlying gitea error rather than a generic "auth failed".
+- chore(cli): expand the published `package.json` `description` with a one-liner showing `qfg run` usage so the npm registry page surfaces the new env-injection workflow. Add `.beads/` to `.gitignore`.
+
 ## 0.0.42 - 2026-05-07
 
 - feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. These take only `propertyName` and intentionally have no `valueToMatch`. The verify schema's `OperatorSchema` enum, the `PROPERTY_OPERATORS` set (so missing `propertyName` is still flagged), and the Launch migrator allowlist are all extended in lockstep — the existing parity test asserts the migrator and verify enums never drift. The `qfg init` operator-reference table and `qfg config-schema` REFERENCE table both get a new presence-operator row.
