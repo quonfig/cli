@@ -3,6 +3,7 @@
 *-error.log
 /.idea
 /.claude
+/.beads
 /.nyc_output
 /dist
 /lib
