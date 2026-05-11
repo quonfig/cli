@@ -62,6 +62,13 @@ export default class Migrate extends BaseCommand {
       options: ['launch', 'launchdarkly', 'flagsmith'],
       required: true,
     }),
+    'full-summary': Flags.boolean({
+      default: false,
+      description:
+        'Reify the full source-side audit log into per-change git commits ' +
+        '(author = original user, date = original timestamp, message = change summary). ' +
+        'Only valid on first-run imports — pass --reset to re-import everything from scratch with this flag.',
+    }),
     push: Flags.boolean({
       default: false,
       description: 'After migrating to a local dir, also push to the given --workspace on Quonfig cloud',
@@ -100,6 +107,13 @@ export default class Migrate extends BaseCommand {
       return this.err('--api-key is required. For --from launch you can also set LAUNCH_API_KEY in your environment.')
     }
 
+    if (flags['full-summary'] && flags.recent !== undefined) {
+      return this.err(
+        '--full-summary and --recent are incompatible: --full-summary reifies the entire audit log into git history, ' +
+          'so trimming changes with --recent would produce a misleading partial log. Drop one of the flags.',
+      )
+    }
+
     let workspaceContext: {authConfig: AuthConfig; workspaceId: string; orgSlug: string} | null = null
     if (flags.push) {
       const resolved = await this.resolvePushWorkspace(flags.workspace)
@@ -116,6 +130,19 @@ export default class Migrate extends BaseCommand {
         if (error instanceof CrossSourceError) return this.err(error.message)
         throw error
       }
+    }
+
+    // qfg-wbkj: --full-summary is a one-shot first-run import. Re-running it on
+    // top of an incremental migration would produce a mixed history (one
+    // collapsed commit on the bottom, per-change commits on top) which is
+    // worse than either pure mode. Force the customer to either drop the flag
+    // or explicitly --reset.
+    if (flags['full-summary'] && !flags.reset && readImportState(dir) !== null) {
+      return this.err(
+        '--full-summary is only valid on first-run imports, but this directory has already been migrated incrementally ' +
+          '(.qf/import-state.json exists). Either drop --full-summary to continue the incremental import, ' +
+          'or re-import everything from scratch by passing --reset alongside --full-summary into a fresh directory.',
+      )
     }
 
     if (flags.from === 'launch') {
@@ -179,11 +206,16 @@ export default class Migrate extends BaseCommand {
         const importState: ImportState = {source: flags.from}
         if (latestChangedAt !== undefined) importState.lastProcessedAt = latestChangedAt
 
-        this.log(`Pushing ${toProcess.length} change(s) to workspace ${workspaceId} (clone-and-stack)...`)
+        this.log(
+          flags['full-summary']
+            ? `Pushing ${toProcess.length} change(s) to workspace ${workspaceId} as per-change audit-log commits...`
+            : `Pushing ${toProcess.length} change(s) to workspace ${workspaceId} (clone-and-stack)...`,
+        )
         try {
           const result = await pushMigrationToCloud({
             changes: toProcess,
             environments,
+            fullHistory: flags['full-summary'],
             importState,
             localDir: dir,
             remoteUrl: repoUrl,
@@ -246,6 +278,7 @@ export default class Migrate extends BaseCommand {
       const localResult = await applyLocalMigration({
         changes: toProcess,
         environments,
+        fullHistory: flags['full-summary'],
         importState: localImportState,
         localDir: dir,
         reportData: buildReportData(flags.from),

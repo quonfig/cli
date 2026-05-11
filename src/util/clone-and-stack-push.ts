@@ -13,19 +13,38 @@ export interface PushIdentity {
   name: string
 }
 
-export interface CloneAndStackPushOptions {
-  /** Called once `localDir` is a clone synced with origin/main. Must write/delete files under `localDir` — do NOT commit. */
-  applyDelta: (localDir: string) => Promise<void> | void
+/**
+ * A single commit to apply on top of the cloned local tree. `apply` writes/deletes
+ * files; it must NOT commit. cloneAndStackPush stages and commits with the given
+ * author + optional author date.
+ */
+export interface CommitSpec {
+  /** File operations to perform in `localDir` before this commit is staged. */
+  apply: (localDir: string) => Promise<void> | void
   /** Commit author. Defaults to the migrator identity. */
   author?: PushIdentity
+  /**
+   * Optional author/committer date. Passed via GIT_AUTHOR_DATE +
+   * GIT_COMMITTER_DATE. Any value `new Date(...)` accepts. Omit to use "now".
+   */
+  authorDate?: Date | number | string
+  /**
+   * Commit message. May be a function when the message depends on counts that
+   * are only known after `apply` runs (qfg-7eig).
+   */
+  message: string | (() => string)
+}
+
+export interface CloneAndStackPushOptions {
   /** Branch to track and push. Defaults to `main`. */
   branch?: string
   /**
-   * Commit message for the delta. Pass a function when the message depends on
-   * counts that are only known after `applyDelta` runs (qfg-7eig). The function
-   * is invoked after applyDelta but before commit.
+   * One or more commits to layer onto the clone. Commits are applied + committed
+   * in order; commits whose `apply` produces no staged changes are silently
+   * skipped (no empty commits). All non-empty commits are pushed in a single
+   * `git push`.
    */
-  commitMessage: string | (() => string)
+  commits: CommitSpec[]
   /** Where to clone into, or an existing clone to reuse. */
   localDir: string
   /** Gitea repo URL (may include token). */
@@ -35,9 +54,11 @@ export interface CloneAndStackPushOptions {
 export interface CloneAndStackPushResult {
   /** `'cloned'` if we had to clone fresh, `'reused'` if the local dir was already a clone of the remote. */
   action: 'cloned' | 'reused'
-  /** SHA of the new commit, if one was made. */
+  /** SHA of the LAST commit landed (back-compat alias for the final entry in commitShas). Null when no commit landed. */
   commitSha: string | null
-  /** `false` if `applyDelta` produced no changes — nothing was committed or pushed. */
+  /** SHAs of every commit landed, in order. Empty when no commit landed. */
+  commitShas: string[]
+  /** `false` if every commit's `apply` produced no changes — nothing was committed or pushed. */
   committed: boolean
 }
 
@@ -140,36 +161,80 @@ const hasStagedChanges = async (dir: string): Promise<boolean> => {
   return stdout.trim().length > 0
 }
 
-export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise<CloneAndStackPushResult> => {
-  const branch = opts.branch ?? 'main'
-  const author = opts.author ?? MIGRATOR_IDENTITY
+const toGitDate = (value: Date | number | string): string => {
+  // Normalize via Date so any of the three accepted shapes round-trips through
+  // git's ISO-8601 parser cleanly.
+  const d = value instanceof Date ? value : new Date(value)
+  return d.toISOString()
+}
 
-  const action = await ensureCloneOrReuse(opts.remoteUrl, opts.localDir, branch)
+/**
+ * Apply + commit a sequence of CommitSpecs against an existing repo at `localDir`.
+ * Per-commit author/date come from each spec (defaults to migrator identity, "now").
+ * Empty commits — where `apply` produces no staged changes — are silently skipped.
+ * Does NOT clone, fetch, or push: callers handle network I/O. Used by
+ * `cloneAndStackPush` for cloud pushes and by the local migrator for `--full-summary`
+ * imports into a `git init`-ed dir.
+ */
+export const stackCommits = async (localDir: string, commits: CommitSpec[]): Promise<{commitShas: string[]}> => {
+  const commitShas: string[] = []
+  for (const spec of commits) {
+    const author = spec.author ?? MIGRATOR_IDENTITY
 
-  // Pin committer identity on the repo so commits are reproducible regardless of host git config.
-  await runGit(opts.localDir, ['config', 'user.name', author.name])
-  await runGit(opts.localDir, ['config', 'user.email', author.email])
+    // eslint-disable-next-line no-await-in-loop
+    await spec.apply(localDir)
+    // eslint-disable-next-line no-await-in-loop
+    await runGitSafe(['-C', localDir, 'add', '--all'])
 
-  await opts.applyDelta(opts.localDir)
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await hasStagedChanges(localDir))) {
+      // No-op commits are silently skipped (qfg-3uks: no empty commits, ever).
+      continue
+    }
 
-  await runGit(opts.localDir, ['add', '--all'])
-
-  if (!(await hasStagedChanges(opts.localDir))) {
-    return {action, committed: false, commitSha: null}
-  }
-
-  const commitMessage = typeof opts.commitMessage === 'function' ? opts.commitMessage() : opts.commitMessage
-  await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
-    stdin: commitMessage,
-    env: {
+    const message = typeof spec.message === 'function' ? spec.message() : spec.message
+    const env: Record<string, string> = {
       GIT_AUTHOR_NAME: author.name,
       GIT_AUTHOR_EMAIL: author.email,
       GIT_COMMITTER_NAME: author.name,
       GIT_COMMITTER_EMAIL: author.email,
-    },
-  })
+    }
+    if (spec.authorDate !== undefined) {
+      const iso = toGitDate(spec.authorDate)
+      env.GIT_AUTHOR_DATE = iso
+      env.GIT_COMMITTER_DATE = iso
+    }
 
-  const {stdout: sha} = await runGitSafe(['-C', opts.localDir, 'rev-parse', 'HEAD'])
+    // eslint-disable-next-line no-await-in-loop
+    await spawnGit(['-C', localDir, 'commit', '-F', '-'], {stdin: message, env})
+
+    // eslint-disable-next-line no-await-in-loop
+    const {stdout: sha} = await runGitSafe(['-C', localDir, 'rev-parse', 'HEAD'])
+    commitShas.push(sha.trim())
+  }
+
+  return {commitShas}
+}
+
+export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise<CloneAndStackPushResult> => {
+  const branch = opts.branch ?? 'main'
+  if (opts.commits.length === 0) {
+    throw new Error('cloneAndStackPush: commits array must contain at least one entry')
+  }
+
+  const action = await ensureCloneOrReuse(opts.remoteUrl, opts.localDir, branch)
+
+  // Pin a stable committer identity on the repo. Per-commit author overrides
+  // happen via env vars in stackCommits; this default catches the case where a
+  // CommitSpec omits `author` entirely.
+  await runGit(opts.localDir, ['config', 'user.name', MIGRATOR_IDENTITY.name])
+  await runGit(opts.localDir, ['config', 'user.email', MIGRATOR_IDENTITY.email])
+
+  const {commitShas} = await stackCommits(opts.localDir, opts.commits)
+
+  if (commitShas.length === 0) {
+    return {action, committed: false, commitSha: null, commitShas: []}
+  }
 
   try {
     // Plain push — no force, no force-with-lease. If the remote has advanced, we fail
@@ -198,5 +263,5 @@ export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise
     throw error
   }
 
-  return {action, committed: true, commitSha: sha.trim()}
+  return {action, committed: true, commitSha: commitShas.at(-1) ?? null, commitShas}
 }

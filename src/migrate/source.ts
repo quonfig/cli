@@ -64,6 +64,22 @@ export interface DuplicateResolutionSummary {
   total: number
 }
 
+/**
+ * qfg-wbkj: Per-change commit metadata for --full-summary mode. Sources that
+ * carry author + timestamp + summary per change (e.g. Launch's change-history)
+ * implement getCommitMeta() so push-to-cloud can author one git commit per
+ * change with the original Launch user as author and `changedAt` as
+ * GIT_AUTHOR_DATE. Sources without this method are rejected at the command
+ * layer when --full-summary is passed.
+ */
+export interface CommitMeta {
+  author: {email: string; name: string}
+  /** Author date — any value `new Date(...)` accepts (Date, ISO string, or epoch ms). */
+  date: Date | number | string
+  /** Non-empty commit message. Empty source-side summaries must be replaced with a fallback by the source. */
+  message: string
+}
+
 export interface MigrationSource {
   fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange>
   /**
@@ -72,6 +88,12 @@ export interface MigrationSource {
    * typed default. Null when nothing was coerced.
    */
   getCoercedSentinels?(): CoercedSentinelSummary | null
+  /**
+   * Optional. qfg-wbkj: per-change commit metadata used by --full-summary. Returns
+   * null if the change carries no usable author/date/summary (e.g. legacy or
+   * synthesized entries) and the caller should fall back to the migrator identity.
+   */
+  getCommitMeta?(change: LegacyChange): CommitMeta | null
   /**
    * Optional post-translate accumulator. Returns any override sections that were
    * dropped during translate() calls because the env.id was not present in the
