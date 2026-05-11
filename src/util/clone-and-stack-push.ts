@@ -168,33 +168,27 @@ const toGitDate = (value: Date | number | string): string => {
   return d.toISOString()
 }
 
-export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise<CloneAndStackPushResult> => {
-  const branch = opts.branch ?? 'main'
-  if (opts.commits.length === 0) {
-    throw new Error('cloneAndStackPush: commits array must contain at least one entry')
-  }
-
-  const action = await ensureCloneOrReuse(opts.remoteUrl, opts.localDir, branch)
-
-  // Pin a stable committer identity on the repo. Per-commit author overrides
-  // happen via env vars below; this default catches the case where a
-  // CommitSpec omits `author` entirely.
-  await runGit(opts.localDir, ['config', 'user.name', MIGRATOR_IDENTITY.name])
-  await runGit(opts.localDir, ['config', 'user.email', MIGRATOR_IDENTITY.email])
-
+/**
+ * Apply + commit a sequence of CommitSpecs against an existing repo at `localDir`.
+ * Per-commit author/date come from each spec (defaults to migrator identity, "now").
+ * Empty commits — where `apply` produces no staged changes — are silently skipped.
+ * Does NOT clone, fetch, or push: callers handle network I/O. Used by
+ * `cloneAndStackPush` for cloud pushes and by the local migrator for `--full-summary`
+ * imports into a `git init`-ed dir.
+ */
+export const stackCommits = async (localDir: string, commits: CommitSpec[]): Promise<{commitShas: string[]}> => {
   const commitShas: string[] = []
-  for (const spec of opts.commits) {
+  for (const spec of commits) {
     const author = spec.author ?? MIGRATOR_IDENTITY
 
     // eslint-disable-next-line no-await-in-loop
-    await spec.apply(opts.localDir)
+    await spec.apply(localDir)
     // eslint-disable-next-line no-await-in-loop
-    await runGit(opts.localDir, ['add', '--all'])
+    await runGitSafe(['-C', localDir, 'add', '--all'])
 
     // eslint-disable-next-line no-await-in-loop
-    if (!(await hasStagedChanges(opts.localDir))) {
-      // No-op commits are silently skipped — same contract as the single-commit
-      // path (qfg-3uks: no empty commits, ever).
+    if (!(await hasStagedChanges(localDir))) {
+      // No-op commits are silently skipped (qfg-3uks: no empty commits, ever).
       continue
     }
 
@@ -212,12 +206,31 @@ export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise
     }
 
     // eslint-disable-next-line no-await-in-loop
-    await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {stdin: message, env})
+    await spawnGit(['-C', localDir, 'commit', '-F', '-'], {stdin: message, env})
 
     // eslint-disable-next-line no-await-in-loop
-    const {stdout: sha} = await runGitSafe(['-C', opts.localDir, 'rev-parse', 'HEAD'])
+    const {stdout: sha} = await runGitSafe(['-C', localDir, 'rev-parse', 'HEAD'])
     commitShas.push(sha.trim())
   }
+
+  return {commitShas}
+}
+
+export const cloneAndStackPush = async (opts: CloneAndStackPushOptions): Promise<CloneAndStackPushResult> => {
+  const branch = opts.branch ?? 'main'
+  if (opts.commits.length === 0) {
+    throw new Error('cloneAndStackPush: commits array must contain at least one entry')
+  }
+
+  const action = await ensureCloneOrReuse(opts.remoteUrl, opts.localDir, branch)
+
+  // Pin a stable committer identity on the repo. Per-commit author overrides
+  // happen via env vars in stackCommits; this default catches the case where a
+  // CommitSpec omits `author` entirely.
+  await runGit(opts.localDir, ['config', 'user.name', MIGRATOR_IDENTITY.name])
+  await runGit(opts.localDir, ['config', 'user.email', MIGRATOR_IDENTITY.email])
+
+  const {commitShas} = await stackCommits(opts.localDir, opts.commits)
 
   if (commitShas.length === 0) {
     return {action, committed: false, commitSha: null, commitShas: []}

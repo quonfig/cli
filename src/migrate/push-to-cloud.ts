@@ -2,13 +2,19 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
-import {buildMigrationCommitMessage, buildMigrationCounts, writeQuonfigFiles} from './local-write.js'
+import {
+  type AuditAccumulator,
+  buildAuditFinalCommit,
+  buildAuditPerChangeCommits,
+  buildMigrationCommitMessage,
+  buildMigrationCounts,
+  writeQuonfigFiles,
+} from './local-write.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {
   type CloneAndStackPushOptions,
   type CloneAndStackPushResult,
   type CommitSpec,
-  MIGRATOR_IDENTITY,
   cloneAndStackPush,
 } from '../util/clone-and-stack-push.js'
 import {type ValidationResult, formatResult, validateWorkspace} from '../verify/validate.js'
@@ -24,8 +30,8 @@ import type {
 /**
  * Thrown when the migrator's freshly-written workspace fails the same checks
  * that the Gitea pre-receive `qfg-verify` hook will run server-side. We raise
- * this client-side after `applyDelta` writes files but before commit + push,
- * so the customer sees the failure locally rather than after a full push
+ * this client-side after the commit's `apply` writes files but before commit +
+ * push, so the customer sees the failure locally rather than after a full push
  * round-trip is rejected (qfg-52qg).
  */
 export class MigratorVerifyError extends Error {
@@ -101,6 +107,14 @@ const mergeEnvironmentsIntoQuonfigJson = (dir: string, sourceEnvs: string[]): vo
   fs.writeFileSync(quonfigPath, JSON.stringify({...existing, environments: merged}, null, 2) + '\n', 'utf8')
 }
 
+const verifyOnDisk = (dir: string): void => {
+  // qfg-52qg: client-side verify against the cumulative tree before commit
+  // lands. The Gitea pre-receive hook runs against the final HEAD; failing
+  // here matches what the server would reject and avoids a wasted push.
+  const verifyResult = validateWorkspace(dir)
+  if (!verifyResult.valid) throw new MigratorVerifyError(verifyResult)
+}
+
 export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): Promise<PushMigrationToCloudResult> => {
   if (opts.fullHistory && !opts.source.getCommitMeta) {
     throw new Error(
@@ -109,55 +123,65 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
     )
   }
 
-  let coercedSentinels: CoercedSentinelSummary | null = null
-  let droppedOverrides: DroppedOverrideSummary | null = null
-  let duplicateResolutions: DuplicateResolutionSummary | null = null
-  let skippedConfigs: SkippedConfigSummary | null = null
+  const acc: AuditAccumulator = {
+    coercedSentinels: null,
+    droppedOverrides: null,
+    duplicateResolutions: null,
+    skippedConfigs: null,
+  }
   let computedCommitMessage: string = `migrator: imported 0 objects from ${opts.source.name}`
 
+  const mergeEnvsIfPresent = (dir: string): void => {
+    if (opts.environments && opts.environments.length > 0) {
+      mergeEnvironmentsIntoQuonfigJson(dir, opts.environments)
+    }
+  }
+
   const commits: CommitSpec[] = opts.fullHistory
-    ? buildAuditLogCommits(opts, {
-        onAccumulatorUpdate(acc) {
-          coercedSentinels = acc.coercedSentinels
-          droppedOverrides = acc.droppedOverrides
-          duplicateResolutions = acc.duplicateResolutions
-          skippedConfigs = acc.skippedConfigs
-        },
-      })
+    ? [
+        ...buildAuditPerChangeCommits(opts.changes, opts.source),
+        buildAuditFinalCommit({
+          changes: opts.changes,
+          environments: opts.environments ?? [],
+          importState: opts.importState,
+          onAccumulatorUpdate: (a) => Object.assign(acc, a),
+          postWrite: verifyOnDisk,
+          preWrite: mergeEnvsIfPresent,
+          reportData: opts.reportData,
+          source: opts.source,
+        }),
+      ]
     : [
         {
           message: () => computedCommitMessage,
           async apply(dir) {
-            if (opts.environments && opts.environments.length > 0) {
-              mergeEnvironmentsIntoQuonfigJson(dir, opts.environments)
-            }
+            mergeEnvsIfPresent(dir)
 
             const {livePaths, resolutions: resolutionEntries} = writeQuonfigFiles(dir, opts.changes, opts.source)
             removeQfFromGitignore(dir)
             writeImportState(dir, opts.importState)
 
-            droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
-            skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
-            coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
-            duplicateResolutions =
+            acc.droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
+            acc.skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+            acc.coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
+            acc.duplicateResolutions =
               resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
             const skippedTotal =
-              (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
+              (acc.skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
             const environmentsCount = opts.environments?.length ?? 0
             const counts = buildMigrationCounts(livePaths, environmentsCount, skippedTotal)
             computedCommitMessage = buildMigrationCommitMessage(opts.source.name, counts)
             const reportData: MigrationReportData = {
               ...opts.reportData,
               counts,
-              ...(coercedSentinels ? {coercedSentinels} : {}),
-              ...(droppedOverrides ? {droppedOverrides} : {}),
-              ...(duplicateResolutions ? {duplicateResolutions} : {}),
-              ...(skippedConfigs ? {skippedConfigs} : {}),
+              ...(acc.coercedSentinels ? {coercedSentinels: acc.coercedSentinels} : {}),
+              ...(acc.droppedOverrides ? {droppedOverrides: acc.droppedOverrides} : {}),
+              ...(acc.duplicateResolutions ? {duplicateResolutions: acc.duplicateResolutions} : {}),
+              ...(acc.skippedConfigs ? {skippedConfigs: acc.skippedConfigs} : {}),
             }
             writeMigrationReport(dir, reportData)
 
-            const verifyResult = validateWorkspace(dir)
-            if (!verifyResult.valid) throw new MigratorVerifyError(verifyResult)
+            verifyOnDisk(dir)
           },
         },
       ]
@@ -170,105 +194,11 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
   if (opts.branch !== undefined) cloneOpts.branch = opts.branch
 
   const result = await cloneAndStackPush(cloneOpts)
-  return {...result, coercedSentinels, droppedOverrides, duplicateResolutions, skippedConfigs}
-}
-
-interface AuditAccumulator {
-  coercedSentinels: CoercedSentinelSummary | null
-  droppedOverrides: DroppedOverrideSummary | null
-  duplicateResolutions: DuplicateResolutionSummary | null
-  skippedConfigs: SkippedConfigSummary | null
-}
-
-const buildAuditLogCommits = (
-  opts: PushMigrationToCloudOptions,
-  callbacks: {onAccumulatorUpdate: (acc: AuditAccumulator) => void},
-): CommitSpec[] => {
-  const auditCommits: CommitSpec[] = opts.changes.map((change, index) => {
-    // Resolve commit meta once. The source must provide it for every change in
-    // full-history mode; null at this point means the bead-level invariant
-    // (Launch always carries changedBy + changedAt) was violated and we should
-    // fail loudly rather than silently fall back to migrator identity.
-    const meta = opts.source.getCommitMeta?.(change) ?? null
-    if (!meta) {
-      return {
-        author: MIGRATOR_IDENTITY,
-        message: `migrator: imported change ${index + 1} of ${opts.changes.length} from ${opts.source.name}`,
-        async apply(dir) {
-          writeQuonfigFiles(dir, [change], opts.source)
-        },
-      }
-    }
-
-    return {
-      author: meta.author,
-      authorDate: meta.date,
-      message: meta.message,
-      async apply(dir) {
-        writeQuonfigFiles(dir, [change], opts.source)
-      },
-    }
-  })
-
-  // Final commit: environments merge (so quonfig.json reflects the source-side
-  // env list), state-file bookkeeping, migration report, and the pre-flight
-  // verify pass against the cumulative tree.
-  const finalCommit: CommitSpec = {
-    author: MIGRATOR_IDENTITY,
-    async apply(dir) {
-      if (opts.environments && opts.environments.length > 0) {
-        mergeEnvironmentsIntoQuonfigJson(dir, opts.environments)
-      }
-
-      // Recompute live paths from disk so counts and duplicate-resolution
-      // reflect the cumulative state rather than the last change's slice.
-      const livePaths = collectLivePathsOnDisk(dir)
-      const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
-      const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
-      const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
-      const duplicateResolutions: DuplicateResolutionSummary | null = null
-
-      removeQfFromGitignore(dir)
-      writeImportState(dir, opts.importState)
-
-      const skippedTotal = skippedConfigs?.total ?? 0
-      const environmentsCount = opts.environments?.length ?? 0
-      const counts = buildMigrationCounts(livePaths, environmentsCount, skippedTotal)
-      const reportData: MigrationReportData = {
-        ...opts.reportData,
-        counts,
-        ...(coercedSentinels ? {coercedSentinels} : {}),
-        ...(droppedOverrides ? {droppedOverrides} : {}),
-        ...(skippedConfigs ? {skippedConfigs} : {}),
-      }
-      writeMigrationReport(dir, reportData)
-
-      callbacks.onAccumulatorUpdate({coercedSentinels, droppedOverrides, duplicateResolutions, skippedConfigs})
-
-      // qfg-52qg: client-side verify of the cumulative tree before the final
-      // commit lands. Pre-receive hook runs only against the final HEAD, so
-      // failing here matches what the server would reject.
-      const verifyResult = validateWorkspace(dir)
-      if (!verifyResult.valid) throw new MigratorVerifyError(verifyResult)
-    },
-    message: () => `migrator: imported ${opts.changes.length} change(s) from ${opts.source.name} (audit log)`,
+  return {
+    ...result,
+    coercedSentinels: acc.coercedSentinels,
+    droppedOverrides: acc.droppedOverrides,
+    duplicateResolutions: acc.duplicateResolutions,
+    skippedConfigs: acc.skippedConfigs,
   }
-
-  return [...auditCommits, finalCommit]
-}
-
-const collectLivePathsOnDisk = (dir: string): string[] => {
-  // Walk the type-dir top-levels we care about. Matches the prefixes that
-  // countsFromLivePaths inspects.
-  const prefixes = ['feature-flags', 'configs', 'segments', 'schemas', 'log-levels']
-  const out: string[] = []
-  for (const prefix of prefixes) {
-    const typeDir = path.join(dir, prefix)
-    if (!fs.existsSync(typeDir)) continue
-    for (const entry of fs.readdirSync(typeDir)) {
-      if (entry.endsWith('.json')) out.push(`${prefix}/${entry}`)
-    }
-  }
-
-  return out
 }

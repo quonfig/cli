@@ -64,6 +64,24 @@ function readLog(dir: string): GitLogEntry[] {
   })
 }
 
+function validConfig(key: string, value = true): string {
+  return (
+    JSON.stringify(
+      {
+        default: {
+          rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value}}],
+        },
+        environments: [],
+        key,
+        type: 'config',
+        valueType: 'bool',
+      },
+      null,
+      2,
+    ) + '\n'
+  )
+}
+
 function validFeatureFlag(key: string, value = true): string {
   return (
     JSON.stringify(
@@ -390,5 +408,69 @@ describe('migrate --full-summary: per-change audit-log commits (qfg-wbkj)', () =
 
     const finalFlag = JSON.parse(fs.readFileSync(path.join(reader, 'feature-flags/flag-x.json'), 'utf8'))
     expect(finalFlag.default.rules[0].value.value).to.equal(true)
+  })
+
+  it('cross-type duplicate keys (same key as config AND feature_flag) are resolved in the final commit', async () => {
+    // qfg-wbkj follow-up: writeQuonfigFiles runs per-change in audit mode and
+    // cannot see cross-change collisions. The final commit must run
+    // detectDuplicateKeys over the cumulative tree (config wins) so
+    // validateWorkspace doesn't reject the push.
+    const remote = createBareRemote(root)
+    seedRemote(remote, root)
+    const localDir = path.join(root, 'workspace')
+
+    const ada = {email: 'ada@example.com', name: 'Ada'}
+
+    const dualSource: MigrationSource = {
+      async *fetchChanges() {
+        /* not used */
+      },
+      getCommitMeta(change: LegacyChange): CommitMeta {
+        return {author: ada, date: change.changedAt!, message: `change ${change.key}@${change.changedAt}`}
+      },
+      async listEnvironments() {
+        return []
+      },
+      name: 'fake',
+      translate(change: LegacyChange): QuonfigFile[] {
+        // The change.raw.type discriminator routes to flag vs config output.
+        const type = (change.raw as {type: string}).type
+        const dir = type === 'config' ? 'configs' : 'feature-flags'
+        const body = type === 'config' ? validConfig(change.key!, true) : validFeatureFlag(change.key!, true)
+        return [{contents: body, path: `${dir}/${change.key}.json`}]
+      },
+      async validateAuth() {
+        /* noop */
+      },
+    }
+
+    const flagChange: LegacyChange = {changedAt: 1000, key: 'collide', raw: {type: 'feature_flag'}, source: 'fake'}
+    const configChange: LegacyChange = {changedAt: 2000, key: 'collide', raw: {type: 'config'}, source: 'fake'}
+
+    await pushMigrationToCloud({
+      changes: [flagChange, configChange],
+      environments: ['production'],
+      fullHistory: true,
+      importState: {lastProcessedAt: 2000, source: 'fake'},
+      localDir,
+      remoteUrl: remote,
+      reportData: emptyReport(),
+      source: dualSource,
+    })
+
+    const reader = cloneForRead(remote, root)
+    // Config kept, flag deleted.
+    expect(fs.existsSync(path.join(reader, 'configs/collide.json'))).to.equal(true)
+    expect(fs.existsSync(path.join(reader, 'feature-flags/collide.json'))).to.equal(false)
+
+    const log = readLog(reader)
+    // initial + flag-create + config-create + final state-file commit
+    expect(log).to.have.length(4)
+
+    // The deletion of feature-flags/collide.json happens in the final commit,
+    // not in an audit commit — it's migrator-attributed bookkeeping.
+    const finalPaths = new Set(log[3].changedPaths)
+    expect(finalPaths.has('feature-flags/collide.json')).to.equal(true)
+    expect(log[3].authorEmail).to.equal('migrator@quonfig.com')
   })
 })

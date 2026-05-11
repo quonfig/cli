@@ -4,7 +4,7 @@ import * as path from 'node:path'
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
 import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
-import {MIGRATOR_IDENTITY, type PushIdentity} from '../util/clone-and-stack-push.js'
+import {type CommitSpec, MIGRATOR_IDENTITY, type PushIdentity, stackCommits} from '../util/clone-and-stack-push.js'
 import {runGit, spawnGit} from '../util/git-ops.js'
 import type {
   CoercedSentinelSummary,
@@ -259,7 +259,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   await runGit(['-C', opts.localDir, 'config', 'user.email', author.email])
 
   if (opts.fullHistory) {
-    return runFullHistoryLocal(opts, author, action)
+    return runFullHistoryLocal(opts, action)
   }
 
   ensureQuonfigJson(opts.localDir, opts.environments)
@@ -323,106 +323,167 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
 
 const runFullHistoryLocal = async (
   opts: ApplyLocalMigrationOptions,
-  author: PushIdentity,
   action: 'initialized' | 'reused',
 ): Promise<ApplyLocalMigrationResult> => {
   ensureQuonfigJson(opts.localDir, opts.environments)
 
-  // Per-change commits, each authored as the original Launch user.
-  for (let i = 0; i < opts.changes.length; i++) {
-    const change = opts.changes[i]
-    const meta = opts.source.getCommitMeta?.(change) ?? null
-
-    writeQuonfigFiles(opts.localDir, [change], opts.source)
-    // eslint-disable-next-line no-await-in-loop
-    await runGit(['-C', opts.localDir, 'add', '--all'])
-    // eslint-disable-next-line no-await-in-loop
-    if (!(await hasStagedChanges(opts.localDir))) continue
-
-    const env: NodeJS.ProcessEnv = meta
-      ? {
-          GIT_AUTHOR_NAME: meta.author.name,
-          GIT_AUTHOR_EMAIL: meta.author.email,
-          GIT_COMMITTER_NAME: meta.author.name,
-          GIT_COMMITTER_EMAIL: meta.author.email,
-          GIT_AUTHOR_DATE: new Date(meta.date).toISOString(),
-          GIT_COMMITTER_DATE: new Date(meta.date).toISOString(),
-        }
-      : {
-          GIT_AUTHOR_NAME: author.name,
-          GIT_AUTHOR_EMAIL: author.email,
-          GIT_COMMITTER_NAME: author.name,
-          GIT_COMMITTER_EMAIL: author.email,
-        }
-    const message =
-      meta?.message ?? `migrator: imported change ${i + 1} of ${opts.changes.length} from ${opts.source.name}`
-    // eslint-disable-next-line no-await-in-loop
-    await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {stdin: message, env})
+  const acc: AuditAccumulator = {
+    coercedSentinels: null,
+    droppedOverrides: null,
+    duplicateResolutions: null,
+    skippedConfigs: null,
   }
 
-  // Final state-file commit (migrator identity).
-  removeQfFromGitignore(opts.localDir)
-  writeImportState(opts.localDir, opts.importState)
+  const commits: CommitSpec[] = [
+    ...buildAuditPerChangeCommits(opts.changes, opts.source),
+    buildAuditFinalCommit({
+      changes: opts.changes,
+      environments: opts.environments,
+      importState: opts.importState,
+      onAccumulatorUpdate: (a) => Object.assign(acc, a),
+      reportData: opts.reportData,
+      source: opts.source,
+    }),
+  ]
 
-  const livePaths = collectLivePathsForCounts(opts.localDir)
-  const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
-  const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
-  const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
-  const duplicateResolutions: DuplicateResolutionSummary | null = null
-
-  const skippedTotal = skippedConfigs?.total ?? 0
-  const counts = buildMigrationCounts(livePaths, opts.environments.length, skippedTotal)
-  const reportData: MigrationReportData = {
-    ...opts.reportData,
-    counts,
-    ...(coercedSentinels ? {coercedSentinels} : {}),
-    ...(droppedOverrides ? {droppedOverrides} : {}),
-    ...(skippedConfigs ? {skippedConfigs} : {}),
-  }
-  writeMigrationReport(opts.localDir, reportData)
-
-  await runGit(['-C', opts.localDir, 'add', '--all'])
-
-  let commitSha: string | null = null
-  let committed = false
-  if (await hasStagedChanges(opts.localDir)) {
-    const finalMessage = `migrator: imported ${opts.changes.length} change(s) from ${opts.source.name} (audit log)`
-    await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
-      stdin: finalMessage,
-      env: {
-        GIT_AUTHOR_NAME: author.name,
-        GIT_AUTHOR_EMAIL: author.email,
-        GIT_COMMITTER_NAME: author.name,
-        GIT_COMMITTER_EMAIL: author.email,
-      },
-    })
-    const {stdout: sha} = await runGit(['-C', opts.localDir, 'rev-parse', 'HEAD'])
-    commitSha = sha.trim()
-    committed = true
-  } else {
-    // No state-file commit needed (e.g. zero changes). HEAD reflects the audit
-    // commits or the prior state.
-    try {
-      const {stdout: sha} = await runGit(['-C', opts.localDir, 'rev-parse', 'HEAD'])
-      commitSha = sha.trim()
-      committed = opts.changes.length > 0
-    } catch {
-      /* empty repo, no HEAD */
-    }
-  }
+  const {commitShas} = await stackCommits(opts.localDir, commits)
 
   return {
     action,
-    coercedSentinels,
-    commitSha,
-    committed,
-    droppedOverrides,
-    duplicateResolutions,
-    skippedConfigs,
+    coercedSentinels: acc.coercedSentinels,
+    commitSha: commitShas.at(-1) ?? null,
+    committed: commitShas.length > 0,
+    droppedOverrides: acc.droppedOverrides,
+    duplicateResolutions: acc.duplicateResolutions,
+    skippedConfigs: acc.skippedConfigs,
   }
 }
 
-const collectLivePathsForCounts = (dir: string): string[] => {
+/**
+ * qfg-wbkj: accumulator for source-level summaries that the final state-file
+ * commit collects from the source after all per-change commits have run.
+ * Used by both push-to-cloud and local-write to surface back to callers.
+ */
+export interface AuditAccumulator {
+  coercedSentinels: CoercedSentinelSummary | null
+  droppedOverrides: DroppedOverrideSummary | null
+  duplicateResolutions: DuplicateResolutionSummary | null
+  skippedConfigs: SkippedConfigSummary | null
+}
+
+/**
+ * qfg-wbkj: build one CommitSpec per change, each carrying the original
+ * source-side author/date/message when `getCommitMeta` returns metadata. Used
+ * by `--full-summary` from both the local-write and push-to-cloud paths.
+ */
+export const buildAuditPerChangeCommits = (changes: LegacyChange[], source: MigrationSource): CommitSpec[] =>
+  changes.map((change, index) => {
+    const meta = source.getCommitMeta?.(change) ?? null
+    const apply = async (dir: string): Promise<void> => {
+      writeQuonfigFiles(dir, [change], source)
+    }
+
+    if (!meta) {
+      return {
+        apply,
+        author: MIGRATOR_IDENTITY,
+        message: `migrator: imported change ${index + 1} of ${changes.length} from ${source.name}`,
+      }
+    }
+
+    return {apply, author: meta.author, authorDate: meta.date, message: meta.message}
+  })
+
+export interface BuildAuditFinalCommitOptions {
+  changes: LegacyChange[]
+  environments: string[]
+  importState: ImportState
+  /** Receives the accumulated summaries once the commit's apply() has run. */
+  onAccumulatorUpdate?: (acc: AuditAccumulator) => void
+  /**
+   * Optional hook to run AFTER writeImportState + writeMigrationReport but before
+   * the commit lands. Push-to-cloud uses this to run validateWorkspace (and to
+   * merge source-side environments into the existing quonfig.json). Throwing here
+   * aborts the commit cleanly.
+   */
+  postWrite?: (dir: string) => Promise<void> | void
+  /**
+   * Optional hook to run BEFORE bookkeeping (state file + report). Push-to-cloud
+   * uses this to merge source-side environments into the cloned quonfig.json.
+   */
+  preWrite?: (dir: string) => Promise<void> | void
+  reportData: MigrationReportData
+  source: MigrationSource
+}
+
+/**
+ * qfg-wbkj: build the final state-file commit for audit-log mode. Writes
+ * `.qf/import-state.json` + `MIGRATION_REPORT.md` with cumulative counts read
+ * from disk, and surfaces the source's accumulated dropped/skipped/coerced
+ * summaries via `onAccumulatorUpdate`. The `preWrite` / `postWrite` hooks let
+ * push-to-cloud merge environments and run server-side-equivalent validation
+ * without local-write needing to know about either.
+ */
+export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): CommitSpec => ({
+  async apply(dir) {
+    if (opts.preWrite) await opts.preWrite(dir)
+
+    // qfg-wbkj follow-up: in audit-log mode, writeQuonfigFiles runs per-change
+    // and cannot detect cross-change duplicate keys (e.g. the same key existing
+    // as both a config and a feature_flag in source history). Resolve here over
+    // the cumulative on-disk tree — same kept/deleted semantics as the
+    // collapsed path — so validateWorkspace doesn't reject the push. The
+    // deletion lands in this final state-file commit under migrator identity,
+    // not in any audit commit.
+    const initialPaths = collectLivePathsOnDisk(dir)
+    const resolutionEntries = detectDuplicateKeys(initialPaths.map((p) => ({path: p})))
+    for (const resolution of resolutionEntries) {
+      for (const toDelete of resolution.deleted) {
+        try {
+          fs.unlinkSync(path.join(dir, toDelete))
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+    }
+
+    const livePaths = collectLivePathsOnDisk(dir)
+    const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
+    const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+    const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
+    const duplicateResolutions: DuplicateResolutionSummary | null =
+      resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
+
+    removeQfFromGitignore(dir)
+    writeImportState(dir, opts.importState)
+
+    const skippedTotal = (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
+    const counts = buildMigrationCounts(livePaths, opts.environments.length, skippedTotal)
+    const reportData: MigrationReportData = {
+      ...opts.reportData,
+      counts,
+      ...(coercedSentinels ? {coercedSentinels} : {}),
+      ...(droppedOverrides ? {droppedOverrides} : {}),
+      ...(duplicateResolutions ? {duplicateResolutions} : {}),
+      ...(skippedConfigs ? {skippedConfigs} : {}),
+    }
+    writeMigrationReport(dir, reportData)
+
+    opts.onAccumulatorUpdate?.({coercedSentinels, droppedOverrides, duplicateResolutions, skippedConfigs})
+
+    if (opts.postWrite) await opts.postWrite(dir)
+  },
+  author: MIGRATOR_IDENTITY,
+  message: `migrator: imported ${opts.changes.length} change(s) from ${opts.source.name} (audit log)`,
+})
+
+/**
+ * Walk the type-dir top-levels we care about, returning all `<type-dir>/*.json`
+ * paths on disk. Used to recompute cumulative counts in audit-log mode where
+ * `writeQuonfigFiles` runs per-change and its in-memory `livePaths` reflects
+ * only the last slice.
+ */
+export const collectLivePathsOnDisk = (dir: string): string[] => {
   const prefixes = ['feature-flags', 'configs', 'segments', 'schemas', 'log-levels']
   const out: string[] = []
   for (const prefix of prefixes) {
