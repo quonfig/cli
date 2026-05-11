@@ -70,10 +70,14 @@ describe('cloneAndStackPush', () => {
     const result = await cloneAndStackPush({
       remoteUrl: remote,
       localDir,
-      commitMessage: 'migrator: import delta',
-      async applyDelta(dir) {
-        fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"key":"a"}\n')
-      },
+      commits: [
+        {
+          message: 'migrator: import delta',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"key":"a"}\n')
+          },
+        },
+      ],
     })
 
     expect(result.committed).to.equal(true)
@@ -93,10 +97,14 @@ describe('cloneAndStackPush', () => {
     await cloneAndStackPush({
       remoteUrl: remote,
       localDir,
-      commitMessage: 'migrator: run 1',
-      async applyDelta(dir) {
-        fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"key":"a","v":1}\n')
-      },
+      commits: [
+        {
+          message: 'migrator: run 1',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"key":"a","v":1}\n')
+          },
+        },
+      ],
     })
 
     // Simulate a UI edit on the remote on a different file
@@ -106,10 +114,14 @@ describe('cloneAndStackPush', () => {
     const result = await cloneAndStackPush({
       remoteUrl: remote,
       localDir,
-      commitMessage: 'migrator: run 2',
-      async applyDelta(dir) {
-        fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"key":"a","v":2}\n')
-      },
+      commits: [
+        {
+          message: 'migrator: run 2',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"key":"a","v":2}\n')
+          },
+        },
+      ],
     })
 
     expect(result.committed).to.equal(true)
@@ -131,10 +143,14 @@ describe('cloneAndStackPush', () => {
     await cloneAndStackPush({
       remoteUrl: remote,
       localDir,
-      commitMessage: 'migrator: identity',
-      async applyDelta(dir) {
-        fs.writeFileSync(path.join(dir, 'x.json'), '{}\n')
-      },
+      commits: [
+        {
+          message: 'migrator: identity',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'x.json'), '{}\n')
+          },
+        },
+      ],
     })
 
     const reader = cloneForRead(remote, root)
@@ -144,7 +160,7 @@ describe('cloneAndStackPush', () => {
     expect(authorEmail).to.equal('migrator@quonfig.com')
   })
 
-  it('returns committed:false and does not create an empty commit when applyDelta writes no changes', async () => {
+  it('returns committed:false and does not create an empty commit when apply writes no changes', async () => {
     const remote = createBareRemote(root)
     seedRemoteWithInitialCommit(remote, root)
     const localDir = path.join(root, 'workspace')
@@ -152,19 +168,28 @@ describe('cloneAndStackPush', () => {
     const result = await cloneAndStackPush({
       remoteUrl: remote,
       localDir,
-      commitMessage: 'migrator: should not land',
-      async applyDelta() {
-        // no files written
-      },
+      commits: [
+        {
+          message: 'migrator: should not land',
+          async apply() {
+            // no files written
+          },
+        },
+      ],
     })
 
     expect(result.committed).to.equal(false)
+    expect(result.commitShas).to.have.length(0)
 
     const reader = cloneForRead(remote, root)
     expect(logSubjects(reader)).to.deep.equal(['initial'])
   })
 
-  it('surfaces a PushHookRejectedError (not a fast-forward conflict) when the remote pre-receive hook declines the push', async () => {
+  it('surfaces a PushHookRejectedError (not a fast-forward conflict) when the remote pre-receive hook declines the push', async function () {
+    // The pre-receive hook execution path involves a real `git push` to a bare
+    // remote with a custom hook installed. Under CPU contention from sibling
+    // tests this can exceed the default 10s budget; give it explicit headroom.
+    this.timeout(20_000)
     const remote = createBareRemote(root)
     seedRemoteWithInitialCommit(remote, root)
 
@@ -184,10 +209,14 @@ describe('cloneAndStackPush', () => {
       await cloneAndStackPush({
         remoteUrl: remote,
         localDir,
-        commitMessage: 'migrator: bad data',
-        async applyDelta(dir) {
-          fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":1}\n')
-        },
+        commits: [
+          {
+            message: 'migrator: bad data',
+            async apply(dir) {
+              fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":1}\n')
+            },
+          },
+        ],
       })
     } catch (error) {
       caught = error as Error
@@ -203,6 +232,101 @@ describe('cloneAndStackPush', () => {
     expect(caught!.message).to.match(/hook|validation/i)
   })
 
+  it('pushes N commits with per-commit author, date, and message (qfg-wbkj)', async () => {
+    const remote = createBareRemote(root)
+    seedRemoteWithInitialCommit(remote, root)
+    const localDir = path.join(root, 'workspace')
+
+    const result = await cloneAndStackPush({
+      remoteUrl: remote,
+      localDir,
+      commits: [
+        {
+          message: 'create flag-x off',
+          author: {name: 'Ada Lovelace', email: 'ada@example.com'},
+          authorDate: new Date(1000),
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-x.json'), '{"v":false}\n')
+          },
+        },
+        {
+          message: 'flip flag-x on',
+          author: {name: 'Grace Hopper', email: 'grace@example.com'},
+          authorDate: new Date(2000),
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-x.json'), '{"v":true}\n')
+          },
+        },
+        {
+          message: 'flip flag-x off',
+          author: {name: 'Linus T', email: 'linus@example.com'},
+          authorDate: new Date(3000),
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-x.json'), '{"v":false}\n')
+          },
+        },
+      ],
+    })
+
+    expect(result.committed).to.equal(true)
+    expect(result.commitShas).to.have.length(3)
+    expect(result.commitSha).to.equal(result.commitShas[2])
+
+    const reader = cloneForRead(remote, root)
+    expect(logSubjects(reader)).to.deep.equal(['flip flag-x off', 'flip flag-x on', 'create flag-x off', 'initial'])
+
+    const readField = (ref: string, field: string): string => run(reader, 'log', '-1', `--pretty=format:${field}`, ref)
+
+    expect(readField('HEAD~2', '%an')).to.equal('Ada Lovelace')
+    expect(readField('HEAD~2', '%ae')).to.equal('ada@example.com')
+    expect(new Date(readField('HEAD~2', '%aI')).getTime()).to.equal(1000)
+
+    expect(readField('HEAD~1', '%an')).to.equal('Grace Hopper')
+    expect(readField('HEAD~1', '%ae')).to.equal('grace@example.com')
+    expect(new Date(readField('HEAD~1', '%aI')).getTime()).to.equal(2000)
+
+    expect(readField('HEAD', '%an')).to.equal('Linus T')
+    expect(readField('HEAD', '%ae')).to.equal('linus@example.com')
+    expect(new Date(readField('HEAD', '%aI')).getTime()).to.equal(3000)
+  })
+
+  it('skips empty commits in a multi-commit batch without aborting', async () => {
+    const remote = createBareRemote(root)
+    seedRemoteWithInitialCommit(remote, root)
+    const localDir = path.join(root, 'workspace')
+
+    const result = await cloneAndStackPush({
+      remoteUrl: remote,
+      localDir,
+      commits: [
+        {
+          message: 'first real',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'a.json'), '{"v":1}\n')
+          },
+        },
+        {
+          message: 'no-op',
+          async apply() {
+            // Apply nothing
+          },
+        },
+        {
+          message: 'second real',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'b.json'), '{"v":2}\n')
+          },
+        },
+      ],
+    })
+
+    expect(result.committed).to.equal(true)
+    expect(result.commitShas).to.have.length(2)
+
+    const reader = cloneForRead(remote, root)
+    expect(logSubjects(reader)).to.deep.equal(['second real', 'first real', 'initial'])
+  })
+
   it('surfaces a PushConflictError and does NOT force-push when the remote has moved between fetch and push', async () => {
     const remote = createBareRemote(root)
     seedRemoteWithInitialCommit(remote, root)
@@ -211,27 +335,35 @@ describe('cloneAndStackPush', () => {
     const result = await cloneAndStackPush({
       remoteUrl: remote,
       localDir,
-      commitMessage: 'migrator: run 1',
-      async applyDelta(dir) {
-        fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":1}\n')
-      },
+      commits: [
+        {
+          message: 'migrator: run 1',
+          async apply(dir) {
+            fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":1}\n')
+          },
+        },
+      ],
     })
     expect(result.committed).to.equal(true)
 
     // Simulate a race: after our local fetch but before our push, another commit lands on the remote.
-    // We implement this by racing the applyDelta: we add a UI commit *inside* applyDelta so that the
+    // We implement this by racing apply: we add a UI commit *inside* apply so that the
     // local clone is stale at push time.
     let conflict: PushConflictError | null = null
     try {
       await cloneAndStackPush({
         remoteUrl: remote,
         localDir,
-        commitMessage: 'migrator: run 2 (will race)',
-        async applyDelta(dir) {
-          // Simulate another writer pushing after we've already fetched+ff-merged
-          addUiCommit(remote, root, 'flag-b.json', '{"v":"ui"}\n')
-          fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":2}\n')
-        },
+        commits: [
+          {
+            message: 'migrator: run 2 (will race)',
+            async apply(dir) {
+              // Simulate another writer pushing after we've already fetched+ff-merged
+              addUiCommit(remote, root, 'flag-b.json', '{"v":"ui"}\n')
+              fs.writeFileSync(path.join(dir, 'flag-a.json'), '{"v":2}\n')
+            },
+          },
+        ],
       })
     } catch (error) {
       conflict = error as PushConflictError

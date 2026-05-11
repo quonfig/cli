@@ -24,6 +24,12 @@ export interface ApplyLocalMigrationOptions {
   changes: LegacyChange[]
   /** Environments discovered from the source (slugified). Written to `quonfig.json` if missing. */
   environments: string[]
+  /**
+   * qfg-wbkj: when true, produce one git commit per change (audit-log mode) +
+   * one final state-file commit on top. Requires `source.getCommitMeta` to be
+   * defined. See pushMigrationToCloud's matching option.
+   */
+  fullHistory?: boolean
   importState: ImportState
   localDir: string
   /**
@@ -240,10 +246,21 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const branch = opts.branch ?? 'main'
   const author = opts.author ?? MIGRATOR_IDENTITY
 
+  if (opts.fullHistory && !opts.source.getCommitMeta) {
+    throw new Error(
+      `--full-summary requires the source to provide per-change author + date + summary, but \`${opts.source.name}\` does not. ` +
+        `Drop --full-summary or use a source (e.g. launch) that supports it.`,
+    )
+  }
+
   const action = await ensureLocalRepo(opts.localDir, branch)
 
   await runGit(['-C', opts.localDir, 'config', 'user.name', author.name])
   await runGit(['-C', opts.localDir, 'config', 'user.email', author.email])
+
+  if (opts.fullHistory) {
+    return runFullHistoryLocal(opts, author, action)
+  }
 
   ensureQuonfigJson(opts.localDir, opts.environments)
   const {livePaths, resolutions: resolutionEntries} = writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
@@ -302,4 +319,119 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
     duplicateResolutions,
     skippedConfigs,
   }
+}
+
+const runFullHistoryLocal = async (
+  opts: ApplyLocalMigrationOptions,
+  author: PushIdentity,
+  action: 'initialized' | 'reused',
+): Promise<ApplyLocalMigrationResult> => {
+  ensureQuonfigJson(opts.localDir, opts.environments)
+
+  // Per-change commits, each authored as the original Launch user.
+  for (let i = 0; i < opts.changes.length; i++) {
+    const change = opts.changes[i]
+    const meta = opts.source.getCommitMeta?.(change) ?? null
+
+    writeQuonfigFiles(opts.localDir, [change], opts.source)
+    // eslint-disable-next-line no-await-in-loop
+    await runGit(['-C', opts.localDir, 'add', '--all'])
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await hasStagedChanges(opts.localDir))) continue
+
+    const env: NodeJS.ProcessEnv = meta
+      ? {
+          GIT_AUTHOR_NAME: meta.author.name,
+          GIT_AUTHOR_EMAIL: meta.author.email,
+          GIT_COMMITTER_NAME: meta.author.name,
+          GIT_COMMITTER_EMAIL: meta.author.email,
+          GIT_AUTHOR_DATE: new Date(meta.date).toISOString(),
+          GIT_COMMITTER_DATE: new Date(meta.date).toISOString(),
+        }
+      : {
+          GIT_AUTHOR_NAME: author.name,
+          GIT_AUTHOR_EMAIL: author.email,
+          GIT_COMMITTER_NAME: author.name,
+          GIT_COMMITTER_EMAIL: author.email,
+        }
+    const message =
+      meta?.message ?? `migrator: imported change ${i + 1} of ${opts.changes.length} from ${opts.source.name}`
+    // eslint-disable-next-line no-await-in-loop
+    await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {stdin: message, env})
+  }
+
+  // Final state-file commit (migrator identity).
+  removeQfFromGitignore(opts.localDir)
+  writeImportState(opts.localDir, opts.importState)
+
+  const livePaths = collectLivePathsForCounts(opts.localDir)
+  const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
+  const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
+  const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
+  const duplicateResolutions: DuplicateResolutionSummary | null = null
+
+  const skippedTotal = skippedConfigs?.total ?? 0
+  const counts = buildMigrationCounts(livePaths, opts.environments.length, skippedTotal)
+  const reportData: MigrationReportData = {
+    ...opts.reportData,
+    counts,
+    ...(coercedSentinels ? {coercedSentinels} : {}),
+    ...(droppedOverrides ? {droppedOverrides} : {}),
+    ...(skippedConfigs ? {skippedConfigs} : {}),
+  }
+  writeMigrationReport(opts.localDir, reportData)
+
+  await runGit(['-C', opts.localDir, 'add', '--all'])
+
+  let commitSha: string | null = null
+  let committed = false
+  if (await hasStagedChanges(opts.localDir)) {
+    const finalMessage = `migrator: imported ${opts.changes.length} change(s) from ${opts.source.name} (audit log)`
+    await spawnGit(['-C', opts.localDir, 'commit', '-F', '-'], {
+      stdin: finalMessage,
+      env: {
+        GIT_AUTHOR_NAME: author.name,
+        GIT_AUTHOR_EMAIL: author.email,
+        GIT_COMMITTER_NAME: author.name,
+        GIT_COMMITTER_EMAIL: author.email,
+      },
+    })
+    const {stdout: sha} = await runGit(['-C', opts.localDir, 'rev-parse', 'HEAD'])
+    commitSha = sha.trim()
+    committed = true
+  } else {
+    // No state-file commit needed (e.g. zero changes). HEAD reflects the audit
+    // commits or the prior state.
+    try {
+      const {stdout: sha} = await runGit(['-C', opts.localDir, 'rev-parse', 'HEAD'])
+      commitSha = sha.trim()
+      committed = opts.changes.length > 0
+    } catch {
+      /* empty repo, no HEAD */
+    }
+  }
+
+  return {
+    action,
+    coercedSentinels,
+    commitSha,
+    committed,
+    droppedOverrides,
+    duplicateResolutions,
+    skippedConfigs,
+  }
+}
+
+const collectLivePathsForCounts = (dir: string): string[] => {
+  const prefixes = ['feature-flags', 'configs', 'segments', 'schemas', 'log-levels']
+  const out: string[] = []
+  for (const prefix of prefixes) {
+    const typeDir = path.join(dir, prefix)
+    if (!fs.existsSync(typeDir)) continue
+    for (const entry of fs.readdirSync(typeDir)) {
+      if (entry.endsWith('.json')) out.push(`${prefix}/${entry}`)
+    }
+  }
+
+  return out
 }
