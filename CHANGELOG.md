@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.44 - 2026-05-11
+
+- feat(qfg-sv3c): `qfg init` no longer emits a per-workspace `quonfig.schema.json`. The README.md, CLAUDE.md, and AGENTS.md templates now reference the hosted JSON Schema at `https://api.quonfig.com/schemas/stored-config.json` (served by app-quonfig as of qfg-c3es), so every workspace gets the current schema without needing to re-run `qfg init`. Existing stale `quonfig.schema.json` files in customer repos are left untouched — explicit non-migration decision; they're harmless and the hosted URL takes precedence in `$schema` references. `src/init/schema.ts` is kept (not deleted) because `qfg config-schema --json-schema` and the operator-parity test still import `storedConfigJsonSchema()`.
+- fix(schema): align the hand-curated `storedConfigJsonSchema()` with the Zod `StoredConfigSchema` source-of-truth in app-quonfig. Adds the `readyForCleanup` property (added to Zod in qfg-580q, never ported here) and renames `variant.key` → `variant.name` to match the Zod (the cli copy was stale; no workspace data references either field name). Drift surfaced by the new cross-repo drift check in qfg-svmx; the check now reports "No drift detected".
+
 ## 0.0.43 - 2026-05-10
 
 - chore(qfg-y7xh): bump `engines.node` floor to `>=20.9.0` to align with the rest of the Quonfig SDK family (Node 20.9 is the minimum LTS that supports `fetch`, `--import`, and the global `crypto` shape we rely on).
