@@ -9,7 +9,7 @@ import {agentsMdTemplate, claudeMdTemplate, PRE_COMMIT_MARKER, readmeTemplate} f
 import {writeWorkspaceSlug, readWorkspaceSlug} from '../../src/util/quonfig-json.js'
 import {validateWorkspace} from '../../src/verify/validate.js'
 
-const HOSTED_SCHEMA_URL = 'https://api.quonfig.com/schemas/stored-config.json'
+const HOSTED_SCHEMA_URL = 'https://api.quonfig.com/schemas/v1/stored-config.json'
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-init-'))

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.45 - 2026-05-11
+
+- fix(qfg-c3es): bump the hosted JSON Schema URL in `qfg init` templates to `https://api.quonfig.com/schemas/v1/stored-config.json`. 0.0.44 advertised an unversioned URL that didn't actually exist as a route (Next.js served the schema at `/api/schemas/...` while the templates pointed at `/schemas/...`, which 307'd to WorkOS auth on production). app-quonfig now serves the schema at the versioned, no-`/api/`-prefix path; this release aligns the workspace templates so newly-emitted `$schema` references resolve. The `/v1/` segment also gives us an immutable-`$id` escape hatch — future breaking changes ship as `/v2/...` instead of mutating in place.
+
 ## 0.0.44 - 2026-05-11
 
 - feat(qfg-sv3c): `qfg init` no longer emits a per-workspace `quonfig.schema.json`. The README.md, CLAUDE.md, and AGENTS.md templates now reference the hosted JSON Schema at `https://api.quonfig.com/schemas/stored-config.json` (served by app-quonfig as of qfg-c3es), so every workspace gets the current schema without needing to re-run `qfg init`. Existing stale `quonfig.schema.json` files in customer repos are left untouched — explicit non-migration decision; they're harmless and the hosted URL takes precedence in `$schema` references. `src/init/schema.ts` is kept (not deleted) because `qfg config-schema --json-schema` and the operator-parity test still import `storedConfigJsonSchema()`.

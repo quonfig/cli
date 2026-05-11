@@ -43,7 +43,7 @@ qfg list
 
 ## Schema
 
-Config files reference the hosted JSON Schema at <https://api.quonfig.com/schemas/stored-config.json> via their \`$schema\` field. Editors that support JSON Schema will provide autocomplete and validation automatically.
+Config files reference the hosted JSON Schema at <https://api.quonfig.com/schemas/v1/stored-config.json> via their \`$schema\` field. Editors that support JSON Schema will provide autocomplete and validation automatically.
 
 ## Validation
 
@@ -64,12 +64,12 @@ This is a Quonfig workspace repository. Configuration is stored as JSON files in
 
 ## JSON Schema
 
-The canonical schema for config files is hosted at <https://api.quonfig.com/schemas/stored-config.json>. Use it as the source of truth for field names, types, enums, and constraints.
+The canonical schema for config files is hosted at <https://api.quonfig.com/schemas/v1/stored-config.json>. Use it as the source of truth for field names, types, enums, and constraints.
 
 Config files can reference it for editor support:
 
 \`\`\`json
-{ "$schema": "https://api.quonfig.com/schemas/stored-config.json", "key": "my.config", ... }
+{ "$schema": "https://api.quonfig.com/schemas/v1/stored-config.json", "key": "my.config", ... }
 \`\`\`
 
 ## Directory Structure
@@ -89,7 +89,7 @@ Files must live in the directory matching their \`type\`. The filename (without 
 
 \`\`\`json
 {
-  "$schema": "https://api.quonfig.com/schemas/stored-config.json",
+  "$schema": "https://api.quonfig.com/schemas/v1/stored-config.json",
   "key": "my-app.timeout",
   "type": "config",
   "valueType": "int",
@@ -123,7 +123,7 @@ The \`default\` block (and each environment override) contains a \`rules\` array
 | Segment | \`IN_SEG\`, \`NOT_IN_SEG\` | \`valueToMatch\` (segment key) |
 | Other | \`IN_INT_RANGE\`, \`LOOKUP_KEY_IN\`, \`LOOKUP_KEY_NOT_IN\` | \`valueToMatch\` |
 
-See <https://api.quonfig.com/schemas/stored-config.json> for the full operator enum and value type definitions.
+See <https://api.quonfig.com/schemas/v1/stored-config.json> for the full operator enum and value type definitions.
 
 ## Environments
 
