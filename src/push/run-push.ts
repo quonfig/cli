@@ -223,14 +223,18 @@ const normalizeForCompare = (url: string): string => {
 
 const sameRepo = (a: string, b: string): boolean => normalizeForCompare(a) === normalizeForCompare(b)
 
-const PUSHED_VIA_TRAILER = 'Pushed-Via: cli'
-
-/** Append the Pushed-Via trailer to a commit message if it isn't already present. */
-export const withPushedViaTrailer = (message: string): string => {
-  if (message.includes(PUSHED_VIA_TRAILER)) return message
-  const trimmed = message.replace(/\s+$/, '')
-  return `${trimmed}\n\n${PUSHED_VIA_TRAILER}\n`
-}
+/**
+ * qfg-glrd.6: the `Pushed-Via: cli` trailer was retired. Audit data
+ * now lives in the server-side `push_events` table (qfg-glrd.4), so a
+ * CLI-appended trailer would be redundant — and CLI trailers also
+ * break SHA identity end-to-end once pack-push lands (the message the
+ * user committed wouldn't match the message that travels to the server).
+ *
+ * Kept as a no-op shim instead of deleted so callers and tests don't
+ * need a coordinated cross-repo rename. Will be removed once every
+ * caller has been updated to drop the call entirely.
+ */
+export const withPushedViaTrailer = (message: string): string => message
 
 export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<RunPushResult> {
   const log = deps.log ?? ((s: string) => console.log(s))

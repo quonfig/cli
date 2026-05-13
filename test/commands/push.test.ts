@@ -464,16 +464,24 @@ describe('runPush (core)', () => {
     })
   })
 
-  describe('trailer', () => {
-    it('withPushedViaTrailer appends "Pushed-Via: cli" when missing', () => {
+  /**
+   * qfg-glrd.6: the `Pushed-Via: cli` trailer was retired. Audit data
+   * lives in the server-side `push_events` table (qfg-glrd.4), so CLI-
+   * appended trailers would now be redundant — and worse, they break
+   * SHA identity end-to-end once pack-push lands (because the message
+   * the user committed wouldn't match the message that travels to the
+   * server). Verify the CLI does not append Pushed-Via to a server-
+   * intended commit message anymore.
+   */
+  describe('no trailer (qfg-glrd.6)', () => {
+    it('withPushedViaTrailer returns the message unchanged', () => {
       const out = withPushedViaTrailer('qfg push: 3 file change(s)')
-      expect(out).to.match(/Pushed-Via: cli/)
+      expect(out).to.equal('qfg push: 3 file change(s)')
     })
 
-    it('withPushedViaTrailer is idempotent', () => {
-      const a = withPushedViaTrailer('hello')
-      const b = withPushedViaTrailer(a)
-      expect(a).to.equal(b)
+    it('withPushedViaTrailer never injects Pushed-Via', () => {
+      const out = withPushedViaTrailer('hello')
+      expect(out).to.not.match(/Pushed-Via/)
     })
   })
 })
