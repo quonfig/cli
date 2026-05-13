@@ -1,5 +1,4 @@
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 
 import {Flags} from '@oclif/core'
 
@@ -28,6 +27,7 @@ import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
 import {computeClonePathDiff} from '../push/clone-path-diff.js'
 import {callConfigsPush} from '../push/config-push-client.js'
+import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 
 export default class Push extends BaseCommand {
@@ -39,7 +39,7 @@ Enforces three guards before touching the remote:
   3. A diff summary is shown; destructive changes (10+ deletes, >=25% of
      files, or an unpinned dir) require typing the workspace slug to confirm.
 
-  qfg push                                 # uses QUONFIG_DIR + profile workspace
+  qfg push                                 # resolves dir from cwd, QUONFIG_DIR, or --dir
   qfg push --dir ./our-config
   qfg push --dir ./our-config --workspace acme-prod
   qfg push --dir ./our-config --yes        # skip normal Y/N (never skips typed-slug)
@@ -53,7 +53,8 @@ Enforces three guards before touching the remote:
 
   static flags = {
     dir: Flags.string({
-      description: 'Local directory to push (defaults to QUONFIG_DIR env var)',
+      description:
+        'Local directory to push (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR env var)',
     }),
     workspace: Flags.string({
       description: 'Workspace slug or UUID (defaults to active profile)',
@@ -79,12 +80,16 @@ Enforces three guards before touching the remote:
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Push)
 
-    const dir = flags.dir || process.env.QUONFIG_DIR
-    if (!dir) {
-      return this.err('No directory specified. Use --dir <path> or set QUONFIG_DIR.')
+    const resolved = resolveWorkspaceDir({
+      flagDir: flags.dir,
+      envDir: process.env.QUONFIG_DIR,
+      cwd: process.cwd(),
+    })
+    if (resolved.kind === 'error') {
+      return this.err(resolved.message)
     }
 
-    const resolvedDir = path.resolve(dir)
+    const resolvedDir = resolved.dir
 
     // Resolve requested target. --workspace > QUONFIG_WORKSPACE > active OAuth
     // profile. Supports API-key mode for headless runs so `qfg push` behaves

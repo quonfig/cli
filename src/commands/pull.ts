@@ -1,4 +1,3 @@
-import * as path from 'node:path'
 import * as fs from 'node:fs'
 
 import {Flags} from '@oclif/core'
@@ -9,6 +8,7 @@ import {BaseCommand} from '../index.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
 import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug, type WorkspacePin} from '../util/quonfig-json.js'
+import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
@@ -47,7 +47,8 @@ CLI shortcuts (no JSON editing needed for simple cases):
 
   static flags = {
     dir: Flags.string({
-      description: 'Local directory to clone/update (defaults to QUONFIG_DIR env var)',
+      description:
+        'Local directory to clone/update (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR env var)',
     }),
     rebase: Flags.boolean({
       default: false,
@@ -62,13 +63,19 @@ CLI shortcuts (no JSON editing needed for simple cases):
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Pull)
 
-    // Resolve target directory
-    const dir = flags.dir || process.env.QUONFIG_DIR
-    if (!dir) {
-      return this.err('No directory specified. Use --dir <path> or set QUONFIG_DIR.')
+    // Resolve target directory. The cwd walk is for the "already inside a
+    // workspace" case; for a first-time clone the user passes --dir
+    // explicitly (no quonfig.json exists yet, so the walk would fail).
+    const resolved = resolveWorkspaceDir({
+      flagDir: flags.dir,
+      envDir: process.env.QUONFIG_DIR,
+      cwd: process.cwd(),
+    })
+    if (resolved.kind === 'error') {
+      return this.err(resolved.message)
     }
 
-    const resolvedDir = path.resolve(dir)
+    const resolvedDir = resolved.dir
 
     // Resolve workspace ID — supports both OAuth and QUONFIG_API_KEY paths,
     // mirroring what APICommand does via get-client.ts so `qfg pull` behaves
