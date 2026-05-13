@@ -64,6 +64,16 @@ export interface GitOps {
    * origin moved between fetch and push.
    */
   getOriginMainSha(dir: string): Promise<string | undefined>
+  /**
+   * Returns every configured remote URL on the repo (i.e. `git remote -v`
+   * URLs, deduped per remote name). Used by the identity check to support
+   * multi-remote workspaces where `origin` points at a customer's PR-review
+   * remote (GitHub) and a secondary remote points at Quonfig (qfg-glrd.3).
+   *
+   * Returns an empty array when the dir isn't a git repo or has no remotes
+   * configured.
+   */
+  getAllRemoteUrls(dir: string): Promise<string[]>
   /** Returns the `remote.origin.url` for the repo, or undefined if unset / not a repo. */
   getRemoteOriginUrl(dir: string): Promise<string | undefined>
   /** Returns true if the dir has a `.git/` (worktree or repo). */
@@ -252,6 +262,16 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   }
   const repoPinSlug = repoPin?.workspaceSlug
   const hasGit = await deps.gitOps.isGitRepo(input.dir)
+  // Multi-remote support (qfg-glrd.3): walk EVERY configured remote, not
+  // just `origin`. Customers commonly run `origin=github` for PR review and
+  // a secondary remote against Quonfig. Identity check accepts as long as
+  // any one of them matches the backend.
+  const remoteUrls = hasGit ? await deps.gitOps.getAllRemoteUrls(input.dir) : []
+  // Clone-path dispatch still keys off `origin` specifically — the
+  // implementation reads `origin/main` and pushes via origin. With a
+  // non-matching origin (e.g. origin=github), the bare-path probe clone is
+  // used instead. Identity-check already accepted the push via a different
+  // remote, so this is a dispatch detail, not a refusal.
   const remoteOriginUrl = hasGit ? await deps.gitOps.getRemoteOriginUrl(input.dir) : undefined
 
   // Mint the write token. The backend accepts a slug OR a UUID for workspaceId
@@ -262,7 +282,7 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   const identity = checkIdentity({
     requestedTarget: input.requestedTarget,
     repoPinSlug,
-    remoteOriginUrl,
+    remoteUrls,
     backend: {
       workspaceSlug: backend.workspaceSlug,
       workspaceId: backend.workspaceId,

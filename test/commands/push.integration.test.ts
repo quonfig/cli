@@ -46,6 +46,7 @@ import {
 } from '../../src/push/run-push.js'
 import {
   dirtyTrackedFiles,
+  getAllRemoteUrls,
   getRemoteUrl,
   gitFetch,
   gitSetRemote,
@@ -183,6 +184,9 @@ function buildTestDeps(args: {
     async getRemoteOriginUrl(dir) {
       const url = await getRemoteUrl(dir)
       return url ?? undefined
+    },
+    async getAllRemoteUrls(dir) {
+      return getAllRemoteUrls(dir)
     },
     async setRemoteOrigin(dir, url) {
       await gitSetRemote(dir, url)

@@ -8,6 +8,7 @@ import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
 import {
   dirtyTrackedFiles,
+  getAllRemoteUrls,
   getOriginMainSha,
   getRemoteUrl,
   gitFetch,
@@ -213,6 +214,9 @@ export function buildRealDeps(
     async getRemoteOriginUrl(dir) {
       const url = await getRemoteUrl(dir)
       return url ?? undefined
+    },
+    async getAllRemoteUrls(dir) {
+      return getAllRemoteUrls(dir)
     },
     async setRemoteOrigin(dir, url) {
       await gitSetRemote(dir, url)

@@ -78,6 +78,7 @@ function makeDeps(opts: {
   const gitOps: GitOps = {
     isGitRepo: async () => true,
     getRemoteOriginUrl: async () => BACKEND.repoUrl,
+    getAllRemoteUrls: async () => [BACKEND.repoUrl],
     async setRemoteOrigin() {},
     async fetch() {},
     diffHeadVsOrigin: async () => opts.deltas,
