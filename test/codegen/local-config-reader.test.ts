@@ -1,4 +1,5 @@
 import {expect} from 'chai'
+import * as os from 'node:os'
 import * as path from 'node:path'
 
 import {LocalConfigReader} from '../../src/codegen/local-config-reader.js'
@@ -181,7 +182,9 @@ describe('LocalConfigReader', () => {
     })
 
     it('throws an error when directory exists but has no quonfig.json', async () => {
-      const reader = new LocalConfigReader('/tmp')
+      // os.tmpdir() instead of a hardcoded '/tmp' — the latter does not exist
+      // on Windows, so the reader would throw "Directory not found" first.
+      const reader = new LocalConfigReader(os.tmpdir())
       try {
         await reader.read()
         expect.fail('Should have thrown an error')

@@ -43,7 +43,11 @@ describe('friction-log utils', () => {
     })
 
     it('resolves relative path against cwd', () => {
-      expect(getFrictionLogPath('logs/qfg.log', '/home/me')).to.equal('/home/me/logs/qfg.log')
+      // Use an absolute cwd built with the platform's own separator so the
+      // expected value matches on Windows too (path.resolve there would
+      // prepend a drive letter and use backslashes).
+      const cwd = path.resolve(path.sep, 'home', 'me')
+      expect(getFrictionLogPath('logs/qfg.log', cwd)).to.equal(path.join(cwd, 'logs', 'qfg.log'))
     })
 
     it('trims whitespace from the value', () => {

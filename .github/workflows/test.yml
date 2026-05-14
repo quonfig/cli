@@ -18,10 +18,10 @@ jobs:
       NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     strategy:
       matrix:
-        # windows-latest dropped (qfg-7429 release): never green since the
-        # upstream fork — POSIX-path / CRLF / HOME test-fixture artifacts, not
-        # a declared-supported platform. Follow-up: qfg-qilt.
-        os: ['ubuntu-latest']
+        # windows-latest re-added (qfg-qilt): the failures were all test-fixture
+        # artifacts (POSIX-path literals, CRLF round-trips, slow-git timeout) —
+        # fixed in test/setup.ts + ~4 test files, no src/ changes.
+        os: ['ubuntu-latest', 'windows-latest']
         node_version: [20.9.0, lts/*, latest]
       fail-fast: false
     runs-on: ${{ matrix.os }}

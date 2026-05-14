@@ -1,5 +1,6 @@
 import {expect, test} from '@oclif/test'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 
 const FIXTURE_DIR = path.join(process.cwd(), 'test/fixtures/workspace')
@@ -145,7 +146,9 @@ describe('generate', () => {
     })
 
   test
-    .command(['generate', '--dir', '/tmp'])
+    // os.tmpdir() instead of a hardcoded '/tmp' — '/tmp' does not exist on
+    // Windows, so the reader would throw "Directory not found" first.
+    .command(['generate', '--dir', os.tmpdir()])
     .catch((error) => {
       expect(error.message).to.include('does not look like a Quonfig workspace')
     })

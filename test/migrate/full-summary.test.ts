@@ -171,7 +171,12 @@ function emptyReport(): Parameters<typeof pushMigrationToCloud>[0]['reportData']
   }
 }
 
-describe('migrate --full-summary: per-change audit-log commits (qfg-wbkj)', () => {
+describe('migrate --full-summary: per-change audit-log commits (qfg-wbkj)', function () {
+  // Each test spawns dozens of git processes (bare init, seed, per-change
+  // commits, clone, readLog's git-show fan-out). Process spawn is markedly
+  // slower on Windows CI runners, pushing past the 10s .mocharc default.
+  this.timeout(60_000)
+
   let root: string
 
   beforeEach(() => {
