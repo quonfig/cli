@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.47 - 2026-05-14
+
+- chore(deps): dependency maintenance sweep — bump `zod` 4.1.12 → 4.4.3 and `acorn-walk` 8.3.4 → 8.3.5 (runtime), and `prettier` 3.6.2 → 3.8.3, `msw` 2.10.4 → 2.14.6, `@types/node` 18.19.129 → 18.19.130 (dev). All five dependabot PRs rebased onto the post-`qfg-qilt` test matrix (Windows dropped) and merged green.
+
 ## 0.0.46 - 2026-05-14
 
 - feat(qfg-7429): `qfg push` now ships your actual local git commits to the server as a packfile, instead of shipping file deltas and letting the server fabricate a fresh commit. The commit on origin is the commit you made locally — same SHA, same message, same author. Multi-commit history is preserved (N local commits land as N commits, not squashed). A successful `qfg push` leaves your local repo genuinely in sync with origin: no more phantom "ahead by 1" / "local commits diverge" loop. Authorization is per-commit and file-level on pushes to `main`; pushes to other branches are membership-gated only. Requires app-quonfig with the `configs.gitPush` handler (live in production as of 2026-05-14).
