@@ -4,6 +4,7 @@ import {http, HttpResponse} from 'msw'
 import {setupServer} from 'msw/node'
 
 import {cleanupTestAuth, setupTestAuth, testConfigPath, testTokensPath} from '../test-auth-helper.js'
+import {getApiBase} from '../test-domain-helper.js'
 
 /**
  * qfg-kr7.8: `qfg workspace` must show the active org/workspace, the saved
@@ -53,9 +54,7 @@ const workspacesResponse = {
   ],
 }
 
-const wsHandler = http.post('https://app.quonfig.com/api/v1/userWorkspaces/list', () =>
-  HttpResponse.json(workspacesResponse),
-)
+const wsHandler = http.post(`${getApiBase()}/api/v1/userWorkspaces/list`, () => HttpResponse.json(workspacesResponse))
 const server = setupServer(wsHandler)
 
 describe('workspace — kr7.8 multi-org status', () => {

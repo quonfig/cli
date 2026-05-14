@@ -1,9 +1,11 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 /**
  * Mock responses for list command tests
- * Uses oRPC API endpoints via https://app.quonfig.com
+ * Uses oRPC API endpoints via the CLI's resolved API base (getApiBase()).
  */
 
 const metadataResponse = {
@@ -48,7 +50,7 @@ const metadataResponse = {
 }
 
 // POST /api/v1/metadata/list - list all configs (oRPC wraps body & response in {json: ...})
-const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
+const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
   HttpResponse.json({json: metadataResponse}),
 )
 

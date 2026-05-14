@@ -1,6 +1,8 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 /**
  * MSW handlers for qfg override tests.
  *
@@ -98,11 +100,11 @@ export function armStaleRetry() {
   staleRetryArmed = true
 }
 
-const flagsListHandler = http.post('https://app.quonfig.com/api/v1/flags/list', () =>
+const flagsListHandler = http.post(`${getApiBase()}/api/v1/flags/list`, () =>
   HttpResponse.json({json: Object.values(FLAGS)}),
 )
 
-const flagsGetByKeyHandler = http.post('https://app.quonfig.com/api/v1/flags/getByKey', async ({request}) => {
+const flagsGetByKeyHandler = http.post(`${getApiBase()}/api/v1/flags/getByKey`, async ({request}) => {
   const body = (await request.json()) as any
   const key = body?.json?.flagKey
   const flag = FLAGS[key]
@@ -110,31 +112,28 @@ const flagsGetByKeyHandler = http.post('https://app.quonfig.com/api/v1/flags/get
   return HttpResponse.json({json: flag})
 })
 
-const findOrCreateHandler = http.post(
-  'https://app.quonfig.com/api/v1/flags/findOrCreateOverride',
-  async ({request}) => {
-    const body = (await request.json()) as any
-    lastFindOrCreateInput = body?.json
-    findOrCreateCallCount += 1
+const findOrCreateHandler = http.post(`${getApiBase()}/api/v1/flags/findOrCreateOverride`, async ({request}) => {
+  const body = (await request.json()) as any
+  lastFindOrCreateInput = body?.json
+  findOrCreateCallCount += 1
 
-    const key = lastFindOrCreateInput?.flagKey
-    if (key === 'feature.stale-once' && staleRetryArmed) {
-      staleRetryArmed = false
-      return HttpResponse.json(
-        {
-          json: {
-            message: 'feature-flags/feature.stale-once.json was modified (expected sha-stale, got sha-fresh)',
-          },
+  const key = lastFindOrCreateInput?.flagKey
+  if (key === 'feature.stale-once' && staleRetryArmed) {
+    staleRetryArmed = false
+    return HttpResponse.json(
+      {
+        json: {
+          message: 'feature-flags/feature.stale-once.json was modified (expected sha-stale, got sha-fresh)',
         },
-        {status: 409},
-      )
-    }
+      },
+      {status: 409},
+    )
+  }
 
-    return HttpResponse.json({json: {commitSha: 'sha-after-write'}})
-  },
-)
+  return HttpResponse.json({json: {commitSha: 'sha-after-write'}})
+})
 
-const removeHandler = http.post('https://app.quonfig.com/api/v1/flags/removeOverride', async ({request}) => {
+const removeHandler = http.post(`${getApiBase()}/api/v1/flags/removeOverride`, async ({request}) => {
   const body = (await request.json()) as any
   lastRemoveInput = body?.json
   removeCallCount += 1

@@ -1,6 +1,8 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 const conflictResponse = {
   message: 'Conflict',
   error: 'already exists',
@@ -29,7 +31,7 @@ const buildFlagDetail = (key: string, defaultBoolValue: boolean) => ({
 })
 
 // POST /api/v1/flags/create - create boolean flags (oRPC wrapped)
-const flagsCreateHandler = http.post('https://app.quonfig.com/api/v1/flags/create', async ({request}) => {
+const flagsCreateHandler = http.post(`${getApiBase()}/api/v1/flags/create`, async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
   const key = input?.flag?.key
@@ -68,7 +70,7 @@ const buildConfigDetail = (key: string, valueType: string, defaultValue: unknown
 })
 
 // POST /api/v1/configs/create - create configs (oRPC wrapped)
-const configsCreateHandler = http.post('https://app.quonfig.com/api/v1/configs/create', async ({request}) => {
+const configsCreateHandler = http.post(`${getApiBase()}/api/v1/configs/create`, async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
   capturedCreateConfigInput = input
@@ -105,7 +107,7 @@ const metadataResponse = {
 }
 
 // POST /api/v1/metadata/list - list all configs for encryption key check (oRPC wrapped)
-const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
+const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
   HttpResponse.json({json: metadataResponse}),
 )
 
@@ -178,7 +180,7 @@ export function resetCapturedLogLevelInputs(): void {
 
 // POST /api/v1/logLevels/create — create a log-level config (oRPC wrapped).
 // Matches app-quonfig's createEntity which always initializes default=INFO.
-const logLevelsCreateHandler = http.post('https://app.quonfig.com/api/v1/logLevels/create', async ({request}) => {
+const logLevelsCreateHandler = http.post(`${getApiBase()}/api/v1/logLevels/create`, async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
   capturedLogLevelCreateInput = input
@@ -203,7 +205,7 @@ const logLevelsCreateHandler = http.post('https://app.quonfig.com/api/v1/logLeve
 })
 
 // POST /api/v1/logLevels/update — patch an existing log-level config.
-const logLevelsUpdateHandler = http.post('https://app.quonfig.com/api/v1/logLevels/update', async ({request}) => {
+const logLevelsUpdateHandler = http.post(`${getApiBase()}/api/v1/logLevels/update`, async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
   capturedLogLevelUpdateInput = input
@@ -243,7 +245,7 @@ const LOG_LEVEL_WITH_EXISTING_TARGET = buildLogLevelDetail('log-level.existing-w
 ])
 
 // POST /api/v1/metadata/getByKey - get config by key for encryption (oRPC wrapped)
-const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getByKey', async ({request}) => {
+const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, async ({request}) => {
   const body = (await request.json()) as any
   const key = body?.json?.key
 

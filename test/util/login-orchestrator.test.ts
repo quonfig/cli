@@ -4,6 +4,7 @@ import {setupServer} from 'msw/node'
 import {afterEach, before, after, beforeEach, describe, it} from 'mocha'
 
 import {orchestrateMultiOrgLogin} from '../../src/util/login-orchestrator.js'
+import {getApiBase} from '../test-domain-helper.js'
 
 /**
  * qfg-mol-k27: login.ts must mint one org-scoped TokenSet per org the user
@@ -37,9 +38,7 @@ interface CapturedAuth {
 const buildServer = (orgs: Array<{workosOrgId: string; slug: string; name: string; role: string}>) => {
   const captured: CapturedAuth[] = []
 
-  const orgsHandler = http.post('https://app.quonfig.com/api/v1/me/organizations', () =>
-    HttpResponse.json({json: orgs}),
-  )
+  const orgsHandler = http.post(`${getApiBase()}/api/v1/me/organizations`, () => HttpResponse.json({json: orgs}))
 
   const authHandler = http.post('https://api.workos.com/user_management/authenticate', async ({request}) => {
     const text = await request.text()
@@ -91,7 +90,7 @@ describe('orchestrateMultiOrgLogin (qfg-mol-k27)', () => {
 
     it('mints one org-scoped TokenSet per org and keys the store by workosOrgId', async () => {
       const result = await orchestrateMultiOrgLogin({
-        apiUrl: 'https://app.quonfig.com',
+        apiUrl: getApiBase(),
         initialAccessToken: buildJwt({email: 'multi@example.com', exp: Math.floor(Date.now() / 1000) + 3600}),
         initialRefreshToken: 'initial_refresh',
         user: {email: 'multi@example.com', id: 'user_test'},
@@ -120,7 +119,7 @@ describe('orchestrateMultiOrgLogin (qfg-mol-k27)', () => {
 
     it('sets defaultOrgId to the first org alphabetically by slug for multi-org users', async () => {
       const result = await orchestrateMultiOrgLogin({
-        apiUrl: 'https://app.quonfig.com',
+        apiUrl: getApiBase(),
         initialAccessToken: buildJwt({email: 'multi@example.com', exp: Math.floor(Date.now() / 1000) + 3600}),
         initialRefreshToken: 'initial_refresh',
         user: {email: 'multi@example.com', id: 'user_test'},
@@ -151,7 +150,7 @@ describe('orchestrateMultiOrgLogin (qfg-mol-k27)', () => {
 
     it('sets defaultOrgId to the single org', async () => {
       const result = await orchestrateMultiOrgLogin({
-        apiUrl: 'https://app.quonfig.com',
+        apiUrl: getApiBase(),
         initialAccessToken: buildJwt({email: 'solo@example.com', exp: Math.floor(Date.now() / 1000) + 3600}),
         initialRefreshToken: 'initial_refresh',
         user: {email: 'solo@example.com', id: 'user_solo'},
@@ -187,7 +186,7 @@ describe('orchestrateMultiOrgLogin (qfg-mol-k27)', () => {
 
     it('mints only the first 10 orgs alphabetically when the user belongs to more than 10', async () => {
       const result = await orchestrateMultiOrgLogin({
-        apiUrl: 'https://app.quonfig.com',
+        apiUrl: getApiBase(),
         initialAccessToken: buildJwt({email: 'big@example.com', exp: Math.floor(Date.now() / 1000) + 3600}),
         initialRefreshToken: 'initial_refresh',
         user: {email: 'big@example.com', id: 'user_big'},
