@@ -116,6 +116,16 @@ export interface GitOps {
   getRemoteBranchSha(dir: string, branchName: string): Promise<string | undefined>
   /** Returns the `remote.origin.url` for the repo, or undefined if unset / not a repo. */
   getRemoteOriginUrl(dir: string): Promise<string | undefined>
+  /**
+   * qfg-7429.6 — return the tree SHA for `<ref>^{tree}`, or undefined when
+   * the ref can't be resolved. Used by the legacy-divergence detector in
+   * the pack-push conflict handler: workspaces created before pack-push
+   * shipped have local commit SHAs that diverge from origin even when the
+   * tree content is identical (the old server fabricated commits). If
+   * `HEAD^{tree}` matches `origin/<branch>^{tree}`, the apparent conflict
+   * is actually that one-shot legacy state, not a real concurrent push.
+   */
+  getTreeShaForRef(dir: string, ref: string): Promise<string | undefined>
   /** Returns true if the dir has a `.git/` (worktree or repo). */
   isGitRepo(dir: string): Promise<boolean>
   /**
@@ -593,6 +603,44 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     }
 
     if (packResult.kind === 'conflict') {
+      // qfg-7429.6: every workspace ever pushed under the pre-pack-push
+      // fabricate-commit handler has local commit SHAs that diverge from
+      // origin even when content is identical. The first pack push from
+      // such a dir trips the server's fast-forward check. Distinguish
+      // that one-shot legacy state from a real conflict by comparing
+      // HEAD's tree to origin/<branch>'s tree: equal trees → migration
+      // hint (`git reset --hard origin/<branch>`); different trees →
+      // existing qfg-pull message. Rebase would produce phantom replay
+      // commits with new SHAs forever, so it is NOT the recommended path.
+      let headTree: string | undefined
+      let originTree: string | undefined
+      try {
+        headTree = await deps.gitOps.getTreeShaForRef(input.dir, 'HEAD')
+      } catch {
+        /* fall through — treat unknown tree as "real conflict" */
+      }
+      try {
+        originTree = await deps.gitOps.getTreeShaForRef(input.dir, `origin/${branchName}`)
+      } catch {
+        /* fall through */
+      }
+
+      if (headTree && originTree && headTree === originTree) {
+        errLog('')
+        errLog(`Your local ${branchName} and origin/${branchName} have diverged from an older push using the`)
+        errLog('fabricate-commit handler. Your local content matches origin (no real conflict).')
+        errLog('')
+        errLog(`To align: git reset --hard origin/${branchName}`)
+        errLog('Then re-run qfg push.')
+        errLog('')
+        errLog('This is a one-time cutover. Subsequent pushes from this dir will preserve your')
+        errLog('commit SHAs end-to-end.')
+        throw new PushFatalError(
+          `Legacy orphan-commit divergence with origin/${branchName}. Run \`git reset --hard origin/${branchName}\` and retry.`,
+          'CONFLICT_LEGACY_DIVERGE',
+        )
+      }
+
       throw new PushFatalError(
         `Remote moved while preparing this push (${packResult.message}). Run \`qfg pull\` and retry.`,
         'CONFLICT',

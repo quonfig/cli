@@ -123,6 +123,11 @@ function makeDeps(opts: {
     buildPack: async () => FAKE_PACK,
     countCommitsBetween: async () => 1,
     getCommitOneline: async (_dir, sha) => `${sha.slice(0, 7)} (stub) commit message`,
+    // Default: HEAD tree and origin tree DIFFER, so a 409 conflict falls
+    // through to the real-conflict path (the qfg-7429.6 legacy-divergence
+    // detector requires identical trees to trigger the migration hint).
+    getTreeShaForRef: async (_dir, ref) =>
+      ref === 'HEAD' ? 'aaaa000000000000000000000000000000000000' : 'bbbb000000000000000000000000000000000000',
     ...opts.gitOps,
   }
 
@@ -477,7 +482,7 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
     it('maps 409 conflict to PushFatalError(CONFLICT) with a qfg-pull hint', async () => {
       const dir = setUpDir()
       try {
-        const {deps} = makeDeps({
+        const {deps, captured} = makeDeps({
           packResult: {kind: 'conflict', message: 'OriginMoved: expected ..., current ...'},
         })
         let caught: unknown
@@ -489,6 +494,68 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
         expect(caught).to.be.instanceOf(PushFatalError)
         expect((caught as PushFatalError).code).to.equal('CONFLICT')
         expect((caught as PushFatalError).message.toLowerCase()).to.include('qfg pull')
+        // qfg-7429.6: trees differ → must NOT print the legacy-divergence
+        // migration hint or recommend a hard reset.
+        const joined = captured.errs.concat(captured.logs).join('\n')
+        expect(joined).to.not.include('git reset --hard origin/main')
+        expect(joined.toLowerCase()).to.not.include('fabricate-commit')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('prints the legacy-divergence migration hint when conflict + HEAD tree matches origin tree (qfg-7429.6)', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({
+          packResult: {kind: 'conflict', message: 'OriginMoved: expected ..., current ...'},
+          gitOps: {
+            // HEAD tree == origin/main tree → legacy orphan-commit state
+            // left behind by the fabricate-commit handler.
+            getTreeShaForRef: async () => 'cafe000000000000000000000000000000000000',
+          },
+        })
+        let caught: unknown
+        try {
+          await runPush(baseInput(dir), deps)
+        } catch (error) {
+          caught = error
+        }
+        expect(caught).to.be.instanceOf(PushFatalError)
+        const joined = captured.errs.join('\n')
+        // The one-shot migration hint must be the suggested remedy.
+        expect(joined).to.include('git reset --hard origin/main')
+        expect(joined.toLowerCase()).to.include('fabricate-commit')
+        expect(joined.toLowerCase()).to.include('one-time cutover')
+        // Per the bead description: NOT qfg pull --rebase — rebase would
+        // produce phantom replay commits with new SHAs forever.
+        expect(joined.toLowerCase()).to.not.include('qfg pull')
+        expect(joined.toLowerCase()).to.not.include('rebase')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('uses the branch-specific reset hint on a non-main branch (qfg-7429.6)', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({
+          branch: {kind: 'branch', name: 'feature/awesome'},
+          remoteBranchSha: 'cafe11111111111111111111111111111111cafe',
+          packResult: {kind: 'conflict', message: 'OriginMoved: ...'},
+          gitOps: {
+            getTreeShaForRef: async () => 'beef000000000000000000000000000000000000',
+          },
+        })
+        let caught: unknown
+        try {
+          await runPush(baseInput(dir), deps)
+        } catch (error) {
+          caught = error
+        }
+        expect(caught).to.be.instanceOf(PushFatalError)
+        const joined = captured.errs.join('\n')
+        expect(joined).to.include('git reset --hard origin/feature/awesome')
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }

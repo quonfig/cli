@@ -336,6 +336,20 @@ export function buildRealDeps(
         return ''
       }
     },
+    async getTreeShaForRef(dir, ref): Promise<string | undefined> {
+      // qfg-7429.6: pack-push conflict handler uses this to detect the
+      // legacy orphan-commit state — local commit SHA != origin's, but
+      // the underlying tree content matches. Return undefined on any
+      // git failure so the caller falls back to the "real conflict"
+      // message rather than aborting on an opaque rev-parse error.
+      try {
+        const {stdout} = await runGit(['-C', dir, 'rev-parse', `${ref}^{tree}`])
+        const sha = stdout.trim()
+        return sha.length > 0 ? sha : undefined
+      } catch {
+        return undefined
+      }
+    },
   }
 
   const deps = {

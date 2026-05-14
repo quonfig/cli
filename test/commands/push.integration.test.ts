@@ -320,6 +320,16 @@ function buildTestDeps(args: {
         return ''
       }
     },
+    async getTreeShaForRef(dir, ref) {
+      try {
+        return execFileSync('git', ['-C', dir, 'rev-parse', `${ref}^{tree}`], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+      } catch {
+        return undefined
+      }
+    },
   }
 
   const deps: RunPushDeps = {

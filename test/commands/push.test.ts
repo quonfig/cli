@@ -114,6 +114,7 @@ function makeDeps(
     buildPack: async () => new Uint8Array(0),
     countCommitsBetween: async () => 0,
     getCommitOneline: async (_dir, sha) => `${sha.slice(0, 7)} stub`,
+    getTreeShaForRef: async (): Promise<string | undefined> => undefined,
     ...opts.gitOps,
   }
 
