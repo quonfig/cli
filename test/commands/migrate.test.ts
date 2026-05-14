@@ -59,15 +59,9 @@ describe('migrate', () => {
       .it('rejects unknown --from values')
   })
 
+  // launchdarkly is no longer a stub (qfg-88cx) — its command-level integration
+  // (dry-run / --dir / --push) is covered by the write-mode epic (qfg-mol-dpc).
   describe('stub sources', () => {
-    test
-      .command(['migrate', '--from', 'launchdarkly', '--api-key', 'k', '--dry-run'])
-      .catch((error) => {
-        expect(error.message).to.match(/not yet implemented/i)
-        expect(error.message).to.match(/launchdarkly/)
-      })
-      .it('--from launchdarkly throws NotYetImplementedError')
-
     test
       .command(['migrate', '--from', 'flagsmith', '--api-key', 'k', '--dry-run'])
       .catch((error) => {

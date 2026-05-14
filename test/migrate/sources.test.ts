@@ -15,7 +15,7 @@ describe('migrate/registry', () => {
       expect(source.name).to.equal('launch')
     })
 
-    it('returns a launchdarkly stub that identifies itself', () => {
+    it('returns the launchdarkly source, which identifies itself', () => {
       const source = getSource('launchdarkly')
       expect(source.name).to.equal('launchdarkly')
     })
@@ -37,57 +37,29 @@ describe('migrate/registry', () => {
     })
   })
 
-  describe('launchdarkly stub', () => {
+  describe('launchdarkly source', () => {
     const source = getSource('launchdarkly')
 
-    it('throws NotYetImplementedError on validateAuth with a bead-file link', async () => {
-      try {
-        await source.validateAuth('sdk-xxx')
-        expect.fail('expected validateAuth to throw')
-      } catch (error) {
-        expect(error).to.be.instanceOf(NotYetImplementedError)
-        const message = (error as Error).message
-        expect(message.toLowerCase()).to.contain('not yet implemented')
-        expect(message.toLowerCase()).to.contain('launchdarkly')
-        expect(message).to.match(/github\.com\/quonfig\/cli\/issues/i)
-      }
+    // The stub is gone (qfg-88cx) — launchdarkly is now a real MigrationSource.
+    // Behavioral coverage lives in launchdarkly-{api,translate,source}.test.ts;
+    // here we just guard against a regression back to NotYetImplementedError.
+    it('translate() no longer throws NotYetImplementedError', () => {
+      const result = source.translate({raw: {}, source: 'launchdarkly'})
+      expect(result).to.be.an('array')
     })
 
-    it('throws NotYetImplementedError on listEnvironments', async () => {
-      try {
-        await source.listEnvironments()
-        expect.fail('expected listEnvironments to throw')
-      } catch (error) {
-        expect(error).to.be.instanceOf(NotYetImplementedError)
-      }
-    })
-
-    it('throws NotYetImplementedError on fetchChanges', async () => {
-      try {
-        const iter = source.fetchChanges(null)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        for await (const _ of iter) {
-          // consume to trigger generator body
-        }
-        expect.fail('expected fetchChanges to throw')
-      } catch (error) {
-        expect(error).to.be.instanceOf(NotYetImplementedError)
-      }
-    })
-
-    it('throws NotYetImplementedError on translate', () => {
-      expect(() => source.translate({source: 'launchdarkly', raw: {}})).to.throw(NotYetImplementedError)
-    })
-
-    it('ships a README.md documenting the schema gaps that block implementation', () => {
+    it('ships a README.md reflecting the frozen, ratified design (qfg-88cx.1)', () => {
       const readmePath = path.join(CLI_ROOT, 'src', 'migrate', 'sources', 'launchdarkly.README.md')
       expect(fs.existsSync(readmePath), `expected ${readmePath} to exist`).to.equal(true)
       const contents = fs.readFileSync(readmePath, 'utf8').toLowerCase()
-      expect(contents).to.contain('prerequisite')
-      expect(contents).to.contain('individual')
-      expect(contents).to.contain('privateattributes')
-      expect(contents).to.contain('semver')
-      expect(contents).to.contain('audit')
+      // Frozen decisions D1/D2/D3/D8 are documented, not presented as open.
+      expect(contents).to.contain('quonfig _is_ the intermediate representation')
+      expect(contents).to.contain('full re-snapshot')
+      expect(contents).to.contain('skip + report')
+      // The semver gap is explicitly marked closed.
+      expect(contents).to.contain('semver gap — closed')
+      // The genuinely-open decisions still point at the plan.
+      expect(contents).to.contain('§9.2')
     })
   })
 
