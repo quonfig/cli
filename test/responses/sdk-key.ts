@@ -1,6 +1,8 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 /**
  * Mock responses for sdk-key command tests
  */
@@ -42,23 +44,21 @@ const createdKeyResponse = {
   rawKey: 'qf_sk_production_abcd1234',
 }
 
-const listHandler = http.post('https://app.quonfig.com/api/v1/sdkKeys/list', () =>
+const listHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/list`, () =>
   HttpResponse.json({json: sdkKeysListResponse}),
 )
 
-const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environments/list', () =>
+const environmentsHandler = http.post(`${getApiBase()}/api/v1/environments/list`, () =>
   HttpResponse.json({json: environmentsResponse}),
 )
 
-const createHandler = http.post('https://app.quonfig.com/api/v1/sdkKeys/create', () =>
+const createHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/create`, () =>
   HttpResponse.json({json: createdKeyResponse}),
 )
 
-const deleteHandler = http.post('https://app.quonfig.com/api/v1/sdkKeys/delete', () =>
-  HttpResponse.json({json: {ok: true}}),
-)
+const deleteHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/delete`, () => HttpResponse.json({json: {ok: true}}))
 
-const deleteNotFoundHandler = http.post('https://app.quonfig.com/api/v1/sdkKeys/delete', () =>
+const deleteNotFoundHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/delete`, () =>
   HttpResponse.json({message: 'Not Found'}, {status: 404}),
 )
 

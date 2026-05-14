@@ -12,6 +12,7 @@ import {
   server,
 } from '../responses/info.js'
 import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
+import {getAppBase} from '../test-domain-helper.js'
 
 const keyDoesNotExist = 'this.does.not.exist'
 
@@ -37,7 +38,7 @@ describe('info', () => {
       .it('returns info for a name', (ctx) => {
         expect(ctx.stdout.trim()).to.eql(
           `
-https://app.quonfig.com/workspaces/workspace-123/flags/${keyWithEvaluations}
+${getAppBase()}/workspaces/workspace-123/flags/${keyWithEvaluations}
 
 - Default: a,b,c
 - jeffrey: [inherit]
@@ -62,18 +63,18 @@ jeffrey: 42
         const output = JSON.parse(ctx.stdout)
         // Check structure but don't validate exact timestamps
         expect(output[keyWithEvaluations].url).to.equal(
-          `https://app.quonfig.com/workspaces/workspace-123/flags/${keyWithEvaluations}`,
+          `${getAppBase()}/workspaces/workspace-123/flags/${keyWithEvaluations}`,
         )
         expect(output[keyWithEvaluations].values).to.deep.equal({
           Default: {
-            url: 'https://app.quonfig.com/workspaces/workspace-123/flags/my-string-list-key?environment=undefined',
+            url: `${getAppBase()}/workspaces/workspace-123/flags/my-string-list-key?environment=undefined`,
             value: ['a', 'b', 'c'],
           },
           Production: {
-            url: 'https://app.quonfig.com/workspaces/workspace-123/flags/my-string-list-key?environment=143',
+            url: `${getAppBase()}/workspaces/workspace-123/flags/my-string-list-key?environment=143`,
           },
           jeffrey: {
-            url: 'https://app.quonfig.com/workspaces/workspace-123/flags/my-string-list-key?environment=588',
+            url: `${getAppBase()}/workspaces/workspace-123/flags/my-string-list-key?environment=588`,
           },
         })
         expect(output[keyWithEvaluations].evaluations.environments).to.deep.equal([
@@ -104,7 +105,7 @@ jeffrey: 42
       .it('returns a message', (ctx) => {
         expect(ctx.stdout.trim()).to.eql(
           `
-https://app.quonfig.com/workspaces/workspace-123/flags/${keyWithNoEvaluations}
+${getAppBase()}/workspaces/workspace-123/flags/${keyWithNoEvaluations}
 
 - Default: abc
 - jeffrey: [see rules]
@@ -125,21 +126,21 @@ No evaluations found for the past 24 hours
               error: `No evaluations found for the past 24 hours`,
             },
 
-            url: `https://app.quonfig.com/workspaces/workspace-123/flags/${keyWithNoEvaluations}`,
+            url: `${getAppBase()}/workspaces/workspace-123/flags/${keyWithNoEvaluations}`,
 
             values: {
               Default: {
-                url: 'https://app.quonfig.com/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=undefined',
+                url: `${getAppBase()}/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=undefined`,
                 value: 'abc',
               },
               Production: {
                 override: 'my.override',
-                url: 'https://app.quonfig.com/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=143',
+                url: `${getAppBase()}/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=143`,
                 value: '[see rules]',
               },
 
               jeffrey: {
-                url: 'https://app.quonfig.com/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=588',
+                url: `${getAppBase()}/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=588`,
                 value: '[see rules]',
               },
             },

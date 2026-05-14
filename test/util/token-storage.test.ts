@@ -7,6 +7,8 @@ import {afterEach, beforeEach, describe, it} from 'mocha'
 import {
   type AuthConfig,
   getActiveProfile,
+  getAuthConfigFilePath,
+  getTokenFilePath,
   getTokenForOrg,
   loadAuthConfig,
   loadTokens,
@@ -20,8 +22,14 @@ import {
 describe('token-storage', () => {
   const testDir = path.join(os.tmpdir(), '.quonfig-test-' + Date.now())
   const quonfigDir = path.join(testDir, '.quonfig')
-  const configFile = path.join(quonfigDir, 'config')
   const options: TokenStorageOptions = {quonfigDir}
+  // The on-disk filenames are domain-suffixed (see token-storage.ts) when
+  // QUONFIG_DOMAIN is set — which it is in CI. Resolve the real paths via the
+  // same helpers the CLI uses instead of hardcoding `config` / `tokens.json`.
+  // These are resolved at call time (not module load) because the
+  // `domain-scoped file paths` test mutates QUONFIG_DOMAIN mid-run.
+  const configFile = () => getAuthConfigFilePath(options)
+  const tokenFile = () => getTokenFilePath(options)
 
   beforeEach(() => {
     // Create test directory and .quonfig subdirectory
@@ -52,7 +60,7 @@ describe('token-storage', () => {
 
       await saveAuthConfig(config, options)
 
-      const content = fs.readFileSync(configFile, 'utf8')
+      const content = fs.readFileSync(configFile(), 'utf8')
       expect(content).to.include('default_profile = default')
       expect(content).to.include('[profile default]')
       expect(content).to.include('workspace = workspace-123 # Org Name - Workspace Name')
@@ -75,7 +83,7 @@ describe('token-storage', () => {
 
       await saveAuthConfig(config, options)
 
-      const content = fs.readFileSync(configFile, 'utf8')
+      const content = fs.readFileSync(configFile(), 'utf8')
       expect(content).to.include('default_profile = work')
       expect(content).to.include('[profile default]')
       expect(content).to.include('[profile work]')
@@ -92,7 +100,7 @@ describe('token-storage', () => {
 workspace = workspace-123 # Org Name - Workspace Name
 
 `
-      fs.writeFileSync(configFile, configContent, 'utf8')
+      fs.writeFileSync(configFile(), configContent, 'utf8')
 
       const config = await loadAuthConfig(options)
 
@@ -112,7 +120,7 @@ workspace = workspace-default # Default Org - Default Workspace
 workspace = workspace-work # Work Org - Work Workspace
 
 `
-      fs.writeFileSync(configFile, configContent, 'utf8')
+      fs.writeFileSync(configFile(), configContent, 'utf8')
 
       const config = await loadAuthConfig(options)
 
@@ -126,8 +134,8 @@ workspace = workspace-work # Work Org - Work Workspace
 
     it('should return null for missing file', async () => {
       // Ensure config file doesn't exist
-      if (fs.existsSync(configFile)) {
-        fs.unlinkSync(configFile)
+      if (fs.existsSync(configFile())) {
+        fs.unlinkSync(configFile())
       }
 
       const config = await loadAuthConfig(options)
@@ -154,14 +162,19 @@ workspace = workspace-work # Work Org - Work Workspace
         },
       }
 
+      // The prod (quonfig.com) config filename is plain `config`; staging is
+      // `config-quonfig-staging-com`. This test asserts they're independent,
+      // so resolve the prod path with QUONFIG_DOMAIN explicitly cleared.
+      const prodConfigFile = path.join(quonfigDir, 'config')
+
       process.env.QUONFIG_DOMAIN = 'quonfig-staging.com'
       await saveAuthConfig(stagingConfig, options)
       expect(fs.existsSync(path.join(quonfigDir, 'config-quonfig-staging-com'))).to.equal(true)
-      expect(fs.existsSync(configFile), 'prod config file should not be touched').to.equal(false)
+      expect(fs.existsSync(prodConfigFile), 'prod config file should not be touched').to.equal(false)
 
       delete process.env.QUONFIG_DOMAIN
       await saveAuthConfig(prodConfig, options)
-      expect(fs.existsSync(configFile)).to.equal(true)
+      expect(fs.existsSync(prodConfigFile)).to.equal(true)
 
       // Read each domain back and confirm they are independent
       const prodLoaded = await loadAuthConfig(options)
@@ -249,15 +262,13 @@ workspace = workspace-work # Work Org - Work Workspace
     it('saveTokens succeeds and the file round-trips on a normal write', async () => {
       await saveTokens(sampleTokens, options)
       // Round-trip via the existing loader path
-      const tokenFile = path.join(quonfigDir, 'tokens.json')
-      const content = fs.readFileSync(tokenFile, 'utf8')
+      const content = fs.readFileSync(tokenFile(), 'utf8')
       const parsed = JSON.parse(content) as TokenStore
       expect(parsed.tokensByOrg.org_1.access_token).to.equal('access')
     })
   })
 
   describe('per-org token storage', () => {
-    const tokenFile = path.join(quonfigDir, 'tokens.json')
     const orgA: TokenSet = {access_token: 'a-tok', expires_at: 1, refresh_token: 'a-ref'}
     const orgB: TokenSet = {access_token: 'b-tok', expires_at: 2, refresh_token: 'b-ref'}
 
@@ -268,7 +279,7 @@ workspace = workspace-work # Work Org - Work Workspace
       }
       await saveTokens(store, options)
 
-      const onDisk = JSON.parse(fs.readFileSync(tokenFile, 'utf8')) as TokenStore
+      const onDisk = JSON.parse(fs.readFileSync(tokenFile(), 'utf8')) as TokenStore
       expect(onDisk.tokensByOrg.org_A.access_token).to.equal('a-tok')
       expect(onDisk.tokensByOrg.org_B.refresh_token).to.equal('b-ref')
       expect(onDisk.defaultOrgId).to.equal('org_A')
@@ -289,7 +300,7 @@ workspace = workspace-work # Work Org - Work Workspace
     })
 
     it('loadTokens rejects a malformed file', async () => {
-      fs.writeFileSync(tokenFile, JSON.stringify({nonsense: true}), 'utf8')
+      fs.writeFileSync(tokenFile(), JSON.stringify({nonsense: true}), 'utf8')
 
       let caught: Error | undefined
       try {
@@ -303,7 +314,7 @@ workspace = workspace-work # Work Org - Work Workspace
     })
 
     it('loadTokens rejects a file written by a newer CLI version', async () => {
-      fs.writeFileSync(tokenFile, JSON.stringify({version: 99, tokensByOrg: {org_A: orgA}}), 'utf8')
+      fs.writeFileSync(tokenFile(), JSON.stringify({version: 99, tokensByOrg: {org_A: orgA}}), 'utf8')
 
       let caught: Error | undefined
       try {
@@ -320,7 +331,7 @@ workspace = workspace-work # Work Org - Work Workspace
     it('saveTokens stamps a version field on the file', async () => {
       const store: TokenStore = {tokensByOrg: {org_A: orgA}}
       await saveTokens(store, options)
-      const onDisk = JSON.parse(fs.readFileSync(tokenFile, 'utf8')) as {version?: number} & TokenStore
+      const onDisk = JSON.parse(fs.readFileSync(tokenFile(), 'utf8')) as {version?: number} & TokenStore
       expect(onDisk.version).to.equal(2)
     })
 

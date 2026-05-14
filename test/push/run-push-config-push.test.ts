@@ -79,6 +79,7 @@ function makeDeps(opts: {
   const gitOps: GitOps = {
     isGitRepo: async () => false,
     getRemoteOriginUrl: async (): Promise<string | undefined> => undefined,
+    getAllRemoteUrls: async (): Promise<string[]> => [],
     async setRemoteOrigin() {},
     async fetch() {},
     diffHeadVsOrigin: async () => opts.deltas,
@@ -86,6 +87,18 @@ function makeDeps(opts: {
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
     getOriginMainSha: async (): Promise<string | undefined> => undefined,
+    // Pack-push (qfg-7429.4) — clone-path now ships via configs.gitPush,
+    // so these tests stay valid only as bare-path coverage. The default
+    // isGitRepo above is false; overrides in individual tests should not
+    // flip it back to true unless they want to drive the pack-push
+    // dispatch (in which case they should test the gitPush wire shape).
+    getCurrentBranch: async () => ({kind: 'branch', name: 'main'}),
+    getHeadSha: async () => '0000000000000000000000000000000000000000',
+    getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
+    buildPack: async () => new Uint8Array(0),
+    countCommitsBetween: async () => 0,
+    getCommitOneline: async (_dir: string, sha: string) => sha.slice(0, 7),
+    getTreeShaForRef: async (): Promise<string | undefined> => undefined,
     ...opts.gitOps,
   }
 
@@ -111,6 +124,11 @@ function makeDeps(opts: {
         }
       )
     },
+    async pushPackToServer() {
+      throw new Error(
+        'pushPackToServer should not run in run-push-config-push tests; they only cover the bare-path configs.push wire shape',
+      )
+    },
     confirmIO: makeIo(opts.userInput),
     log() {},
     errLog() {},
@@ -133,7 +151,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -203,7 +221,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
             ],
           },
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -249,7 +267,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
           deltas,
           pushResult: {kind: 'conflict', message: 'configs/a.json was modified (expected ..., got ...)'},
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -290,7 +308,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
           deltas,
           pushResult: {kind: 'success', commitSha: 'deadbeef0011223344556677'},
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -325,7 +343,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
             getOriginMainSha: async () => FAKE_ORIGIN_SHA,
@@ -356,7 +374,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
             getOriginMainSha: async (): Promise<string | undefined> => undefined,
@@ -395,7 +413,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },

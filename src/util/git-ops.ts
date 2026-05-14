@@ -99,6 +99,43 @@ export const getRemoteUrl = async (dir: string): Promise<string | null> => {
   }
 }
 
+/**
+ * Return every configured remote URL (one per remote name). Walks the
+ * output of `git remote` and resolves each name's URL via `remote get-url`.
+ *
+ * Returns an empty array when the dir isn't a git repo or has no remotes.
+ * Multi-remote support (qfg-glrd.3): the identity check accepts as long as
+ * any configured remote points at the backend's repo URL.
+ */
+export const getAllRemoteUrls = async (dir: string): Promise<string[]> => {
+  let names: string[]
+  try {
+    const {stdout} = await runGit(['-C', dir, 'remote'])
+    names = stdout
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+
+  const urls: string[] = []
+  for (const name of names) {
+    try {
+      // Sequential by design: each `git remote get-url` spawns its own git
+      // process against the same repo; running them serially keeps git's
+      // index/lock access predictable and the remote count is tiny.
+      // eslint-disable-next-line no-await-in-loop
+      const {stdout} = await runGit(['-C', dir, 'remote', 'get-url', name])
+      const url = stdout.trim()
+      if (url.length > 0) urls.push(url)
+    } catch {
+      /* skip remotes whose URL we can't read */
+    }
+  }
+  return urls
+}
+
 export const isWorkingTreeClean = async (dir: string): Promise<boolean> => {
   const {stdout} = await runGit(['-C', dir, 'status', '--porcelain'])
   return stdout.trim() === ''

@@ -1,6 +1,8 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 /**
  * Mock responses for `qfg workspace create` tests.
  *
@@ -23,13 +25,13 @@ export const successResponse = {
   ],
 }
 
-const defaultHandler = http.post('https://app.quonfig.com/api/v1/workspaces/create', () =>
+const defaultHandler = http.post(`${getApiBase()}/api/v1/workspaces/create`, () =>
   HttpResponse.json({json: successResponse}),
 )
 
 export const server = setupServer(defaultHandler)
 
-export const conflictHandler = http.post('https://app.quonfig.com/api/v1/workspaces/create', () =>
+export const conflictHandler = http.post(`${getApiBase()}/api/v1/workspaces/create`, () =>
   HttpResponse.json(
     {
       json: {
@@ -41,11 +43,11 @@ export const conflictHandler = http.post('https://app.quonfig.com/api/v1/workspa
   ),
 )
 
-export const unauthorizedHandler = http.post('https://app.quonfig.com/api/v1/workspaces/create', () =>
+export const unauthorizedHandler = http.post(`${getApiBase()}/api/v1/workspaces/create`, () =>
   HttpResponse.json({json: {code: 'UNAUTHORIZED', message: 'Unauthorized'}}, {status: 401}),
 )
 
-export const multiOrgHandler = http.post('https://app.quonfig.com/api/v1/workspaces/create', () =>
+export const multiOrgHandler = http.post(`${getApiBase()}/api/v1/workspaces/create`, () =>
   HttpResponse.json(
     {
       json: {

@@ -1,6 +1,8 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 type SchemaDocument = Record<string, unknown>
 
 interface StoredSchema {
@@ -72,7 +74,7 @@ function schemaResponseFor(key: string, stored: StoredSchema) {
 }
 
 // POST /api/v1/schemas/getByKey - get schema by key (oRPC wrapped)
-const getSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/getByKey', async ({request}) => {
+const getSchemaHandler = http.post(`${getApiBase()}/api/v1/schemas/getByKey`, async ({request}) => {
   const body = (await request.json()) as any
   const key = body?.json?.schemaKey
 
@@ -86,7 +88,7 @@ const getSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/getBy
 })
 
 // POST /api/v1/schemas/create - create schema (oRPC wrapped)
-const createSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/create', async ({request}) => {
+const createSchemaHandler = http.post(`${getApiBase()}/api/v1/schemas/create`, async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
 
@@ -115,7 +117,7 @@ const createSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/cr
 })
 
 // POST /api/v1/schemas/update - update schema (oRPC wrapped)
-const updateSchemaHandler = http.post('https://app.quonfig.com/api/v1/schemas/update', async ({request}) => {
+const updateSchemaHandler = http.post(`${getApiBase()}/api/v1/schemas/update`, async ({request}) => {
   const body = (await request.json()) as any
   const input = body?.json
 
