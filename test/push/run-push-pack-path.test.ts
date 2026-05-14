@@ -496,7 +496,7 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
         expect((caught as PushFatalError).message.toLowerCase()).to.include('qfg pull')
         // qfg-7429.6: trees differ → must NOT print the legacy-divergence
         // migration hint or recommend a hard reset.
-        const joined = captured.errs.concat(captured.logs).join('\n')
+        const joined = [...captured.errs, ...captured.logs].join('\n')
         expect(joined).to.not.include('git reset --hard origin/main')
         expect(joined.toLowerCase()).to.not.include('fabricate-commit')
       } finally {

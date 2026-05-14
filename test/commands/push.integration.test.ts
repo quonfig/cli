@@ -320,7 +320,7 @@ function buildTestDeps(args: {
         return ''
       }
     },
-    async getTreeShaForRef(dir, ref) {
+    async getTreeShaForRef(dir, ref): Promise<string | undefined> {
       try {
         return execFileSync('git', ['-C', dir, 'rev-parse', `${ref}^{tree}`], {
           encoding: 'utf8',

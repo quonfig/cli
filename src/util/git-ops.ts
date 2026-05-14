@@ -122,6 +122,10 @@ export const getAllRemoteUrls = async (dir: string): Promise<string[]> => {
   const urls: string[] = []
   for (const name of names) {
     try {
+      // Sequential by design: each `git remote get-url` spawns its own git
+      // process against the same repo; running them serially keeps git's
+      // index/lock access predictable and the remote count is tiny.
+      // eslint-disable-next-line no-await-in-loop
       const {stdout} = await runGit(['-C', dir, 'remote', 'get-url', name])
       const url = stdout.trim()
       if (url.length > 0) urls.push(url)

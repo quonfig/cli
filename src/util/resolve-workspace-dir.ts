@@ -78,15 +78,15 @@ const walkUpForWorkspace = (start: string, homeDir: string): string | undefined 
   // trailing slash or symlink-resolved path on the caller's side.
   const stop = path.resolve(homeDir)
 
-  while (true) {
+  // Walk up until the filesystem root: path.dirname() of the root is the
+  // root itself, so `parent === current` is the terminal condition.
+  for (let parent = path.dirname(current); ; current = parent, parent = path.dirname(current)) {
     if (current === stop) return undefined
 
     if (fs.existsSync(path.join(current, QUONFIG_JSON))) {
       return current
     }
 
-    const parent = path.dirname(current)
     if (parent === current) return undefined
-    current = parent
   }
 }
