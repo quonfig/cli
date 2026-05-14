@@ -1,0 +1,186 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-multi-env-state",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531672945,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-multi-env-state",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531675570,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "622c700d-0845-4f31-a763-c38092c4b12d",
+          "clauses": [
+            {
+              "_id": "2a14c81a-83b4-4b83-b2a2-6cb4bb4566e9",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "DE"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 1
+        }
+      ],
+      "salt": "0bf247a470f74ad5950949436491e3d3",
+      "sel": "a5b0a75835b84230a2f7bca3fb24ba4a",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 2
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-multi-env-state",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531674296,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "72d07e93-c11a-4d6d-9dce-9510e53c7c3d",
+          "clauses": [
+            {
+              "_id": "09184db5-b109-463f-9a92-6243547b8646",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "US"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 0
+        }
+      ],
+      "salt": "d1fd2fd019534426a871d3fff0acd9ae",
+      "sel": "5dc5a125342445aa8394ebd4e369c9d5",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 2
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-multi-env-state",
+  "kind": "boolean",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx multi env state",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "a9eaa85c-7da1-411a-95c0-f22218d31102",
+      "name": "true",
+      "value": true
+    },
+    {
+      "_id": "56ece6d0-3e48-4713-bc6a-11abf99886cf",
+      "name": "false",
+      "value": false
+    }
+  ]
+}

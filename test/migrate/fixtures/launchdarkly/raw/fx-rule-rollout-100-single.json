@@ -1,0 +1,181 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-rule-rollout-100-single",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531592917,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-rule-rollout-100-single",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531592930,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "a4957976bae944b8ad11f2d0f2f79bfa",
+      "sel": "2d1b83c8cc1f48cd9b9d0fbedf5395ed",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-rule-rollout-100-single",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 1,
+            "rules": 1,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778532953339,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "1daf92da-5484-4ae4-8fea-de660cfa6c42",
+          "clauses": [
+            {
+              "_id": "d8498f00-87e2-41a6-9b0c-6d9b565dd60c",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "US"
+              ]
+            }
+          ],
+          "rollout": {
+            "bucketBy": "key",
+            "contextKind": "user",
+            "variations": [
+              {
+                "variation": 0,
+                "weight": 100000
+              },
+              {
+                "variation": 1,
+                "weight": 0
+              }
+            ]
+          },
+          "trackEvents": false
+        }
+      ],
+      "salt": "e9c14e2563274a21b2f6c964ffcee930",
+      "sel": "185a7ed54b6b488ea3925dee67a57337",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 3
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-rule-rollout-100-single",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx rule rollout 100 single",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "5764b164-5da0-4e60-a69f-9081c1a840ee",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "131fc544-8b0d-4175-97ae-57c0c5882617",
+      "name": "b",
+      "value": "b"
+    }
+  ]
+}

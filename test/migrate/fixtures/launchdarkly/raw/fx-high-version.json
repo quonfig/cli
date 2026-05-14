@@ -1,0 +1,150 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-high-version",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 76,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531680371,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "mutation iteration 24",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-high-version",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531680385,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "1c301a2929354bf1aa4cc81ba288061a",
+      "sel": "5c485113440a4d50b8cfa3751d946931",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-high-version",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778533100612,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "03004f989b2a4061bdfdfc1ff166d43e",
+      "sel": "f77f4b221cdf42308d384ec6f0f7af35",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 2
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-high-version",
+  "kind": "boolean",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx high version",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "dff85f22-9ebf-431f-a3bf-32984426d637",
+      "name": "true",
+      "value": true
+    },
+    {
+      "_id": "d73ddee7-86bf-47e7-a30e-8d7e430cec82",
+      "name": "false",
+      "value": false
+    }
+  ]
+}

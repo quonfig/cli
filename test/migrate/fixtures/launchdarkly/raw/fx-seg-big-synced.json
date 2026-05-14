@@ -1,0 +1,39 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-big-synced",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-big-synced",
+      "type": "text/html"
+    }
+  },
+  "_unboundedMetadata": {
+    "deleted": false,
+    "envId": "",
+    "excludedCount": 0,
+    "includedCount": 0,
+    "segmentId": "",
+    "version": 0
+  },
+  "creationDate": 1778531382308,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-big-synced",
+  "lastModifiedDate": 1778531382308,
+  "name": "fx seg big synced",
+  "rules": [],
+  "tags": [],
+  "unbounded": true,
+  "unboundedContextKind": "user",
+  "version": 1
+}

@@ -1,0 +1,45 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-rules-only",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-rules-only",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531392946,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-rules-only",
+  "lastModifiedDate": 1778531393213,
+  "name": "fx seg rules only",
+  "rules": [
+    {
+      "_id": "333c9ebf-f5f6-4fd8-865b-23c3a165446f",
+      "clauses": [
+        {
+          "_id": "b06f2ed8-3e74-42a2-afbe-31b74a480959",
+          "attribute": "country",
+          "contextKind": "user",
+          "negate": false,
+          "op": "in",
+          "values": [
+            "US"
+          ]
+        }
+      ]
+    }
+  ],
+  "tags": [],
+  "version": 2
+}

@@ -1,0 +1,48 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-rule-with-weight",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-rule-with-weight",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531381129,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-rule-with-weight",
+  "lastModifiedDate": 1778531381386,
+  "name": "fx seg rule with weight",
+  "rules": [
+    {
+      "_id": "14b4094b-72b5-4084-b157-cdd711bb0106",
+      "bucketBy": "key",
+      "clauses": [
+        {
+          "_id": "24b49873-10f7-4cf3-b520-f159e0133136",
+          "attribute": "country",
+          "contextKind": "user",
+          "negate": false,
+          "op": "in",
+          "values": [
+            "US"
+          ]
+        }
+      ],
+      "rolloutContextKind": "user",
+      "weight": 50000
+    }
+  ],
+  "tags": [],
+  "version": 2
+}

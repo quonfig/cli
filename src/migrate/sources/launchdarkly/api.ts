@@ -187,10 +187,22 @@ export async function fetchContextKinds(apiKey: string, projectKey: string): Pro
  * returns rules, clauses, targets, fallthrough, offVariation, prerequisites
  * and rollouts for every named environment in one response — there is no
  * "all environments" wildcard, so env keys are templated in explicitly.
+ *
+ * `opts.archived` flips the list to *only* archived flags. LaunchDarkly's flag
+ * list endpoint hides archived flags by default and has no "both" mode, so a
+ * full picture is two calls. The migration runtime does not want archived flags
+ * (`fetchSnapshot` omits this), but the fixture-corpus exporter needs them so
+ * the `state-archived` edge case is in the canonical corpus.
  */
-export async function fetchFlags(apiKey: string, projectKey: string, envKeys: string[]): Promise<LDFlag[]> {
+export async function fetchFlags(
+  apiKey: string,
+  projectKey: string,
+  envKeys: string[],
+  opts: {archived?: boolean} = {},
+): Promise<LDFlag[]> {
   const params = new URLSearchParams({limit: String(PAGE_LIMIT), summary: '0'})
   for (const env of envKeys) params.append('env', env)
+  if (opts.archived) params.set('archived', 'true')
   return paginate<LDFlag, LDFlagsResponse>(`/flags/${encodeURIComponent(projectKey)}?${params}`, apiKey)
 }
 

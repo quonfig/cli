@@ -4,3 +4,5 @@ src/quonfig-common/
 package.json
 yarn.lock
 README.md
+# Raw provider-export corpora — exporter owns the formatting (see scripts/export-ld-fixtures.ts).
+test/migrate/fixtures/**/raw/*.json

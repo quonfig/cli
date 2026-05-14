@@ -1,0 +1,213 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-reorder-rules",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531741652,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-reorder-rules",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531741675,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "ca3b9b386f014232bc31e69b0fad1657",
+      "sel": "387ed3452f8b4abda912fa3d655eb71c",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-reorder-rules",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          },
+          "2": {
+            "contextTargets": 0,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778533102934,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "4c411999-8128-4d9c-b5c5-24e70746d5f1",
+          "clauses": [
+            {
+              "_id": "d310844d-4c84-4b6b-ad4d-1af3649c477f",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "GB"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 2
+        },
+        {
+          "_id": "7dc260b4-819d-42e3-8eb5-aa4694e511d5",
+          "clauses": [
+            {
+              "_id": "cb23808f-c219-4d1d-bdab-ab05eddc66ff",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "CA"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 1
+        },
+        {
+          "_id": "bd038d8e-fbc2-4b90-9d92-f6436fbf669d",
+          "clauses": [
+            {
+              "_id": "3a35ca59-8324-4150-b2e5-35ecb437c612",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "US"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 0
+        }
+      ],
+      "salt": "645c9e7ea6584c179c9303c43db7c704",
+      "sel": "c699d751d6434a78a94f0f5ec8e50ae8",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 6
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-reorder-rules",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx reorder rules",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "b576bf2d-ea23-4180-a198-edfc01f76ecf",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "ec960537-169d-470a-a815-23620d95cb46",
+      "name": "b",
+      "value": "b"
+    },
+    {
+      "_id": "09cabc92-88f0-4d5a-bb34-6fd656193344",
+      "name": "c",
+      "value": "c"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-included-only",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-included-only",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531379624,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-included-only",
+  "lastModifiedDate": 1778531379624,
+  "name": "fx seg included only",
+  "rules": [],
+  "tags": [],
+  "version": 1
+}

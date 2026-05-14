@@ -7,3 +7,5 @@ generated/
 .vscode/
 reforge.*.config.json
 test/fixtures
+# Raw provider-export corpora — byte-faithful third-party JSON, not our code to style.
+test/migrate/fixtures/**/raw/

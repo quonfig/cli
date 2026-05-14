@@ -1,0 +1,150 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-track-all-true",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531665398,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-track-all-true",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531665414,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "8ddde6fee324407188467d5e7c049f14",
+      "sel": "45c9d2cee2a24e9d9bfc63df86c7462a",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-track-all-true",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778532962046,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "b7c0826c85874680973f784c744cac7a",
+      "sel": "8846b7ea66d74b739805e6f59f7930c5",
+      "targets": [],
+      "trackEvents": true,
+      "trackEventsFallthrough": true,
+      "version": 3
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-track-all-true",
+  "kind": "boolean",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx track all true",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "5d2b636a-05b6-44ce-b945-3a39e3066001",
+      "name": "true",
+      "value": true
+    },
+    {
+      "_id": "78ae0cc8-e29a-4ba5-b282-38f983e553a6",
+      "name": "false",
+      "value": false
+    }
+  ]
+}

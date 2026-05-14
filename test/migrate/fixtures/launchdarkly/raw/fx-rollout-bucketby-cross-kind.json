@@ -1,0 +1,181 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-rollout-bucketby-cross-kind",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531769157,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-rollout-bucketby-cross-kind",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531769177,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "ef3f5aaa541346829c6b92db228c6379",
+      "sel": "7f74805a4767490aa534384352cf4b5b",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-rollout-bucketby-cross-kind",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778533117076,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "7940adff-46d9-4070-97be-7527966e2d24",
+          "clauses": [
+            {
+              "_id": "9a8b8f1e-b968-4d85-ad95-0e7d09412c1c",
+              "attribute": "plan",
+              "contextKind": "organization",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "enterprise"
+              ]
+            }
+          ],
+          "rollout": {
+            "bucketBy": "email",
+            "contextKind": "organization",
+            "variations": [
+              {
+                "variation": 0,
+                "weight": 60000
+              },
+              {
+                "variation": 1,
+                "weight": 40000
+              }
+            ]
+          },
+          "trackEvents": false
+        }
+      ],
+      "salt": "538f0f2d6c064fce9e4323faa423389b",
+      "sel": "680fe3e6b07946f780f35039b41c55e3",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 3
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-rollout-bucketby-cross-kind",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx rollout bucketby cross kind",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "42dc1d47-455a-4087-9daa-dd6d0c661723",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "25e16124-0363-4239-8a44-1775caff27db",
+      "name": "b",
+      "value": "b"
+    }
+  ]
+}

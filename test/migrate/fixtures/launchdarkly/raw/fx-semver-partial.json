@@ -1,0 +1,178 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-semver-partial",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531750621,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-semver-partial",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531750641,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "24962aa379ae4150a087054f69ee7fb3",
+      "sel": "b4d5e7d5de5849fc8fd9e35229a515e4",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-semver-partial",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778533107591,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "27cb6cac-2302-4d3e-b6c5-175227864257",
+          "clauses": [
+            {
+              "_id": "6759a89a-9e5f-4466-ae74-9afd1f385454",
+              "attribute": "appVersion",
+              "contextKind": "user",
+              "negate": false,
+              "op": "semVerEqual",
+              "values": [
+                "2"
+              ]
+            },
+            {
+              "_id": "117b6180-eced-4134-af74-0d944d388534",
+              "attribute": "appVersion",
+              "contextKind": "user",
+              "negate": false,
+              "op": "semVerGreaterThan",
+              "values": [
+                "2.3"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 0
+        }
+      ],
+      "salt": "fb12262a37364642a370630c75066541",
+      "sel": "a375269c56bf4b2481faaa0ef9035e73",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 3
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-semver-partial",
+  "kind": "boolean",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx semver partial",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "52379182-7305-4045-bd30-d1de08635965",
+      "name": "true",
+      "value": true
+    },
+    {
+      "_id": "a67130d6-4d9f-4bc3-b981-978a862c5a62",
+      "name": "false",
+      "value": false
+    }
+  ]
+}

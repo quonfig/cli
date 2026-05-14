@@ -1,0 +1,45 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-included-excluded-rules",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-included-excluded-rules",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531380173,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-included-excluded-rules",
+  "lastModifiedDate": 1778531380440,
+  "name": "fx seg included excluded rules",
+  "rules": [
+    {
+      "_id": "2f7f6d54-9d0e-47ef-8de5-f5e789d9b54c",
+      "clauses": [
+        {
+          "_id": "bf12fc14-161a-4615-af01-c4fa04708e6f",
+          "attribute": "country",
+          "contextKind": "user",
+          "negate": false,
+          "op": "in",
+          "values": [
+            "US"
+          ]
+        }
+      ]
+    }
+  ],
+  "tags": [],
+  "version": 2
+}

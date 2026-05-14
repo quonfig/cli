@@ -1,0 +1,13 @@
+{
+  "contextKinds": [
+    "user"
+  ],
+  "environments": [
+    "production",
+    "test"
+  ],
+  "exportedAt": "2026-05-14",
+  "flagCount": 80,
+  "project": "default",
+  "segmentCount": 11
+}

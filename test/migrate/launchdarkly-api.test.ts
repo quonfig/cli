@@ -156,9 +156,27 @@ describe('migrate/sources/launchdarkly/api', () => {
       const u = new URL(firstUrl)
       expect(u.searchParams.get('summary')).to.equal('0')
       expect(u.searchParams.getAll('env')).to.deep.equal(['test', 'production'])
+      expect(u.searchParams.get('archived')).to.equal(null)
       expect(flags).to.have.length(21)
       // Page 2 must have been fetched via the _links.next href.
       expect(seenPaths.some((p) => p.includes('offset=20'))).to.equal(true)
+    })
+
+    it('sets archived=true only when opts.archived is passed (corpus-exporter pass)', async () => {
+      let seenUrl = ''
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/flags/default`, ({request}) => {
+          seenUrl = request.url
+          return HttpResponse.json({
+            items: [{archived: true, environments: {}, key: 'fx-state-archived', kind: 'boolean', variations: []}],
+          })
+        }),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      const flags = await fetchFlags('k', 'default', ['test'], {archived: true})
+      expect(new URL(seenUrl).searchParams.get('archived')).to.equal('true')
+      expect(flags.map((f) => f.key)).to.deep.equal(['fx-state-archived'])
     })
   })
 

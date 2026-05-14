@@ -1,0 +1,29 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-cross-env",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-cross-env",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531393474,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-cross-env",
+  "lastModifiedDate": 1778531393474,
+  "name": "fx seg cross env (test)",
+  "rules": [],
+  "tags": [],
+  "version": 1
+}

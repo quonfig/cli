@@ -1,0 +1,179 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-rule-single-variation",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531580914,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-rule-single-variation",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531580934,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "c1ed711c3e7844e6ab4f3f1b77eb7b8f",
+      "sel": "de8105fa7cb2444eb9890ea20a251d74",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-rule-single-variation",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "2": {
+            "contextTargets": 0,
+            "nullRules": 0,
+            "rules": 1,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778533065481,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "c2c16827-8d97-46e5-bad9-53b10d4cf9cd",
+          "clauses": [
+            {
+              "_id": "a472f61f-6cb3-42d5-9adc-f513d5e7d274",
+              "attribute": "country",
+              "contextKind": "user",
+              "negate": false,
+              "op": "in",
+              "values": [
+                "US"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 2
+        }
+      ],
+      "salt": "9cf1818fa17e44af85a7ddaf00156b1d",
+      "sel": "6ec988874f504669ba303f1e040fa268",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 3
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-rule-single-variation",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx rule single variation",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "88065c3f-5956-4c83-b0e3-9ce443f1af62",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "bef0664e-e03c-4fce-8746-fb3ec03791ff",
+      "name": "b",
+      "value": "b"
+    },
+    {
+      "_id": "139f1e80-f1c3-48c1-b406-ce29a823df0b",
+      "name": "c",
+      "value": "c"
+    }
+  ]
+}

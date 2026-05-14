@@ -1,0 +1,37 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-ctx-segment-non-user-kind",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-ctx-segment-non-user-kind",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531612926,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [
+    {
+      "contextKind": "device",
+      "values": [
+        "device-1",
+        "device-2"
+      ]
+    }
+  ],
+  "key": "fx-ctx-segment-non-user-kind",
+  "lastModifiedDate": 1778532162013,
+  "name": "fx ctx segment non user kind",
+  "rules": [],
+  "tags": [],
+  "version": 2
+}

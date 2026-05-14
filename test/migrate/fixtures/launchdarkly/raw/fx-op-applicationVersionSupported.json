@@ -1,0 +1,202 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-op-applicationVersionSupported",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531541899,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-op-applicationVersionSupported",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531541926,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "f8d56b0179414388b5993d81d4853fcb",
+      "sel": "35415ee9a2f3467788b11f6cc48cc8ac",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-op-applicationVersionSupported",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 3,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778533051282,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [
+        {
+          "_id": "c1442cea-18c1-4ea0-8f89-059b34cb826e",
+          "clauses": [
+            {
+              "_id": "a7bfe5b7-cced-4be7-9c19-ea598badf5b8",
+              "attribute": "version_support_status",
+              "contextKind": "ld_application",
+              "negate": false,
+              "op": "applicationVersionSupported",
+              "values": [
+                "1.0.0"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 0
+        },
+        {
+          "_id": "ef295f05-1e6f-488c-ba07-e684a51f5847",
+          "clauses": [
+            {
+              "_id": "11bc7560-81ff-47a0-9439-47b5d593fdd2",
+              "attribute": "version_support_status",
+              "contextKind": "ld_application",
+              "negate": false,
+              "op": "applicationVersionSupported",
+              "values": [
+                "1.0.0"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 0
+        },
+        {
+          "_id": "b63cb71e-62d8-4ce5-8d03-753e13e2b370",
+          "clauses": [
+            {
+              "_id": "139f34db-f48a-4724-a9d8-22ed43cf37c4",
+              "attribute": "version_support_status",
+              "contextKind": "ld_application",
+              "negate": false,
+              "op": "applicationVersionSupported",
+              "values": [
+                "1.0.0"
+              ]
+            }
+          ],
+          "trackEvents": false,
+          "variation": 0
+        }
+      ],
+      "salt": "5b2af57240334e62bd6c978da8f43e58",
+      "sel": "862396f66b7348298ae839718fff604a",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 5
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-op-applicationVersionSupported",
+  "kind": "boolean",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx op-applicationVersionSupported",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "855b08c0-9cae-4492-acfc-235c7e90ef0e",
+      "name": "true",
+      "value": true
+    },
+    {
+      "_id": "990b4ea2-89d9-4770-abba-7c8349aa94c2",
+      "name": "false",
+      "value": false
+    }
+  ]
+}

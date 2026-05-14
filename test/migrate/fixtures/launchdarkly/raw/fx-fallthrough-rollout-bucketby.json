@@ -1,0 +1,166 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-fallthrough-rollout-bucketby",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531603940,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-fallthrough-rollout-bucketby",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531603954,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "24db546de2d44e3d8e6c3f70cb5266dc",
+      "sel": "16f97e03f39f4a2c93865df66f5d6d6f",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-fallthrough-rollout-bucketby",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "bucketBy": "email",
+            "contextTargets": 0,
+            "nullRules": 0,
+            "rollout": 60000,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "bucketBy": "email",
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rollout": 40000,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "rollout": {
+          "bucketBy": "email",
+          "contextKind": "user",
+          "variations": [
+            {
+              "variation": 0,
+              "weight": 60000
+            },
+            {
+              "variation": 1,
+              "weight": 40000
+            }
+          ]
+        }
+      },
+      "lastModified": 1778533080969,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "53b6e04f1cee4c8a810854435700be5f",
+      "sel": "33bd1378640c4721b88a1cf7ffa0bfc3",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 3
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-fallthrough-rollout-bucketby",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx fallthrough rollout bucketby",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "4ea4ef81-2620-45ac-89d0-f1eff1c92199",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "a07f3147-893e-4550-b19b-d0292395e968",
+      "name": "b",
+      "value": "b"
+    }
+  ]
+}

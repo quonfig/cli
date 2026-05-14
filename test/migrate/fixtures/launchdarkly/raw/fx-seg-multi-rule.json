@@ -1,0 +1,60 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/segments/default/test",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/segments/default/test/fx-seg-multi-rule",
+      "type": "application/json"
+    },
+    "site": {
+      "href": "/default/test/segments/fx-seg-multi-rule",
+      "type": "text/html"
+    }
+  },
+  "creationDate": 1778531380624,
+  "deleted": false,
+  "excluded": [],
+  "excludedContexts": [],
+  "generation": 1,
+  "included": [],
+  "includedContexts": [],
+  "key": "fx-seg-multi-rule",
+  "lastModifiedDate": 1778531380872,
+  "name": "fx seg multi rule",
+  "rules": [
+    {
+      "_id": "0369ec99-4650-4b94-9245-f349f58ab64d",
+      "clauses": [
+        {
+          "_id": "17b743e9-a706-49e6-bcee-95a5c3bbc632",
+          "attribute": "country",
+          "contextKind": "user",
+          "negate": false,
+          "op": "in",
+          "values": [
+            "US"
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "c058db39-b947-48cf-ba34-c582fc5060e1",
+      "clauses": [
+        {
+          "_id": "f32fea69-bc4d-4668-9e13-32f0edba7020",
+          "attribute": "country",
+          "contextKind": "user",
+          "negate": false,
+          "op": "in",
+          "values": [
+            "CA"
+          ]
+        }
+      ]
+    }
+  ],
+  "tags": [],
+  "version": 2
+}

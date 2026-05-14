@@ -1,0 +1,155 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-meta-defaults-on-off",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531390725,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 2,
+    "onVariation": 1
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-meta-defaults-on-off",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "1": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "2": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 1
+      },
+      "lastModified": 1778531390756,
+      "offVariation": 2,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "f6d96b5688f3450b8cb3ad75382a612c",
+      "sel": "5cb5b14e961041fdad1ac0660c4f4d14",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-meta-defaults-on-off",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "1": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "2": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 1
+      },
+      "lastModified": 1778533095945,
+      "offVariation": 2,
+      "on": true,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "64c8b5306e7140be9df4a97b8f4b1a2c",
+      "sel": "9f44c6caa57844a59ee54bc312057087",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 2
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-meta-defaults-on-off",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx meta defaults on off",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "863ab34b-e9e4-4ecf-9e9a-ce6f305ad756",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "bef715d4-48f8-4143-bc5e-6162c24f8f03",
+      "name": "b",
+      "value": "b"
+    },
+    {
+      "_id": "454aa118-8a64-4076-8380-6c4f97ad0aa7",
+      "name": "c",
+      "value": "c"
+    }
+  ]
+}

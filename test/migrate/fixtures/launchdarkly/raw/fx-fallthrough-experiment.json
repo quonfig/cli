@@ -1,0 +1,184 @@
+{
+  "_links": {
+    "parent": {
+      "href": "/api/v2/flags/default",
+      "type": "application/json"
+    },
+    "self": {
+      "href": "/api/v2/flags/default/fx-fallthrough-experiment",
+      "type": "application/json"
+    }
+  },
+  "_maintainer": {
+    "_id": "6a01c58d51b2060a7e9178e1",
+    "_links": {
+      "self": {
+        "href": "/api/v2/members/6a01c58d51b2060a7e9178e1",
+        "type": "application/json"
+      }
+    },
+    "email": "jeff@pricingcompared.com",
+    "firstName": "Jeff",
+    "lastName": "Dwyer",
+    "role": "owner"
+  },
+  "_version": 1,
+  "archived": false,
+  "clientSideAvailability": {
+    "usingEnvironmentId": true,
+    "usingMobileKey": true
+  },
+  "creationDate": 1778531602934,
+  "customProperties": {},
+  "defaults": {
+    "offVariation": 1,
+    "onVariation": 0
+  },
+  "deprecated": false,
+  "description": "",
+  "environments": {
+    "production": {
+      "_environmentName": "Production",
+      "_site": {
+        "href": "/default/production/features/fx-fallthrough-experiment",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "contextTargets": 0,
+            "isFallthrough": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "variation": 0
+      },
+      "lastModified": 1778531602950,
+      "offVariation": 1,
+      "on": false,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "7d6331b31ab742bbba354542352525f6",
+      "sel": "7e925f507a7e49f1913505ec8ea40aa9",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 1
+    },
+    "test": {
+      "_environmentName": "Test",
+      "_site": {
+        "href": "/default/test/features/fx-fallthrough-experiment",
+        "type": "text/html"
+      },
+      "_summary": {
+        "prerequisites": 0,
+        "variations": {
+          "0": {
+            "bucketBy": "key",
+            "contextTargets": 0,
+            "nullRules": 0,
+            "rollout": 50000,
+            "rules": 0,
+            "targets": 0
+          },
+          "1": {
+            "bucketBy": "key",
+            "contextTargets": 0,
+            "isOff": true,
+            "nullRules": 0,
+            "rollout": 30000,
+            "rules": 0,
+            "targets": 0
+          },
+          "2": {
+            "bucketBy": "key",
+            "contextTargets": 0,
+            "nullRules": 0,
+            "rollout": 20000,
+            "rules": 0,
+            "targets": 0
+          }
+        }
+      },
+      "archived": false,
+      "contextTargets": [],
+      "fallthrough": {
+        "rollout": {
+          "bucketBy": "key",
+          "contextKind": "user",
+          "seed": 67890,
+          "variations": [
+            {
+              "variation": 0,
+              "weight": 50000
+            },
+            {
+              "variation": 1,
+              "weight": 30000
+            },
+            {
+              "variation": 2,
+              "weight": 20000
+            }
+          ]
+        }
+      },
+      "lastModified": 1778533078274,
+      "offVariation": 1,
+      "on": true,
+      "prerequisites": [],
+      "rules": [],
+      "salt": "edc3825cdd1f449b911c891c4af5afe1",
+      "sel": "7cefaec1f2be4b638df8e37f562a2239",
+      "targets": [],
+      "trackEvents": false,
+      "trackEventsFallthrough": false,
+      "version": 6
+    }
+  },
+  "experiments": {
+    "baselineIdx": 0,
+    "items": []
+  },
+  "goalIds": [],
+  "includeInSnippet": true,
+  "key": "fx-fallthrough-experiment",
+  "kind": "multivariate",
+  "maintainerId": "6a01c58d51b2060a7e9178e1",
+  "name": "fx fallthrough experiment",
+  "tags": [],
+  "temporary": false,
+  "variationJsonSchema": null,
+  "variations": [
+    {
+      "_id": "c0ba7260-0ed2-4983-b002-ebf1bfd08ee5",
+      "name": "a",
+      "value": "a"
+    },
+    {
+      "_id": "f7f20e88-4deb-4c6e-913a-fb565a1b59b5",
+      "name": "b",
+      "value": "b"
+    },
+    {
+      "_id": "610ee809-4f62-4b60-bdef-bf29bf4589c1",
+      "name": "c",
+      "value": "c"
+    }
+  ]
+}
