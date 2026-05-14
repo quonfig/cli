@@ -16,7 +16,7 @@ describe('resolve-workspace recovery from tokens', () => {
   const testRoot = path.join(os.tmpdir(), '.quonfig-resolve-recovery-' + Date.now())
   const fakeHome = path.join(testRoot, 'home')
   const quonfigDir = path.join(fakeHome, '.quonfig')
-  let originalHome: string | undefined
+  let originalConfigHome: string | undefined
   let originalApiKey: string | undefined
   let originalDomain: string | undefined
   let originalApiOverride: string | undefined
@@ -35,11 +35,11 @@ describe('resolve-workspace recovery from tokens', () => {
 
   beforeEach(async () => {
     fs.mkdirSync(quonfigDir, {recursive: true})
-    originalHome = process.env.HOME
+    originalConfigHome = process.env.QUONFIG_CONFIG_HOME
     originalApiKey = process.env.QUONFIG_API_KEY
     originalDomain = process.env.QUONFIG_DOMAIN
     originalApiOverride = process.env.QUONFIG_API_BASE_URL_OVERRIDE
-    process.env.HOME = fakeHome
+    process.env.QUONFIG_CONFIG_HOME = quonfigDir
     delete process.env.QUONFIG_API_KEY
     delete process.env.QUONFIG_DOMAIN
     delete process.env.QUONFIG_API_BASE_URL_OVERRIDE
@@ -49,8 +49,8 @@ describe('resolve-workspace recovery from tokens', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch
-    if (originalHome === undefined) delete process.env.HOME
-    else process.env.HOME = originalHome
+    if (originalConfigHome === undefined) delete process.env.QUONFIG_CONFIG_HOME
+    else process.env.QUONFIG_CONFIG_HOME = originalConfigHome
     if (originalApiKey === undefined) delete process.env.QUONFIG_API_KEY
     else process.env.QUONFIG_API_KEY = originalApiKey
     if (originalDomain === undefined) delete process.env.QUONFIG_DOMAIN
@@ -198,7 +198,7 @@ describe('resolve-workspace org/ws addressing', () => {
   const testRoot = path.join(os.tmpdir(), '.quonfig-resolve-orgws-' + Date.now())
   const fakeHome = path.join(testRoot, 'home')
   const quonfigDir = path.join(fakeHome, '.quonfig')
-  let originalHome: string | undefined
+  let originalConfigHome: string | undefined
   let originalApiKey: string | undefined
   let originalDomain: string | undefined
   let originalApiOverride: string | undefined
@@ -218,12 +218,12 @@ describe('resolve-workspace org/ws addressing', () => {
 
   beforeEach(() => {
     fs.mkdirSync(quonfigDir, {recursive: true})
-    originalHome = process.env.HOME
+    originalConfigHome = process.env.QUONFIG_CONFIG_HOME
     originalApiKey = process.env.QUONFIG_API_KEY
     originalDomain = process.env.QUONFIG_DOMAIN
     originalApiOverride = process.env.QUONFIG_API_BASE_URL_OVERRIDE
     originalWorkspace = process.env.QUONFIG_WORKSPACE
-    process.env.HOME = fakeHome
+    process.env.QUONFIG_CONFIG_HOME = quonfigDir
     delete process.env.QUONFIG_API_KEY
     delete process.env.QUONFIG_DOMAIN
     delete process.env.QUONFIG_API_BASE_URL_OVERRIDE
@@ -234,8 +234,8 @@ describe('resolve-workspace org/ws addressing', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch
-    if (originalHome === undefined) delete process.env.HOME
-    else process.env.HOME = originalHome
+    if (originalConfigHome === undefined) delete process.env.QUONFIG_CONFIG_HOME
+    else process.env.QUONFIG_CONFIG_HOME = originalConfigHome
     if (originalApiKey === undefined) delete process.env.QUONFIG_API_KEY
     else process.env.QUONFIG_API_KEY = originalApiKey
     if (originalDomain === undefined) delete process.env.QUONFIG_DOMAIN

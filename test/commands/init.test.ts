@@ -235,9 +235,13 @@ describe('qfg init', () => {
         expect(content).to.include('qfg verify')
         expect(content).to.include(PRE_COMMIT_MARKER)
 
-        // Should be executable
-        const stat = fs.statSync(hookPath)
-        expect(stat.mode & 0o111).to.be.greaterThan(0)
+        // Should be executable. NTFS has no Unix executable bit, so
+        // stat.mode & 0o111 is always 0 on Windows — git there runs hooks via
+        // its bundled sh regardless. Only assert the bit off-Windows.
+        if (process.platform !== 'win32') {
+          const stat = fs.statSync(hookPath)
+          expect(stat.mode & 0o111).to.be.greaterThan(0)
+        }
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }

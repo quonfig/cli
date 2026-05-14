@@ -16,8 +16,10 @@ const buildJwt = (payload: Record<string, unknown>): string => {
 /**
  * These tests exercise the QUONFIG_API_KEY short-circuit in getValidAccessToken().
  *
- * We redirect HOME to a per-test tmp dir so the code path reading
- * ~/.quonfig/tokens.json is isolated from the developer's real session.
+ * We redirect QUONFIG_CONFIG_HOME to a per-test tmp dir so the code path
+ * reading the token store is isolated from the developer's real session.
+ * (HOME isn't enough — on Windows os.homedir() reads USERPROFILE, so the
+ * token-storage helpers would still hit the real config dir. qfg-qilt.)
  * A successful env-key short-circuit must return the key without reading
  * or writing that directory.
  */
@@ -26,22 +28,22 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
   const fakeHome = path.join(testRoot, 'home')
   const quonfigDir = path.join(fakeHome, '.quonfig')
   const tokenOptions: TokenStorageOptions = {quonfigDir}
-  let originalHome: string | undefined
+  let originalConfigHome: string | undefined
   let originalApiKey: string | undefined
 
   beforeEach(() => {
     fs.mkdirSync(quonfigDir, {recursive: true})
-    originalHome = process.env.HOME
+    originalConfigHome = process.env.QUONFIG_CONFIG_HOME
     originalApiKey = process.env.QUONFIG_API_KEY
-    process.env.HOME = fakeHome
+    process.env.QUONFIG_CONFIG_HOME = quonfigDir
     delete process.env.QUONFIG_API_KEY
   })
 
   afterEach(() => {
-    if (originalHome === undefined) {
-      delete process.env.HOME
+    if (originalConfigHome === undefined) {
+      delete process.env.QUONFIG_CONFIG_HOME
     } else {
-      process.env.HOME = originalHome
+      process.env.QUONFIG_CONFIG_HOME = originalConfigHome
     }
 
     if (originalApiKey === undefined) {
@@ -150,24 +152,24 @@ describe('get-valid-token (per-org OAuth path)', () => {
   const fakeHome = path.join(testRoot, 'home')
   const quonfigDir = path.join(fakeHome, '.quonfig')
   const tokenOptions: TokenStorageOptions = {quonfigDir}
-  let originalHome: string | undefined
+  let originalConfigHome: string | undefined
   let originalApiKey: string | undefined
   let originalFetch: typeof globalThis.fetch
 
   beforeEach(() => {
     fs.mkdirSync(quonfigDir, {recursive: true})
-    originalHome = process.env.HOME
+    originalConfigHome = process.env.QUONFIG_CONFIG_HOME
     originalApiKey = process.env.QUONFIG_API_KEY
     originalFetch = globalThis.fetch
-    process.env.HOME = fakeHome
+    process.env.QUONFIG_CONFIG_HOME = quonfigDir
     delete process.env.QUONFIG_API_KEY
   })
 
   afterEach(() => {
-    if (originalHome === undefined) {
-      delete process.env.HOME
+    if (originalConfigHome === undefined) {
+      delete process.env.QUONFIG_CONFIG_HOME
     } else {
-      process.env.HOME = originalHome
+      process.env.QUONFIG_CONFIG_HOME = originalConfigHome
     }
 
     if (originalApiKey === undefined) {
