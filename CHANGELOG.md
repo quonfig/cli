@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.46 - 2026-05-14
+
+- feat(qfg-7429): `qfg push` now ships your actual local git commits to the server as a packfile, instead of shipping file deltas and letting the server fabricate a fresh commit. The commit on origin is the commit you made locally — same SHA, same message, same author. Multi-commit history is preserved (N local commits land as N commits, not squashed). A successful `qfg push` leaves your local repo genuinely in sync with origin: no more phantom "ahead by 1" / "local commits diverge" loop. Authorization is per-commit and file-level on pushes to `main`; pushes to other branches are membership-gated only. Requires app-quonfig with the `configs.gitPush` handler (live in production as of 2026-05-14).
+- feat(qfg-7429.5): push denials now render per-commit attribution — which commit, which file, which permission was missing. When a forbidden change appears to have come from a non-Quonfig upstream remote, the error includes a `revert-upstream` recovery hint pointing at the offending commit.
+- feat(qfg-7429.6): `qfg push` detects the legacy orphan-commit divergence state (created by older CLI versions that fabricated server-side commits) and prints a `git reset --hard origin/<branch>` migration hint instead of failing opaquely.
+- feat(qfg-glrd.2): `qfg push` / `qfg pull` resolve the workspace directory from the current working directory — explicit `--dir` is no longer required when you're standing in a workspace. The error when cwd isn't a workspace is now specific.
+- feat(qfg-glrd.3): the wrong-directory safety check walks all configured git remotes, not just `origin`, when matching the local checkout against the backend repo.
+- fix(qfg-glrd.6): retire the `Pushed-Via` commit trailer. Server-added trailers changed the commit SHA and reintroduced divergence; the push channel is now recorded in the server-side `push_events` audit table instead.
+
 ## 0.0.45 - 2026-05-11
 
 - fix(qfg-c3es): bump the hosted JSON Schema URL in `qfg init` templates to `https://api.quonfig.com/schemas/v1/stored-config.json`. 0.0.44 advertised an unversioned URL that didn't actually exist as a route (Next.js served the schema at `/api/schemas/...` while the templates pointed at `/schemas/...`, which 307'd to WorkOS auth on production). app-quonfig now serves the schema at the versioned, no-`/api/`-prefix path; this release aligns the workspace templates so newly-emitted `$schema` references resolve. The `/v1/` segment also gives us an immutable-`$id` escape hatch — future breaking changes ship as `/v2/...` instead of mutating in place.
