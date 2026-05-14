@@ -1,10 +1,9 @@
 import {expect, test} from '@oclif/test'
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 import {http, HttpResponse} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
+import {cleanupTestAuth, setupTestAuth, testConfigPath, testTokensPath} from '../test-auth-helper.js'
 
 /**
  * qfg-kr7.8: `qfg workspace` must show the active org/workspace, the saved
@@ -13,17 +12,8 @@ import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
  * single-line "Workspace: <slug>" output that lacked org context.
  */
 
-const tokensPath = () => {
-  const home = process.env.QUONFIG_CONFIG_HOME
-  if (!home) throw new Error('QUONFIG_CONFIG_HOME unset')
-  return path.join(home, 'tokens.json')
-}
-
-const configPath = () => {
-  const home = process.env.QUONFIG_CONFIG_HOME
-  if (!home) throw new Error('QUONFIG_CONFIG_HOME unset')
-  return path.join(home, 'config')
-}
+const tokensPath = testTokensPath
+const configPath = testConfigPath
 
 const buildJwt = () => {
   const payload = Buffer.from(

@@ -2,6 +2,8 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import {getAuthConfigFilePath, getTokenFilePath} from '../src/util/token-storage.js'
+
 /**
  * Setup authentication files for tests.
  *
@@ -9,6 +11,12 @@ import * as path from 'node:path'
  * writes a fake JWT + profile config inside. The CLI's storage helpers
  * (token-storage, gitea-token-storage) read `QUONFIG_CONFIG_HOME` so they'll
  * see these fixtures instead of the user's real `~/.quonfig/`.
+ *
+ * The token/config filenames are domain-suffixed when `QUONFIG_DOMAIN` is set
+ * (e.g. CI sets `quonfig-staging.com`, so the CLI reads
+ * `tokens-quonfig-staging-com.json`). We resolve the fixture paths through the
+ * same `getTokenFilePath` / `getAuthConfigFilePath` helpers the CLI uses, so
+ * the fixtures land where the CLI actually looks regardless of `QUONFIG_DOMAIN`.
  *
  * Pair every call with `cleanupTestAuth()`.
  */
@@ -43,8 +51,10 @@ export const setupTestAuth = () => {
   process.env.QUONFIG_CONFIG_HOME = quonfigDir
   activeTmpDir = quonfigDir
 
-  const tokensFile = path.join(quonfigDir, 'tokens.json')
-  const configFile = path.join(quonfigDir, 'config')
+  // Resolve via the CLI's own helpers — QUONFIG_CONFIG_HOME is set above, and
+  // these honor QUONFIG_DOMAIN so the fixture filenames match what the CLI reads.
+  const tokensFile = getTokenFilePath()
+  const configFile = getAuthConfigFilePath()
 
   const jwtPayload = Buffer.from(
     JSON.stringify({
@@ -83,6 +93,32 @@ organization_slug = test-organization
   fs.writeFileSync(configFile, configContent)
 
   return {configFile, tokensFile}
+}
+
+/**
+ * Resolve the on-disk tokens-file path the CLI will read, honoring
+ * `QUONFIG_DOMAIN` (CI sets it, so the real filename is
+ * `tokens-<domain>.json`, not `tokens.json`). Use this instead of
+ * `path.join(QUONFIG_CONFIG_HOME, 'tokens.json')` when a test needs to
+ * rewrite the tokens fixture after `setupTestAuth()`.
+ */
+export const testTokensPath = (): string => {
+  if (!process.env.QUONFIG_CONFIG_HOME) {
+    throw new Error('QUONFIG_CONFIG_HOME unset — setupTestAuth must run before this test')
+  }
+  return getTokenFilePath()
+}
+
+/**
+ * Resolve the on-disk auth-config path the CLI will read, honoring
+ * `QUONFIG_DOMAIN` (the real filename is `config-<domain>` when set).
+ * Companion to {@link testTokensPath}.
+ */
+export const testConfigPath = (): string => {
+  if (!process.env.QUONFIG_CONFIG_HOME) {
+    throw new Error('QUONFIG_CONFIG_HOME unset — setupTestAuth must run before this test')
+  }
+  return getAuthConfigFilePath()
 }
 
 /**
