@@ -1,10 +1,10 @@
 import {expect, test} from '@oclif/test'
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 import {http, HttpResponse} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {cleanupTestAuth, setupTestAuth} from '../../test-auth-helper.js'
+import {cleanupTestAuth, setupTestAuth, testConfigPath, testTokensPath} from '../../test-auth-helper.js'
+import {getApiBase} from '../../test-domain-helper.js'
 
 /**
  * qfg-kr7.9: `qfg workspace switch` accepts the `<org>/<ws>` pin form,
@@ -14,17 +14,8 @@ import {cleanupTestAuth, setupTestAuth} from '../../test-auth-helper.js'
  * org-scoped token without a round-trip.
  */
 
-const tokensPath = () => {
-  const home = process.env.QUONFIG_CONFIG_HOME
-  if (!home) throw new Error('QUONFIG_CONFIG_HOME unset')
-  return path.join(home, 'tokens.json')
-}
-
-const configPath = () => {
-  const home = process.env.QUONFIG_CONFIG_HOME
-  if (!home) throw new Error('QUONFIG_CONFIG_HOME unset')
-  return path.join(home, 'config')
-}
+const tokensPath = testTokensPath
+const configPath = testConfigPath
 
 const buildJwt = () => {
   const payload = Buffer.from(
@@ -57,7 +48,7 @@ const wsList = {
   ],
 }
 
-const wsHandler = http.post('https://app.quonfig.com/api/v1/userWorkspaces/list', () => HttpResponse.json(wsList))
+const wsHandler = http.post(`${getApiBase()}/api/v1/userWorkspaces/list`, () => HttpResponse.json(wsList))
 const server = setupServer(wsHandler)
 
 describe('workspace switch — kr7.9 multi-org pinning', () => {

@@ -2,7 +2,8 @@
  * JSON Schema for Quonfig StoredConfig files.
  *
  * This is the machine-readable schema for files in configs/, feature-flags/,
- * segments/, and log-levels/. Written to `quonfig.schema.json` by `qfg init`.
+ * segments/, and log-levels/. Served at api.quonfig.com/schemas/v1/stored-config.json
+ * and printed by `qfg config-schema --json-schema`.
  *
  * Derived from the Zod schemas in verify/validate.ts — keep in sync.
  */
@@ -243,7 +244,7 @@ const variant = {
   type: 'object' as const,
   properties: {
     id: {type: 'string' as const},
-    key: {type: 'string' as const},
+    name: {type: 'string' as const},
     value: simpleValue,
     description: {type: 'string' as const},
   },
@@ -311,6 +312,11 @@ export function storedConfigJsonSchema(): object {
       tags: {
         type: 'array',
         items: {type: 'string'},
+      },
+      readyForCleanup: {
+        type: 'boolean',
+        description:
+          'Owner-supplied lifecycle marker (qfg-580q). When true on a feature_flag, the UI shows "Ready for cleanup" instead of the rule-derived status — signaling the flag is safe to remove from code.',
       },
       environments: {
         type: 'array',

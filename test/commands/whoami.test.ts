@@ -1,10 +1,10 @@
 import {expect, test} from '@oclif/test'
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 import {http, HttpResponse} from 'msw'
 import {setupServer} from 'msw/node'
 
-import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
+import {cleanupTestAuth, setupTestAuth, testTokensPath} from '../test-auth-helper.js'
+import {getApiBase} from '../test-domain-helper.js'
 
 /**
  * qfg-kr7.10: whoami must enumerate all org memberships from the per-org
@@ -13,11 +13,7 @@ import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
  * is unreachable so whoami is never bricked by a transient network error.
  */
 
-const tokensPath = () => {
-  const home = process.env.QUONFIG_CONFIG_HOME
-  if (!home) throw new Error('QUONFIG_CONFIG_HOME unset')
-  return path.join(home, 'tokens.json')
-}
+const tokensPath = testTokensPath
 
 const buildJwt = (expSecondsFromNow = 3600) => {
   const payload = Buffer.from(
@@ -31,7 +27,7 @@ const buildJwt = (expSecondsFromNow = 3600) => {
   return `eyJhbGciOiJSUzI1NiJ9.${payload}.sig`
 }
 
-const orgsHandler = http.post('https://app.quonfig.com/api/v1/me/organizations', () =>
+const orgsHandler = http.post(`${getApiBase()}/api/v1/me/organizations`, () =>
   HttpResponse.json({
     json: [
       {workosOrgId: 'org_acme_uuid', slug: 'acme', name: 'Acme', role: 'admin'},
@@ -40,7 +36,7 @@ const orgsHandler = http.post('https://app.quonfig.com/api/v1/me/organizations',
   }),
 )
 
-const orgsErrorHandler = http.post('https://app.quonfig.com/api/v1/me/organizations', () =>
+const orgsErrorHandler = http.post(`${getApiBase()}/api/v1/me/organizations`, () =>
   HttpResponse.json({error: 'Internal'}, {status: 500}),
 )
 

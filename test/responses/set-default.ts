@@ -1,9 +1,11 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 /**
  * Mock responses for set-default command tests
- * Uses oRPC API endpoints via https://app.quonfig.com
+ * Uses oRPC API endpoints via the CLI's resolved API base (getApiBase()).
  */
 
 // Shared metadata response
@@ -67,12 +69,12 @@ const metadataResponse = {
 }
 
 // POST /api/v1/metadata/list - list all configs (oRPC wrapped)
-const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
+const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
   HttpResponse.json({json: metadataResponse}),
 )
 
 // POST /api/v1/environments/list - list environments (oRPC wrapped)
-const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environments/list', () =>
+const environmentsHandler = http.post(`${getApiBase()}/api/v1/environments/list`, () =>
   HttpResponse.json({
     json: [
       {id: '5', name: 'Development', active: true, protected: false},
@@ -133,7 +135,7 @@ const encryptionKeyResponse = {
 }
 
 // POST /api/v1/metadata/getByKey - get config by key (oRPC wrapped)
-const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getByKey', async ({request}) => {
+const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, async ({request}) => {
   const body = (await request.json()) as any
   const key = body?.json?.key
 
@@ -228,7 +230,7 @@ const getByKeyHandler = http.post('https://app.quonfig.com/api/v1/metadata/getBy
 export const configsUpdateCapture: {body: any} = {body: null}
 
 // POST /api/v1/configs/update — update a config via oRPC
-const configsUpdateHandler = http.post('https://app.quonfig.com/api/v1/configs/update', async ({request}) => {
+const configsUpdateHandler = http.post(`${getApiBase()}/api/v1/configs/update`, async ({request}) => {
   const body = (await request.json()) as any
   configsUpdateCapture.body = body
   if (!body?.json?.configKey) {
@@ -238,7 +240,7 @@ const configsUpdateHandler = http.post('https://app.quonfig.com/api/v1/configs/u
 })
 
 // POST /api/v1/flags/update — update a flag via oRPC
-const flagsUpdateHandler = http.post('https://app.quonfig.com/api/v1/flags/update', async ({request}) => {
+const flagsUpdateHandler = http.post(`${getApiBase()}/api/v1/flags/update`, async ({request}) => {
   const body = (await request.json()) as any
   if (!body?.json?.flagKey) {
     return HttpResponse.json({json: {error: 'Missing flagKey'}}, {status: 400})
@@ -247,7 +249,7 @@ const flagsUpdateHandler = http.post('https://app.quonfig.com/api/v1/flags/updat
 })
 
 // POST /api/v1/logLevels/update — update a log-level via oRPC
-const logLevelsUpdateHandler = http.post('https://app.quonfig.com/api/v1/logLevels/update', async ({request}) => {
+const logLevelsUpdateHandler = http.post(`${getApiBase()}/api/v1/logLevels/update`, async ({request}) => {
   const body = (await request.json()) as any
   if (!body?.json?.logLevelKey) {
     return HttpResponse.json({json: {error: 'Missing logLevelKey'}}, {status: 400})

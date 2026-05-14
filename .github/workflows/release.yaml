@@ -1,10 +1,25 @@
 name: Release Package
+# Gated on the full `tests` workflow (test.yml). This workflow only triggers
+# once `tests` has completed for a push to main, and every job below is
+# additionally guarded on `tests` having concluded `success` — so publish
+# blocks if the full `yarn test:ci` matrix (3 Node versions x 2 OS) is red.
+#
+# Previously this file re-ran an inline subset (prettier + lint + build +
+# oclif manifest/readme + uncommitted-changes) and deliberately excluded
+# `yarn test:ci` because the unit tests were red on the matrix. Those root
+# causes are fixed (qfg-vcn2 + qfg-4tmh), so the inline subset is removed:
+# test.yml already runs prettier/lint/build/test:ci/manifest/readme +
+# the uncommitted-changes check across the matrix, against this same SHA.
 on:
-  push:
+  workflow_run:
+    workflows: ['tests']
+    types: [completed]
     branches: [main]
 jobs:
   check-version:
     runs-on: ubuntu-latest
+    # Only proceed if the full tests workflow passed.
+    if: github.event.workflow_run.conclusion == 'success'
     outputs:
       version-changed: ${{ steps.check.outputs.changed }}
       current-version: ${{ steps.check.outputs.current-version }}
@@ -13,6 +28,8 @@ jobs:
       npm-tag: ${{ steps.check.outputs.npm-tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Check if version needs publishing
         id: check
         run: |
@@ -49,7 +66,7 @@ jobs:
 
   build-and-publish:
     runs-on: ubuntu-latest
-    needs: check-version
+    needs: [check-version]
     if: needs.check-version.outputs.version-changed == 'true'
     permissions:
       contents: read
@@ -59,6 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           submodules: recursive
       - uses: actions/setup-node@v4
         with:
@@ -109,6 +127,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: enable corepack
         run: |
           corepack enable

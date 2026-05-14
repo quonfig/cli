@@ -1,5 +1,6 @@
 import {
   type CoercedSentinelSummary,
+  type CommitMeta,
   type DroppedOverrideSummary,
   type LegacyChange,
   type MigrationSource,
@@ -125,6 +126,28 @@ function translateImpl(change: LegacyChange): QuonfigFile[] {
   return [{contents: JSON.stringify(transformed, null, 2), path: outputPath}]
 }
 
+function getCommitMetaImpl(change: LegacyChange): CommitMeta | null {
+  const raw = change.raw as LaunchChangeEntry | undefined
+  if (!raw || typeof raw !== 'object') return null
+  if (!raw.changedBy || typeof raw.changedAt !== 'number') return null
+
+  const email = raw.changedBy.email
+  const name = raw.changedBy.fullName ?? raw.changedBy.email
+  // qfg-wbkj: empirically a large fraction of Launch history entries carry no
+  // human-authored summary. Fall back to a stable, key-aware message instead
+  // of an empty commit body so `git log feature-flags/<key>.json` is still
+  // readable when scrolled through.
+  const trimmed = raw.summary?.trim()
+  const message = trimmed && trimmed.length > 0 ? raw.summary! : buildFallbackMessage(raw)
+
+  return {author: {email, name}, date: raw.changedAt, message}
+}
+
+function buildFallbackMessage(raw: LaunchChangeEntry): string {
+  const verb = raw.deleted ? 'delete' : raw.previousConfigId === undefined ? 'create' : 'update'
+  return `migrator: ${verb} ${raw.key}`
+}
+
 function getDroppedOverridesImpl(): DroppedOverrideSummary | null {
   if (state.droppedOverrides.size === 0) return null
   const byEnv: Record<string, Record<string, number>> = {}
@@ -179,6 +202,7 @@ export const launchSource: MigrationSource = {
     return fetchChangesImpl(sinceEpochMs)
   },
   getCoercedSentinels: getCoercedSentinelsImpl,
+  getCommitMeta: getCommitMetaImpl,
   getDroppedOverrides: getDroppedOverridesImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,

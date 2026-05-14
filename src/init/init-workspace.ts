@@ -10,7 +10,6 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import {SAMPLE_FILES} from './samples.js'
-import {storedConfigJsonSchema} from './schema.js'
 import {
   PRE_COMMIT_MARKER,
   agentsMdTemplate,
@@ -84,7 +83,6 @@ export function planInit(options: InitOptions): InitPlan {
 
   // 2. Managed files — always overwrite
   const managedFiles: Array<{content: string; file: string}> = [
-    {file: 'quonfig.schema.json', content: JSON.stringify(storedConfigJsonSchema(), null, 2) + '\n'},
     {file: 'README.md', content: readmeTemplate()},
     {file: 'CLAUDE.md', content: claudeMdTemplate()},
     {file: 'AGENTS.md', content: agentsMdTemplate()},
@@ -165,7 +163,6 @@ export function planInit(options: InitOptions): InitPlan {
 export function executeInit(plan: InitPlan, dir: string): void {
   // Build a lookup for managed file content
   const managedContent: Record<string, string> = {
-    'quonfig.schema.json': JSON.stringify(storedConfigJsonSchema(), null, 2) + '\n',
     'README.md': readmeTemplate(),
     'CLAUDE.md': claudeMdTemplate(),
     'AGENTS.md': agentsMdTemplate(),

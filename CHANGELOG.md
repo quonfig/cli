@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.0.46 - 2026-05-14
+
+- feat(qfg-7429): `qfg push` now ships your actual local git commits to the server as a packfile, instead of shipping file deltas and letting the server fabricate a fresh commit. The commit on origin is the commit you made locally — same SHA, same message, same author. Multi-commit history is preserved (N local commits land as N commits, not squashed). A successful `qfg push` leaves your local repo genuinely in sync with origin: no more phantom "ahead by 1" / "local commits diverge" loop. Authorization is per-commit and file-level on pushes to `main`; pushes to other branches are membership-gated only. Requires app-quonfig with the `configs.gitPush` handler (live in production as of 2026-05-14).
+- feat(qfg-7429.5): push denials now render per-commit attribution — which commit, which file, which permission was missing. When a forbidden change appears to have come from a non-Quonfig upstream remote, the error includes a `revert-upstream` recovery hint pointing at the offending commit.
+- feat(qfg-7429.6): `qfg push` detects the legacy orphan-commit divergence state (created by older CLI versions that fabricated server-side commits) and prints a `git reset --hard origin/<branch>` migration hint instead of failing opaquely.
+- feat(qfg-glrd.2): `qfg push` / `qfg pull` resolve the workspace directory from the current working directory — explicit `--dir` is no longer required when you're standing in a workspace. The error when cwd isn't a workspace is now specific.
+- feat(qfg-glrd.3): the wrong-directory safety check walks all configured git remotes, not just `origin`, when matching the local checkout against the backend repo.
+- fix(qfg-glrd.6): retire the `Pushed-Via` commit trailer. Server-added trailers changed the commit SHA and reintroduced divergence; the push channel is now recorded in the server-side `push_events` audit table instead.
+
+## 0.0.45 - 2026-05-11
+
+- fix(qfg-c3es): bump the hosted JSON Schema URL in `qfg init` templates to `https://api.quonfig.com/schemas/v1/stored-config.json`. 0.0.44 advertised an unversioned URL that didn't actually exist as a route (Next.js served the schema at `/api/schemas/...` while the templates pointed at `/schemas/...`, which 307'd to WorkOS auth on production). app-quonfig now serves the schema at the versioned, no-`/api/`-prefix path; this release aligns the workspace templates so newly-emitted `$schema` references resolve. The `/v1/` segment also gives us an immutable-`$id` escape hatch — future breaking changes ship as `/v2/...` instead of mutating in place.
+
+## 0.0.44 - 2026-05-11
+
+- feat(qfg-sv3c): `qfg init` no longer emits a per-workspace `quonfig.schema.json`. The README.md, CLAUDE.md, and AGENTS.md templates now reference the hosted JSON Schema at `https://api.quonfig.com/schemas/stored-config.json` (served by app-quonfig as of qfg-c3es), so every workspace gets the current schema without needing to re-run `qfg init`. Existing stale `quonfig.schema.json` files in customer repos are left untouched — explicit non-migration decision; they're harmless and the hosted URL takes precedence in `$schema` references. `src/init/schema.ts` is kept (not deleted) because `qfg config-schema --json-schema` and the operator-parity test still import `storedConfigJsonSchema()`.
+- fix(schema): align the hand-curated `storedConfigJsonSchema()` with the Zod `StoredConfigSchema` source-of-truth in app-quonfig. Adds the `readyForCleanup` property (added to Zod in qfg-580q, never ported here) and renames `variant.key` → `variant.name` to match the Zod (the cli copy was stale; no workspace data references either field name). Drift surfaced by the new cross-repo drift check in qfg-svmx; the check now reports "No drift detected".
+
+## 0.0.43 - 2026-05-10
+
+- chore(qfg-y7xh): bump `engines.node` floor to `>=20.9.0` to align with the rest of the Quonfig SDK family (Node 20.9 is the minimum LTS that supports `fetch`, `--import`, and the global `crypto` shape we rely on).
+- feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. (Also shipped in 0.0.42; included here for the intentional release-commit gap that 0.0.42's tag covered.)
+- fix(qfg-3fc6): `qfg push` on the clone path now picks up untracked files in the working tree instead of silently skipping anything not yet `git add`'d. The clone-path stager was using `git diff --name-only` against `HEAD`, which by definition only sees tracked files; switched to a `git status --porcelain`-based enumeration that includes `??` entries so a brand-new config file gets pushed on first try.
+- ci(qfg-uzoo): the cli repo now runs `lint`, `prettier`, `build`, and `test` on every push to `main` (not just PRs) so an admin-merge through a red PR can't silently land a regression. Three "not logged in" tests were leaking the user's real `~/.quonfig/tokens.json` via process-wide env state and have been migrated to the `setupTestAuth` / `cleanupTestAuth` helpers that redirect `~/.quonfig/` to a per-test tmp dir via `QUONFIG_CONFIG_HOME`.
+- fix(qfg-3uks): `qfg push --no-interactive` now aborts with a specific, actionable error when the gitea token mint step fails (e.g. expired session, missing scope) instead of silently falling back to an interactive prompt that no automation can answer. The same mint-failure path on the bare-token bootstrap now reports the underlying gitea error rather than a generic "auth failed".
+- chore(cli): expand the published `package.json` `description` with a one-liner showing `qfg run` usage so the npm registry page surfaces the new env-injection workflow. Add `.beads/` to `.gitignore`.
+
 ## 0.0.42 - 2026-05-07
 
 - feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. These take only `propertyName` and intentionally have no `valueToMatch`. The verify schema's `OperatorSchema` enum, the `PROPERTY_OPERATORS` set (so missing `propertyName` is still flagged), and the Launch migrator allowlist are all extended in lockstep — the existing parity test asserts the migrator and verify enums never drift. The `qfg init` operator-reference table and `qfg config-schema` REFERENCE table both get a new presence-operator row.

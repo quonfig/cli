@@ -1,16 +1,18 @@
 import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
+import {getApiBase} from '../test-domain-helper.js'
+
 /**
  * Mock responses for get command tests
- * Uses oRPC API endpoints via https://app.quonfig.com
+ * Uses oRPC API endpoints via the CLI's resolved API base (getApiBase()).
  *
  * Response shape matches sdk-node RawConfigWithDependencies — the raw-match
  * path from qfg-c7d.2 that does NOT resolve ENV_VAR or decrypt on the server.
  */
 
 // POST /api/v1/metadata/list - list all configs
-const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list', () =>
+const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
   HttpResponse.json({
     json: {
       configs: [
@@ -57,7 +59,7 @@ const metadataHandler = http.post('https://app.quonfig.com/api/v1/metadata/list'
 
 // POST /api/v1/environments/list - list environments
 // oRPC returns the array directly (wrapped in {json: ...} by the transport)
-const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environments/list', () =>
+const environmentsHandler = http.post(`${getApiBase()}/api/v1/environments/list`, () =>
   HttpResponse.json({json: [{id: '', name: '[default]', active: true, protected: false}]}),
 )
 
@@ -65,7 +67,7 @@ const environmentsHandler = http.post('https://app.quonfig.com/api/v1/environmen
 // Returns RawConfigWithDependencies[] — raw stored values + dependency pointers.
 // The CLI resolves providedBy (ENV_VAR) and decryptWith locally against its own
 // process.env. See qfg-c7d for the security background.
-const evaluationHandler = http.post('https://app.quonfig.com/api/v1/evaluations/evaluate', async () => {
+const evaluationHandler = http.post(`${getApiBase()}/api/v1/evaluations/evaluate`, async () => {
   const results = [
     {
       key: 'my-string-list-key',

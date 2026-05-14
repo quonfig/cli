@@ -40,12 +40,15 @@ import {
   type ConfigPushInput,
   type ConfigPushResult,
   type GitOps,
+  type GitPushInput,
+  type GitPushResult,
   type GiteaTokenMintResult,
   type RunPushDeps,
   type RunPushInput,
 } from '../../src/push/run-push.js'
 import {
   dirtyTrackedFiles,
+  getAllRemoteUrls,
   getRemoteUrl,
   gitFetch,
   gitSetRemote,
@@ -133,6 +136,8 @@ function countRemoteFiles(remoteDir: string): number {
 
 interface CapturedCalls {
   mint: Array<{requestedTarget: string}>
+  /** Pack-push (qfg-7429.4) — clone-path now ships via `configs.gitPush`. */
+  pushPackToServer: GitPushInput[]
   pushToServer: ConfigPushInput[]
 }
 
@@ -155,12 +160,14 @@ function buildTestDeps(args: {
   backendSlug?: string
   io: {input: PassThrough; output: PassThrough}
   pushResult?: ConfigPushResult
+  /** Pack-push (qfg-7429.4) — controls the response from the gitPush stub. */
+  packPushResult?: GitPushResult
 }): {
   deps: RunPushDeps
   calls: CapturedCalls
   cleanup: () => void
 } {
-  const calls: CapturedCalls = {mint: [], pushToServer: []}
+  const calls: CapturedCalls = {mint: [], pushToServer: [], pushPackToServer: []}
   const slug = args.backendSlug ?? 'acme-prod'
 
   let authenticatedRepoUrl: string | undefined
@@ -183,6 +190,9 @@ function buildTestDeps(args: {
     async getRemoteOriginUrl(dir) {
       const url = await getRemoteUrl(dir)
       return url ?? undefined
+    },
+    async getAllRemoteUrls(dir) {
+      return getAllRemoteUrls(dir)
     },
     async setRemoteOrigin(dir, url) {
       await gitSetRemote(dir, url)
@@ -254,6 +264,72 @@ function buildTestDeps(args: {
       }
       return out && out.length > 0 ? out : undefined
     },
+    // Pack-push (qfg-7429.4) — clone-path now ships actual packfiles via
+    // configs.gitPush. Use the real helpers from src/push/git-pack and the
+    // shell-based git ops so the integration test exercises the production
+    // code path. Bare-path tests below still use isGitRepo=false to
+    // dispatch to configs.push.
+    async getCurrentBranch(dir) {
+      const {getCurrentBranch} = await import('../../src/push/git-pack.js')
+      return getCurrentBranch(dir)
+    },
+    async getHeadSha(dir) {
+      try {
+        return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+      } catch {
+        return '0000000000000000000000000000000000000000'
+      }
+    },
+    async getRemoteBranchSha(dir, branchName): Promise<string | undefined> {
+      try {
+        const out = execFileSync('git', ['-C', dir, 'rev-parse', `origin/${branchName}`], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+        return out.length > 0 ? out : undefined
+      } catch {
+        return undefined
+      }
+    },
+    async buildPack(dir, expectedSha, newSha) {
+      const {buildPack} = await import('../../src/push/git-pack.js')
+      return buildPack(dir, expectedSha, newSha)
+    },
+    async countCommitsBetween(dir, expectedSha, newSha) {
+      if (expectedSha === newSha) return 0
+      try {
+        const out = execFileSync('git', ['-C', dir, 'rev-list', '--count', `${expectedSha}..${newSha}`], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+        return Number.parseInt(out, 10) || 0
+      } catch {
+        return 0
+      }
+    },
+    async getCommitOneline(dir, sha) {
+      try {
+        return execFileSync('git', ['-C', dir, 'log', '-1', '--pretty=oneline', sha], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+      } catch {
+        return ''
+      }
+    },
+    async getTreeShaForRef(dir, ref): Promise<string | undefined> {
+      try {
+        return execFileSync('git', ['-C', dir, 'rev-parse', `${ref}^{tree}`], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+      } catch {
+        return undefined
+      }
+    },
   }
 
   const deps: RunPushDeps = {
@@ -276,6 +352,13 @@ function buildTestDeps(args: {
     async pushToServer(input) {
       calls.pushToServer.push(input)
       return args.pushResult ?? {kind: 'success', commitSha: FAKE_COMMIT_SHA}
+    },
+    async pushPackToServer(input) {
+      // Pack-push wire (qfg-7429.4). Default success — the SHA echoed
+      // back is the SHA the CLI shipped, matching the server contract
+      // (server returns input.newSha as commitSha).
+      calls.pushPackToServer.push(input)
+      return args.packPushResult ?? {kind: 'success', commitSha: input.newSha, ref: input.targetRef}
     },
     confirmIO: args.io,
     log() {},
@@ -326,7 +409,7 @@ describe('runPush: integration against real local bare git repos (server-side co
   })
 
   describe('1. clone-path happy', () => {
-    it('sends a modified-file FileDelta with beforeJson + afterJson and returns the server commitSha', async () => {
+    it('ships a packfile via configs.gitPush and returns the local HEAD SHA back as commitSha', async () => {
       const {remoteUrl} = createBareRemote(root)
       const quonfigJson = JSON.stringify({workspace: 'acme/acme-prod'}) + '\n'
       seedRemote(remoteUrl, root, {
@@ -340,6 +423,7 @@ describe('runPush: integration against real local bare git repos (server-side co
 
       writeFiles(local, {'configs/one.json': '{"k":99}\n'})
       commitAll(local, 'local edit to one.json')
+      const localHeadSha = git(local, 'rev-parse', 'HEAD')
 
       const io = makeIo() // --yes bypasses Y/N
       const {deps, calls, cleanup} = buildTestDeps({remoteUrl, io})
@@ -355,35 +439,39 @@ describe('runPush: integration against real local bare git repos (server-side co
         expect(result.kind).to.equal('pushed')
         if (result.kind === 'pushed') {
           expect(result.dispatchedAs).to.equal('clone-path')
-          expect(result.commitSha).to.equal(FAKE_COMMIT_SHA)
+          // qfg-7429.4: pack-push echoes back the SHA the CLI shipped.
+          expect(result.commitSha).to.equal(localHeadSha)
         }
       } finally {
         cleanup()
       }
 
-      expect(calls.pushToServer).to.have.length(1)
-      const sent = calls.pushToServer[0]
+      // qfg-7429.4: clone-path now ships actual git objects, not file deltas.
+      expect(calls.pushToServer, 'configs.push must NOT be called on clone-path').to.have.length(0)
+      expect(calls.pushPackToServer).to.have.length(1)
+      const sent = calls.pushPackToServer[0]
       expect(sent.workspaceId).to.equal('acme-prod')
-      expect(sent.files).to.have.length(1)
-      const f = sent.files[0]
-      expect(f.kind).to.equal('modify')
-      expect(f.path).to.equal('configs/one.json')
-      expect(f.beforeJson).to.equal('{"k":1}\n')
-      expect(f.afterJson).to.equal('{"k":99}\n')
-
-      // qfg-gj3i: clone path forwards the local origin/main SHA so the
-      // server can reject the push if origin moved between fetch and now.
-      const expectedOriginSha = git(local, 'rev-parse', 'origin/main')
-      expect(sent.expectedSha).to.equal(expectedOriginSha)
+      expect(sent.targetRef).to.equal('refs/heads/main')
+      expect(sent.newSha).to.equal(localHeadSha)
+      // expectedSha is the origin/main SHA the CLI saw at fetch time.
+      expect(sent.expectedSha).to.equal(git(local, 'rev-parse', 'origin/main'))
+      // Pack must be a real packfile — git's "PACK" magic.
+      expect(sent.pack.byteLength).to.be.greaterThan(0)
+      const magic = Buffer.from(sent.pack.subarray(0, 4)).toString('utf8')
+      expect(magic).to.equal('PACK')
     })
 
-    // qfg-3fc6: a beta tester dropped a fresh
-    // `configs/quonfig.secrets.encryption.key.json` into a pulled (clone-path)
-    // dir and ran `qfg push`. The file was silently dropped — the diff only
-    // saw committed history, so an untracked working-tree file vanished.
-    // Lock in that untracked, non-ignored files in `configs/` are picked up
-    // as 'add' deltas with their working-tree content.
-    it('picks up an untracked configs/ file as an added FileDelta (qfg-3fc6)', async () => {
+    // qfg-3fc6 (clone-path): a beta tester dropped a fresh
+    // `configs/quonfig.secrets.encryption.key.json` into a pulled dir and
+    // ran `qfg push`. The OLD file-delta wire silently picked the file up
+    // because it walked the working tree. The NEW pack-push wire matches
+    // `git push` semantics — only committed objects ship. Untracked
+    // working-tree files are correctly excluded; the existing
+    // dirty-tracked warning + new "you have untracked files" UX would
+    // surface them as a separate concern. This test locks in the new
+    // semantics so a future refactor can't silently re-introduce
+    // working-tree pickup on the clone path.
+    it('does NOT ship an untracked configs/ file in the pack (matches git push semantics, qfg-7429.4)', async () => {
       const {remoteUrl} = createBareRemote(root)
       seedRemote(remoteUrl, root, {
         'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
@@ -393,8 +481,15 @@ describe('runPush: integration against real local bare git repos (server-side co
       const local = path.join(root, 'work')
       cloneRemoteTo(remoteUrl, local)
 
-      // User drops a NEW config file into the workspace dir. They never run
-      // `git add` / `git commit` — the file is untracked.
+      // Make a real committed change so the push has something to ship —
+      // otherwise it would short-circuit as no-op before reaching the
+      // pack-push branch.
+      writeFiles(local, {'configs/one.json': '{"k":99}\n'})
+      commitAll(local, 'committed edit')
+
+      // User drops a NEW config file into the workspace dir. They never
+      // run `git add` / `git commit` — the file is untracked. Pack-push
+      // should not include it.
       writeFiles(local, {'configs/quonfig.secrets.encryption.key.json': '{"k":"hex"}\n'})
 
       const io = makeIo() // --yes bypasses Y/N
@@ -413,14 +508,27 @@ describe('runPush: integration against real local bare git repos (server-side co
         cleanup()
       }
 
-      expect(calls.pushToServer).to.have.length(1)
-      const sent = calls.pushToServer[0]
-      const byPath = new Map(sent.files.map((f) => [f.path, f]))
-      const added = byPath.get('configs/quonfig.secrets.encryption.key.json')
-      expect(added, 'untracked configs/ file must reach pushToServer as an added delta').to.not.equal(undefined)
-      expect(added!.kind).to.equal('add')
-      expect(added!.afterJson).to.equal('{"k":"hex"}\n')
-      expect(added!.beforeJson).to.equal(undefined)
+      // pack-push went through; configs.push is unused on clone-path.
+      expect(calls.pushToServer).to.have.length(0)
+      expect(calls.pushPackToServer).to.have.length(1)
+
+      // The pack itself is opaque here — assert the COMMITTED file is
+      // reachable from newSha (the committed configs/one.json edit) but
+      // the UNTRACKED file is not. ls-tree on newSha is the
+      // pack-equivalent of "what the server will see after ingesting".
+      const sent = calls.pushPackToServer[0]
+      const tree = git(local, 'ls-tree', '-r', '--name-only', sent.newSha)
+      const treeFiles = new Set(
+        tree
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      )
+      expect(treeFiles.has('configs/one.json')).to.equal(true)
+      expect(
+        treeFiles.has('configs/quonfig.secrets.encryption.key.json'),
+        'untracked file must NOT be in newSha tree under pack-push',
+      ).to.equal(false)
     })
   })
 
@@ -523,7 +631,9 @@ describe('runPush: integration against real local bare git repos (server-side co
         cleanup()
       }
 
+      // qfg-7429.4: identity abort fires before either push wire.
       expect(calls.pushToServer).to.deep.equal([])
+      expect(calls.pushPackToServer).to.deep.equal([])
     })
   })
 
@@ -562,10 +672,13 @@ describe('runPush: integration against real local bare git repos (server-side co
           cleanup()
         }
 
+        // qfg-7429.4: clone-path now ships via pack-push; the typed-slug
+        // EOF abort fires before EITHER push wire.
         expect(calls.pushToServer).to.deep.equal([])
+        expect(calls.pushPackToServer).to.deep.equal([])
       }
 
-      // sub-case B: typed slug => proceeds, pushToServer is called
+      // sub-case B: typed slug => proceeds, pack-push is called
       {
         const local = path.join(root, 'work-proceed')
         cloneRemoteTo(remoteUrl, local)
@@ -593,9 +706,23 @@ describe('runPush: integration against real local bare git repos (server-side co
           cleanup()
         }
 
-        expect(calls.pushToServer).to.have.length(1)
-        const sent = calls.pushToServer[0]
-        expect(sent.files.filter((f) => f.kind === 'delete')).to.have.length(15)
+        // qfg-7429.4: clone-path → pack-push wire. The 15 deletes are
+        // committed git objects in the new tip; the diff lives in the
+        // packfile, not in a JSON file-delta envelope. Verify by
+        // walking the new tip on the local repo: the 15 deleted files
+        // must be absent from the tree.
+        expect(calls.pushPackToServer).to.have.length(1)
+        const packSent = calls.pushPackToServer[0]
+        const tree = git(local, 'ls-tree', '-r', '--name-only', packSent.newSha)
+        const treeFiles = new Set(
+          tree
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        )
+        for (let i = 0; i < 15; i++) {
+          expect(treeFiles.has(`configs/c${i}.json`), `expected configs/c${i}.json to be deleted`).to.equal(false)
+        }
       }
     })
   })
@@ -617,9 +744,11 @@ describe('runPush: integration against real local bare git repos (server-side co
       const {deps, cleanup} = buildTestDeps({
         remoteUrl,
         io,
-        pushResult: {
+        // qfg-7429.4: clone-path goes through pack-push, so the
+        // conflict result must be set on the gitPush stub.
+        packPushResult: {
           kind: 'conflict',
-          message: 'configs/one.json was modified (expected ..., got ...)',
+          message: 'OriginMoved: expected ..., current ...',
         },
       })
       try {
@@ -673,6 +802,8 @@ describe('runPush: integration against real local bare git repos (server-side co
       }
 
       expect(calls.pushToServer).to.deep.equal([])
+      // qfg-7429.4: no-op short-circuits before either push branch.
+      expect(calls.pushPackToServer).to.deep.equal([])
     })
   })
 })
