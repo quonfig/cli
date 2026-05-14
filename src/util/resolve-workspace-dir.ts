@@ -28,12 +28,12 @@ export const NO_WORKSPACE_DIR_ERROR =
   'No Quonfig workspace dir found. Run from inside a workspace, or pass --dir, or set QUONFIG_DIR.'
 
 export interface ResolveWorkspaceDirInput {
-  /** Value of `--dir` flag (or undefined). */
-  flagDir: string | undefined
-  /** Value of `QUONFIG_DIR` env var (or undefined). */
-  envDir: string | undefined
   /** Current working directory — the search root for the walk. */
   cwd: string
+  /** Value of `QUONFIG_DIR` env var (or undefined). */
+  envDir: string | undefined
+  /** Value of `--dir` flag (or undefined). */
+  flagDir: string | undefined
   /**
    * The user's home directory. The cwd walk stops here (without checking
    * it) so we never pick up a stray `quonfig.json` parked in `~`. Defaults

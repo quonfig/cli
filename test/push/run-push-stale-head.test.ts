@@ -86,6 +86,14 @@ function makeDeps(opts: {
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
     getOriginMainSha: async (): Promise<string | undefined> => undefined,
+    // Pack-push (qfg-7429.4) stubs — the stale-HEAD guard fires before
+    // the pack-push dispatch path. These are present only so the
+    // GitOps interface type-checks.
+    getCurrentBranch: async () => ({kind: 'branch', name: 'main'}),
+    getHeadSha: async () => '0000000000000000000000000000000000000000',
+    getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
+    buildPack: async () => new Uint8Array(0),
+    countCommitsBetween: async () => 0,
     ...opts.gitOps,
   }
 
@@ -100,6 +108,14 @@ function makeDeps(opts: {
     async pushToServer(input) {
       captured.pushToServer.push(input)
       return opts.pushResult ?? {kind: 'success', commitSha: 'abc1234567890def'}
+    },
+    async pushPackToServer(input) {
+      // Pack-push (qfg-7429.4): clone-path scenarios in this file
+      // (e.g. the dirty-tree warning test) reach the dispatch and need
+      // a successful response. The stale-HEAD refusal test asserts
+      // `pushToServer` was never called — pushPackToServer is similarly
+      // not called because the guard fires before the dispatch.
+      return {kind: 'success', commitSha: input.newSha, ref: input.targetRef}
     },
     confirmIO: makeIo(opts.userInput),
     log: (s) => captured.logs.push(s),

@@ -21,13 +21,14 @@ import {
   PushFatalError,
   runPush,
   type ConfigPushInput,
+  type GitPushInput,
   type GiteaTokenMintResult,
   type GitOps,
 } from '../push/run-push.js'
 import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
 import {computeClonePathDiff} from '../push/clone-path-diff.js'
-import {callConfigsPush} from '../push/config-push-client.js'
+import {callConfigsGitPush, callConfigsPush} from '../push/config-push-client.js'
 import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 
@@ -285,6 +286,44 @@ export function buildRealDeps(
       if (!(await isGitRepo(dir))) return
       return getOriginMainSha(dir)
     },
+    // Pack-push (qfg-7429.4) — clone-path now ships actual git objects
+    // via `configs.gitPush`. All five hooks below are no-ops on bare
+    // path (the dispatch chooses configs.push instead) and only fire
+    // when the local dir is a clone whose origin matches the backend.
+    async getCurrentBranch(dir) {
+      const {getCurrentBranch} = await import('../push/git-pack.js')
+      return getCurrentBranch(dir)
+    },
+    async getHeadSha(dir) {
+      const {stdout} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
+      return stdout.trim()
+    },
+    async getRemoteBranchSha(dir, branchName): Promise<string | undefined> {
+      try {
+        const {stdout} = await runGit(['-C', dir, 'rev-parse', `origin/${branchName}`])
+        const sha = stdout.trim()
+        return sha.length > 0 ? sha : undefined
+      } catch {
+        // No remote-tracking ref yet — brand-new branch. The pack-push
+        // dispatch interprets `undefined` as zero-OID on the wire.
+        return undefined
+      }
+    },
+    async buildPack(dir, expectedSha, newSha) {
+      const {buildPack} = await import('../push/git-pack.js')
+      return buildPack(dir, expectedSha, newSha)
+    },
+    async countCommitsBetween(dir, expectedSha, newSha) {
+      if (expectedSha === newSha) return 0
+      const ZERO = '0000000000000000000000000000000000000000'
+      const range = expectedSha === ZERO ? newSha : `${expectedSha}..${newSha}`
+      try {
+        const {stdout} = await runGit(['-C', dir, 'rev-list', '--count', range])
+        return Number.parseInt(stdout.trim(), 10) || 0
+      } catch {
+        return 0
+      }
+    },
   }
 
   const deps = {
@@ -305,6 +344,7 @@ export function buildRealDeps(
     },
     gitOps,
     pushToServer: (input: ConfigPushInput) => callConfigsPush(input, orgSlug),
+    pushPackToServer: (input: GitPushInput) => callConfigsGitPush(input, orgSlug),
     log,
     errLog,
   }

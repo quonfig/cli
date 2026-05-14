@@ -26,6 +26,10 @@ import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../ut
 import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
 import {FileDelta, summarizeDiff} from './diff-summary.js'
+import type {CurrentBranchResult} from './git-pack.js'
+
+/** All-zeros object id, the git-protocol convention for "no such ref". */
+const ZERO_OID = '0000000000000000000000000000000000000000'
 
 export interface GiteaTokenMintResult {
   expiresAt: string | null
@@ -36,6 +40,20 @@ export interface GiteaTokenMintResult {
 }
 
 export interface GitOps {
+  /**
+   * Pack-push — produce a packfile of `<expectedSha>..<newSha>` (or an
+   * empty buffer when expectedSha === newSha). Capped at 25 MiB per §7
+   * open Q #7; throws on overflow so callers see a concrete error
+   * before any HTTP traffic.
+   */
+  buildPack(dir: string, expectedSha: string, newSha: string): Promise<Uint8Array>
+  /**
+   * Pack-push — count of commits in `<expectedSha>..<newSha>`. Drives
+   * the final "Pushed N commit(s)" log line. Returns 0 for a no-op
+   * push (already at the tip) and best-effort for new branches with
+   * a zero-OID base.
+   */
+  countCommitsBetween(dir: string, expectedSha: string, newSha: string): Promise<number>
   /** Number of tracked files on origin/main (used for the destructive-ratio heuristic). */
   countFilesInRemote(dir: string): Promise<number>
   /**
@@ -55,6 +73,25 @@ export interface GitOps {
   /** `git fetch origin` in the given dir. */
   fetch(dir: string): Promise<void>
   /**
+   * Returns every configured remote URL on the repo (i.e. `git remote -v`
+   * URLs, deduped per remote name). Used by the identity check to support
+   * multi-remote workspaces where `origin` points at a customer's PR-review
+   * remote (GitHub) and a secondary remote points at Quonfig (qfg-glrd.3).
+   *
+   * Returns an empty array when the dir isn't a git repo or has no remotes
+   * configured.
+   */
+  getAllRemoteUrls(dir: string): Promise<string[]>
+  /**
+   * Pack-push (qfg-7429.4) — resolve HEAD as a branch name or refuse
+   * cleanly. Returns the documented refusal text for detached HEAD and
+   * the local default branch being `master`. The result drives the
+   * `targetRef` the server sees on success.
+   */
+  getCurrentBranch(dir: string): Promise<CurrentBranchResult>
+  /** Pack-push — local HEAD SHA. Forwarded as `newSha` on the wire. */
+  getHeadSha(dir: string): Promise<string>
+  /**
    * Returns the local SHA of `origin/main` after fetch — the remote tip
    * the diff was computed against — or undefined if no `origin/main` ref
    * exists (bare-path push, or repo never fetched).
@@ -65,15 +102,11 @@ export interface GitOps {
    */
   getOriginMainSha(dir: string): Promise<string | undefined>
   /**
-   * Returns every configured remote URL on the repo (i.e. `git remote -v`
-   * URLs, deduped per remote name). Used by the identity check to support
-   * multi-remote workspaces where `origin` points at a customer's PR-review
-   * remote (GitHub) and a secondary remote points at Quonfig (qfg-glrd.3).
-   *
-   * Returns an empty array when the dir isn't a git repo or has no remotes
-   * configured.
+   * Pack-push — local SHA for `origin/<branchName>`, or undefined when
+   * the remote-tracking ref doesn't exist yet (brand-new branch).
+   * Drives `expectedSha`: defined → SHA, undefined → zero-OID.
    */
-  getAllRemoteUrls(dir: string): Promise<string[]>
+  getRemoteBranchSha(dir: string, branchName: string): Promise<string | undefined>
   /** Returns the `remote.origin.url` for the repo, or undefined if unset / not a repo. */
   getRemoteOriginUrl(dir: string): Promise<string | undefined>
   /** Returns true if the dir has a `.git/` (worktree or repo). */
@@ -120,6 +153,52 @@ export interface PushDenial {
   reason: string
   requiredPermission: string
 }
+
+/**
+ * Pack-push wire input for `configs.gitPush` (qfg-7429.4). The pack
+ * itself stays raw on the CLI side; the HTTP client base64-encodes it
+ * so the JSON envelope stays text-safe.
+ */
+export interface GitPushInput {
+  /** Remote tip the CLI saw (zero-OID for a brand-new branch). */
+  expectedSha: string
+  /** Local HEAD being published. Server returns this back as commitSha. */
+  newSha: string
+  pack: Uint8Array
+  /** `refs/heads/main` or `refs/heads/<branch>`. */
+  targetRef: string
+  workspaceId: string
+}
+
+/**
+ * Pack-push denial. Carries `commitSha` so the CLI can name which
+ * commit failed authz — the §6 GitHub-fork dead-end UX (rendered
+ * fully in qfg-7429.5).
+ */
+export interface GitPushDenial {
+  commitSha: string
+  path: string
+  reason: string
+  requiredPermission: string
+}
+
+/**
+ * Server-emitted recovery hint for the GitHub-fork dead-end (§6 of
+ * the design plan). Currently the only `kind` is `revert-upstream`;
+ * future kinds are forward-compatible because the discriminator is
+ * tagged.
+ */
+export type SuggestedRecovery = {
+  kind: 'revert-upstream'
+  offendingCommitSha: string
+  message: string
+}
+
+export type GitPushResult =
+  | {kind: 'success'; commitSha: string; ref: string}
+  | {kind: 'conflict'; message: string}
+  | {kind: 'bad-request'; message: string}
+  | {kind: 'denied'; denials: GitPushDenial[]; suggestedRecovery?: SuggestedRecovery}
 
 export type ConfirmIO = {
   input?: NodeJS.ReadableStream
@@ -179,6 +258,12 @@ export interface RunPushDeps {
    * stable across the qfg-azk.13 transition.
    */
   mintWriteToken(requestedTarget: string): Promise<GiteaTokenMintResult>
+  /**
+   * Pack-push — call the server-side `configs.gitPush` oRPC procedure
+   * (qfg-7429.4). Used by the clone-path dispatch; bare-path still
+   * routes through `pushToServer` above.
+   */
+  pushPackToServer(input: GitPushInput): Promise<GitPushResult>
   /**
    * Call the server-side `configs.push` oRPC procedure. Returns a tagged
    * union so callers can distinguish success / per-file denials / a stale
@@ -332,18 +417,31 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   // Clone path: align origin with the backend so the gitOps.fetch + diff
   // walk authenticates against the read URL we minted. The bare path's
   // probe-clone path bypasses local origin entirely.
+  //
+  // Pack-push (qfg-7429.4): the §4.1 step-1 refusals run BEFORE any
+  // network work in clone-path so a detached-HEAD or `master` checkout
+  // gets a clear error message without us pinging Gitea or the backend.
+  let currentBranch: CurrentBranchResult | undefined
   if (isClonePath) {
+    currentBranch = await deps.gitOps.getCurrentBranch(input.dir)
+    if (currentBranch.kind === 'detached') {
+      throw new PushFatalError(currentBranch.message, 'DETACHED_HEAD')
+    }
+    if (currentBranch.kind === 'master') {
+      throw new PushFatalError(currentBranch.message, 'MASTER_BRANCH')
+    }
+
     await deps.gitOps.setRemoteOrigin(input.dir, backend.repoUrl)
     log('Fetching from remote...')
     await deps.gitOps.fetch(input.dir)
 
     // Guard 4 (qfg-fboj): refuse to push when local HEAD is behind or has
-    // diverged from origin/main. Without this guard the HEAD-vs-origin
-    // diff produces REVERSAL deltas that silently undo whatever was
-    // committed to the cloud since the user last pulled. Tell the user
-    // to run `qfg pull` first; the standalone `--ff-only` step keeps
-    // push from doing surprising merges on the user's behalf.
-    if (await deps.gitOps.isLocalBehindRemote(input.dir)) {
+    // diverged from origin/main. The §4.1 server-side fast-forward check
+    // already covers correctness; this client-side guard turns a 409 round
+    // trip into a fast local error with a `qfg pull` hint. Only meaningful
+    // on `main` — branch pushes are evaluated against origin/<branch>, not
+    // origin/main, and may legitimately diverge.
+    if (currentBranch.name === 'main' && (await deps.gitOps.isLocalBehindRemote(input.dir))) {
       throw new PushFatalError(
         'Local HEAD is behind origin/main. Run `qfg pull` first to merge remote changes, then re-run `qfg push`.',
         'STALE_HEAD',
@@ -420,48 +518,122 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     return {kind: 'aborted', reason: decision.reason}
   }
 
-  const baseMessage = input.message ?? `qfg push: ${summary.totals.filesTouched} file change(s)`
-  const commitMessage = withPushedViaTrailer(baseMessage)
+  // Pack-push branch (qfg-7429.4): clone-path now ships actual git
+  // commit objects via `configs.gitPush`. The bare-path branch below is
+  // the unchanged file-delta wire shape used by the UI and CI pushes
+  // that don't carry a `.git/`.
+  let pushedCommitSha: string | null | undefined
+  if (isClonePath && currentBranch && currentBranch.kind === 'branch') {
+    const branchName = currentBranch.name
+    const targetRef = `refs/heads/${branchName}`
 
-  const serverFiles: ServerFileDelta[] = deltas.map((d) => ({
-    path: d.path,
-    kind: toServerKind(d.kind),
-    ...(d.beforeJson === undefined ? {} : {beforeJson: d.beforeJson}),
-    ...(d.afterJson === undefined ? {} : {afterJson: d.afterJson}),
-  }))
+    // expectedSha: for `main`, the origin/main SHA we already know; for
+    // branches, look up `origin/<branch>` (zero-OID for brand-new branches).
+    const expectedShaRaw =
+      branchName === 'main'
+        ? await deps.gitOps.getOriginMainSha(input.dir)
+        : await deps.gitOps.getRemoteBranchSha(input.dir, branchName)
+    const expectedSha = expectedShaRaw ?? ZERO_OID
+    const newSha = await deps.gitOps.getHeadSha(input.dir)
 
-  // qfg-gj3i: pass origin/main SHA as expectedSha so the server-side
-  // optimistic lock can reject the push if origin moved between fetch
-  // and now. Undefined on bare-path; the server treats absence as
-  // "non-clone client" and applies its bare-path policy.
-  const expectedSha = await deps.gitOps.getOriginMainSha(input.dir)
+    log('Building pack...')
+    const pack = await deps.gitOps.buildPack(input.dir, expectedSha, newSha)
 
-  log('Sending push to Quonfig cloud...')
-  const result = await deps.pushToServer({
-    workspaceId: backend.workspaceId,
-    files: serverFiles,
-    message: commitMessage,
-    ...(expectedSha === undefined ? {} : {expectedSha}),
-  })
+    log('Sending push to Quonfig cloud...')
+    const packResult = await deps.pushPackToServer({
+      workspaceId: backend.workspaceId,
+      targetRef,
+      expectedSha,
+      newSha,
+      pack,
+    })
 
-  if (result.kind === 'denied') {
-    errLog(`Push denied for ${result.denials.length} file(s):`)
-    for (const d of result.denials) {
-      errLog(`  ${d.path}: missing permission ${d.requiredPermission}`)
+    if (packResult.kind === 'denied') {
+      errLog(`Push denied for ${packResult.denials.length} commit(s):`)
+      for (const d of packResult.denials) {
+        errLog(`  ${d.commitSha.slice(0, 8)} ${d.path}: missing permission ${d.requiredPermission}`)
+      }
+      if (packResult.suggestedRecovery) {
+        errLog('')
+        errLog(packResult.suggestedRecovery.message)
+      }
+      throw new PushFatalError(
+        `Push denied for ${packResult.denials.length} commit(s). See errors above.`,
+        'PUSH_DENIED',
+      )
     }
 
-    throw new PushFatalError(`Push denied for ${result.denials.length} file(s). See errors above.`, 'PUSH_DENIED')
-  }
+    if (packResult.kind === 'conflict') {
+      throw new PushFatalError(
+        `Remote moved while preparing this push (${packResult.message}). Run \`qfg pull\` and retry.`,
+        'CONFLICT',
+      )
+    }
 
-  if (result.kind === 'conflict') {
-    throw new PushFatalError(
-      `Remote moved while preparing this push (${result.message}). Run \`qfg pull\` and retry.`,
-      'CONFLICT',
-    )
-  }
+    if (packResult.kind === 'bad-request') {
+      throw new PushFatalError(`Push rejected by server: ${packResult.message}`, 'BAD_REQUEST')
+    }
 
-  if (result.kind === 'bad-request') {
-    throw new PushFatalError(`Push rejected by server: ${result.message}`, 'BAD_REQUEST')
+    pushedCommitSha = packResult.commitSha
+
+    // §4.1 step 4: post-push refresh — `git fetch origin` (NOT `git
+    // reset`) brings the local origin/<ref> tracking ref in line with
+    // the SHA the server published, so subsequent `qfg pull` runs are
+    // a no-op. SHAs already match by construction (pack-push round-trip).
+    try {
+      await deps.gitOps.fetch(input.dir)
+    } catch {
+      /* non-fatal — the push itself succeeded */
+    }
+
+    const commitCount = await deps.gitOps.countCommitsBetween(input.dir, expectedSha, newSha)
+    log(`Pushed ${commitCount} commit(s) to origin/${targetRef} as ${newSha.slice(0, 7)}. Local repo in sync.`)
+  } else {
+    const baseMessage = input.message ?? `qfg push: ${summary.totals.filesTouched} file change(s)`
+    const commitMessage = withPushedViaTrailer(baseMessage)
+
+    const serverFiles: ServerFileDelta[] = deltas.map((d) => ({
+      path: d.path,
+      kind: toServerKind(d.kind),
+      ...(d.beforeJson === undefined ? {} : {beforeJson: d.beforeJson}),
+      ...(d.afterJson === undefined ? {} : {afterJson: d.afterJson}),
+    }))
+
+    // qfg-gj3i: pass origin/main SHA as expectedSha so the server-side
+    // optimistic lock can reject the push if origin moved between fetch
+    // and now. Undefined on bare-path; the server treats absence as
+    // "non-clone client" and applies its bare-path policy.
+    const expectedSha = await deps.gitOps.getOriginMainSha(input.dir)
+
+    log('Sending push to Quonfig cloud...')
+    const result = await deps.pushToServer({
+      workspaceId: backend.workspaceId,
+      files: serverFiles,
+      message: commitMessage,
+      ...(expectedSha === undefined ? {} : {expectedSha}),
+    })
+
+    if (result.kind === 'denied') {
+      errLog(`Push denied for ${result.denials.length} file(s):`)
+      for (const d of result.denials) {
+        errLog(`  ${d.path}: missing permission ${d.requiredPermission}`)
+      }
+
+      throw new PushFatalError(`Push denied for ${result.denials.length} file(s). See errors above.`, 'PUSH_DENIED')
+    }
+
+    if (result.kind === 'conflict') {
+      throw new PushFatalError(
+        `Remote moved while preparing this push (${result.message}). Run \`qfg pull\` and retry.`,
+        'CONFLICT',
+      )
+    }
+
+    if (result.kind === 'bad-request') {
+      throw new PushFatalError(`Push rejected by server: ${result.message}`, 'BAD_REQUEST')
+    }
+
+    pushedCommitSha = result.commitSha
   }
 
   if (unpinned && !input.noPinWrite) {
@@ -483,7 +655,7 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     }
   }
 
-  return {kind: 'pushed', dispatchedAs, commitSha: result.commitSha}
+  return {kind: 'pushed', dispatchedAs, commitSha: pushedCommitSha}
 }
 
 const toServerKind = (kind: FileDelta['kind']): ServerFileKind => {

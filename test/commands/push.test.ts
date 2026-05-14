@@ -11,6 +11,7 @@ import {
   type ConfigPushInput,
   type ConfigPushResult,
   type GitOps,
+  type GitPushInput,
   type GiteaTokenMintResult,
   type RunPushDeps,
   type RunPushInput,
@@ -46,6 +47,8 @@ type CapturedCalls = {
   mint: MintCall[]
   validate: string[]
   pushToServer: ConfigPushInput[]
+  /** Pack-push (qfg-7429.4) — clone-path wire shape for `configs.gitPush`. */
+  pushPackToServer: GitPushInput[]
   setRemoteOrigin: Array<[string, string]>
 }
 
@@ -64,6 +67,7 @@ function makeDeps(
     mint: [],
     validate: [],
     pushToServer: [],
+    pushPackToServer: [],
     setRemoteOrigin: [],
   }
   const logs: string[] = []
@@ -100,6 +104,15 @@ function makeDeps(
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
     getOriginMainSha: async (): Promise<string | undefined> => undefined,
+    // Pack-push (qfg-7429.4) — most tests in this file exercise the
+    // bare-path / configs.push wire shape. Tests that flip isGitRepo to
+    // true now drive the pack-push dispatch; the stubs below let it run
+    // through to a successful response so the flow assertions still hold.
+    getCurrentBranch: async () => ({kind: 'branch', name: 'main'}),
+    getHeadSha: async () => '0000000000000000000000000000000000000000',
+    getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
+    buildPack: async () => new Uint8Array(0),
+    countCommitsBetween: async () => 0,
     ...opts.gitOps,
   }
 
@@ -118,6 +131,23 @@ function makeDeps(
       calls.pushToServer.push(input)
       if (opts.pushThrows) throw opts.pushThrows
       return opts.pushResult ?? {kind: 'success', commitSha: 'abc1234567890def'}
+    },
+    async pushPackToServer(input) {
+      // Default pack-push success. Captured so dispatch tests can
+      // assert the pack-push branch fired without separately stubbing.
+      calls.pushPackToServer.push(input)
+      if (opts.pushThrows) throw opts.pushThrows
+      const r = opts.pushResult
+      // Reuse the bare-path `pushResult` stub if it carries a kind that
+      // makes sense for gitPush: success, conflict, bad-request. denials
+      // need the gitPush shape (commitSha) so we leave that to test
+      // overrides.
+      if (r) {
+        if (r.kind === 'success') return {kind: 'success', commitSha: r.commitSha, ref: input.targetRef}
+        if (r.kind === 'conflict') return {kind: 'conflict', message: r.message}
+        if (r.kind === 'bad-request') return {kind: 'bad-request', message: r.message}
+      }
+      return {kind: 'success', commitSha: input.newSha, ref: input.targetRef}
     },
     confirmIO: io,
     log: (s) => logs.push(s),
@@ -288,7 +318,9 @@ describe('runPush (core)', () => {
           expect(result.dispatchedAs).to.equal('clone-path')
         }
 
-        expect(calls.pushToServer).to.have.length(1)
+        // qfg-7429.4: clone-path now ships via the pack-push wire.
+        expect(calls.pushToServer).to.have.length(0)
+        expect(calls.pushPackToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -354,7 +386,8 @@ describe('runPush (core)', () => {
         }
         const result = await runPush(input, deps)
         expect(result.kind).to.equal('pushed')
-        expect(calls.pushToServer).to.have.length(1)
+        // qfg-7429.4: clone-path → pack-push wire.
+        expect(calls.pushPackToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -386,7 +419,9 @@ describe('runPush (core)', () => {
         }
         const result = await runPush(input, deps)
         expect(result.kind).to.equal('aborted')
+        // qfg-7429.4: typed-slug abort fires before EITHER push branch.
         expect(calls.pushToServer).to.deep.equal([])
+        expect(calls.pushPackToServer).to.deep.equal([])
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -416,7 +451,8 @@ describe('runPush (core)', () => {
         }
         const result = await runPush(input, deps)
         expect(result.kind).to.equal('pushed')
-        expect(calls.pushToServer).to.have.length(1)
+        // qfg-7429.4: clone-path → pack-push wire.
+        expect(calls.pushPackToServer).to.have.length(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
