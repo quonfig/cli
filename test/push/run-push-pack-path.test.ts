@@ -122,6 +122,7 @@ function makeDeps(opts: {
     getRemoteBranchSha: async () => opts.remoteBranchSha,
     buildPack: async () => FAKE_PACK,
     countCommitsBetween: async () => 1,
+    getCommitOneline: async (_dir, sha) => `${sha.slice(0, 7)} (stub) commit message`,
     ...opts.gitOps,
   }
 
@@ -310,7 +311,7 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
   })
 
   describe('failure modes', () => {
-    it('maps 403 denied to PushFatalError(PUSH_DENIED) with one error line per denial', async () => {
+    it('maps 403 denied to PushFatalError(PUSH_DENIED) with one error line per denial (sha + path + reason + perm)', async () => {
       const dir = setUpDir()
       try {
         const {deps, captured} = makeDeps({
@@ -335,9 +336,139 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
         expect(caught).to.be.instanceOf(PushFatalError)
         expect((caught as PushFatalError).code).to.equal('PUSH_DENIED')
         const joined = captured.errs.join('\n')
+        // qfg-7429.5 format: `<short-sha>  <path>  -- <reason>, requires <requiredPermission>`
         expect(joined).to.include('configs/secret.json')
         expect(joined).to.include('config.edit.protected-all-envs')
-        expect(joined).to.include('deadbeef') // commit SHA prefix (8 chars, matches errLog formatting)
+        expect(joined).to.include('deadbeef') // short SHA
+        expect(joined).to.include('missing-permission') // reason
+        expect(joined).to.match(/requires\s+config\.edit\.protected-all-envs/)
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('prints suggestedRecovery verbatim + offending commit oneline when the server attaches one (qfg-7429.5, §6)', async () => {
+      const dir = setUpDir()
+      try {
+        const offendingSha = 'feedbeefdeadbabe1111111111111111feed1234'
+        const recoveryMessage =
+          'This commit was likely merged on your upstream remote without Quonfig review. Revert it there, re-pull, then qfg push again. Alternatively, ask a workspace admin with the listed permission to push this change.'
+        const onelineCalls: string[] = []
+        const {deps, captured} = makeDeps({
+          gitOps: {
+            async getCommitOneline(_dir, sha) {
+              onelineCalls.push(sha)
+              return `${sha.slice(0, 7)} feat: merge Bob's protected change`
+            },
+          },
+          packResult: {
+            kind: 'denied',
+            denials: [
+              {
+                commitSha: offendingSha,
+                path: 'protected-all-envs/auth.signing-key.json',
+                reason: 'missing-permission',
+                requiredPermission: 'config.edit.protected',
+              },
+            ],
+            suggestedRecovery: {
+              kind: 'revert-upstream',
+              offendingCommitSha: offendingSha,
+              message: recoveryMessage,
+            },
+          },
+        })
+        let caught: unknown
+        try {
+          await runPush(baseInput(dir), deps)
+        } catch (error) {
+          caught = error
+        }
+        expect(caught).to.be.instanceOf(PushFatalError)
+        const joined = captured.errs.join('\n')
+        // Verbatim message from the server.
+        expect(joined).to.include(recoveryMessage)
+        // Offending commit's oneline came from `git log -1 --pretty=oneline`.
+        expect(onelineCalls).to.deep.equal([offendingSha])
+        expect(joined).to.include(`${offendingSha.slice(0, 7)} feat: merge Bob's protected change`)
+        // Admin-escalation alternative is part of the verbatim message
+        // (covered by the server emitting it). We assert it lands in
+        // the stderr stream so the CLI didn't strip it.
+        expect(joined.toLowerCase()).to.include('admin')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('does NOT print a recovery hint when the server omits suggestedRecovery (qfg-7429.5)', async () => {
+      const dir = setUpDir()
+      try {
+        const onelineCalls: string[] = []
+        const {deps, captured} = makeDeps({
+          gitOps: {
+            async getCommitOneline(_dir, sha) {
+              onelineCalls.push(sha)
+              return 'should-never-be-called'
+            },
+          },
+          packResult: {
+            kind: 'denied',
+            denials: [
+              {
+                commitSha: 'deadbeefcafebabe0000000000000000abcdef00',
+                path: 'configs/secret.json',
+                reason: 'missing-permission',
+                requiredPermission: 'config.edit.protected-all-envs',
+              },
+            ],
+            // no suggestedRecovery
+          },
+        })
+        let caught: unknown
+        try {
+          await runPush(baseInput(dir), deps)
+        } catch (error) {
+          caught = error
+        }
+        expect(caught).to.be.instanceOf(PushFatalError)
+        const joined = captured.errs.join('\n')
+        // No upstream-revert language.
+        expect(joined.toLowerCase()).to.not.include('upstream')
+        expect(joined.toLowerCase()).to.not.include('revert')
+        // And no oneline lookup happened.
+        expect(onelineCalls).to.have.length(0)
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('sends hasUpstreamRemote=true when any remote URL does not match the backend repo (qfg-7429.5)', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({
+          gitOps: {
+            getAllRemoteUrls: async () => [BACKEND.repoUrl, 'https://github.com/acme/config'],
+          },
+        })
+        await runPush(baseInput(dir), deps)
+        expect(captured.pushPack).to.have.length(1)
+        expect(captured.pushPack[0].hasUpstreamRemote).to.equal(true)
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('sends hasUpstreamRemote=false when every remote URL matches the backend repo (qfg-7429.5)', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({
+          gitOps: {
+            getAllRemoteUrls: async () => [BACKEND.repoUrl],
+          },
+        })
+        await runPush(baseInput(dir), deps)
+        expect(captured.pushPack).to.have.length(1)
+        expect(captured.pushPack[0].hasUpstreamRemote).to.equal(false)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }

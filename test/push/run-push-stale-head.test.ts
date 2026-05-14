@@ -94,6 +94,7 @@ function makeDeps(opts: {
     getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
     buildPack: async () => new Uint8Array(0),
     countCommitsBetween: async () => 0,
+    getCommitOneline: async (_dir: string, sha: string) => sha.slice(0, 7),
     ...opts.gitOps,
   }
 

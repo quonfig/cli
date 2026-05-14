@@ -113,6 +113,7 @@ export const callConfigsGitPush = async (input: GitPushInput, orgSlug: string): 
     expectedSha: input.expectedSha,
     newSha: input.newSha,
     pack: Buffer.from(input.pack).toString('base64'),
+    hasUpstreamRemote: input.hasUpstreamRemote,
   }
 
   const res = await fetch(`${apiUrl}/api/v1/configs/gitPush`, {

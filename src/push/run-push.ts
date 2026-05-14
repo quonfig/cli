@@ -83,6 +83,13 @@ export interface GitOps {
    */
   getAllRemoteUrls(dir: string): Promise<string[]>
   /**
+   * Run `git log -1 --pretty=oneline <sha>` and return the resulting line
+   * (`<short-sha> <subject>`) or an empty string when the commit is not
+   * present locally. Used by the qfg-7429.5 denial renderer to print the
+   * offending commit's identity alongside the server's recovery message.
+   */
+  getCommitOneline(dir: string, sha: string): Promise<string>
+  /**
    * Pack-push (qfg-7429.4) — resolve HEAD as a branch name or refuse
    * cleanly. Returns the documented refusal text for detached HEAD and
    * the local default branch being `master`. The result drives the
@@ -162,6 +169,13 @@ export interface PushDenial {
 export interface GitPushInput {
   /** Remote tip the CLI saw (zero-OID for a brand-new branch). */
   expectedSha: string
+  /**
+   * qfg-7429.5 / §6: true when at least one configured git remote on
+   * the local clone does not normalize to the backend's Quonfig repo
+   * URL. The server uses this to decide whether to attach the
+   * GitHub-fork dead-end `suggestedRecovery` block to a 403 response.
+   */
+  hasUpstreamRemote: boolean
   /** Local HEAD being published. Server returns this back as commitSha. */
   newSha: string
   pack: Uint8Array
@@ -539,6 +553,11 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     log('Building pack...')
     const pack = await deps.gitOps.buildPack(input.dir, expectedSha, newSha)
 
+    // §6 / qfg-7429.5: tell the server whether the local clone has a
+    // non-Quonfig upstream so it can decide whether to attach a
+    // GitHub-fork dead-end recovery hint to a 403.
+    const hasUpstreamRemote = remoteUrls.some((u) => !sameRepo(u, backend.repoUrl))
+
     log('Sending push to Quonfig cloud...')
     const packResult = await deps.pushPackToServer({
       workspaceId: backend.workspaceId,
@@ -546,16 +565,26 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       expectedSha,
       newSha,
       pack,
+      hasUpstreamRemote,
     })
 
     if (packResult.kind === 'denied') {
       errLog(`Push denied for ${packResult.denials.length} commit(s):`)
       for (const d of packResult.denials) {
-        errLog(`  ${d.commitSha.slice(0, 8)} ${d.path}: missing permission ${d.requiredPermission}`)
+        // qfg-7429.5 denial line: `<short-sha>  <path>  -- <reason>, requires <requiredPermission>`
+        errLog(`  ${d.commitSha.slice(0, 8)}  ${d.path}  -- ${d.reason}, requires ${d.requiredPermission}`)
       }
       if (packResult.suggestedRecovery) {
         errLog('')
         errLog(packResult.suggestedRecovery.message)
+        try {
+          const oneline = await deps.gitOps.getCommitOneline(input.dir, packResult.suggestedRecovery.offendingCommitSha)
+          if (oneline.length > 0) {
+            errLog(`  ${oneline}`)
+          }
+        } catch {
+          /* non-fatal — the recovery message is the load-bearing part */
+        }
       }
       throw new PushFatalError(
         `Push denied for ${packResult.denials.length} commit(s). See errors above.`,

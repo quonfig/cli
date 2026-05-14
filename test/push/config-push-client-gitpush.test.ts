@@ -28,6 +28,7 @@ const INPUT = {
   expectedSha: '0000000000000000000000000000000000000001',
   newSha: '0000000000000000000000000000000000000002',
   pack: PACK,
+  hasUpstreamRemote: false,
 }
 
 describe('callConfigsGitPush (qfg-7429.4)', () => {
@@ -89,6 +90,49 @@ describe('callConfigsGitPush (qfg-7429.4)', () => {
     expect(body.json.newSha).to.equal(INPUT.newSha)
     // Pack is base64-encoded so the JSON envelope stays text-safe.
     expect(body.json.pack).to.equal(Buffer.from(PACK).toString('base64'))
+  })
+
+  it('forwards hasUpstreamRemote to the server when set (qfg-7429.5)', async () => {
+    stub(200, {json: {commitSha: INPUT.newSha, ref: 'refs/heads/main'}})
+
+    await callConfigsGitPush({...INPUT, hasUpstreamRemote: true}, 'acme')
+
+    const body = JSON.parse(lastInit?.body as string) as {json: {hasUpstreamRemote?: boolean}}
+    expect(body.json.hasUpstreamRemote).to.equal(true)
+  })
+
+  it('parses suggestedRecovery on 403 and surfaces it on the denied result (qfg-7429.5)', async () => {
+    const offending = 'feedbeefdeadbabe1111111111111111feed1234'
+    const recoveryMessage = 'Revert it upstream and try again, or ask an admin.'
+    stub(403, {
+      json: {
+        message: 'Push denied — 1 commit(s) failed per-file authorization',
+        data: {
+          denials: [
+            {
+              commitSha: offending,
+              path: 'protected-all-envs/auth.json',
+              reason: 'missing-permission',
+              requiredPermission: 'config.edit.protected',
+            },
+          ],
+          suggestedRecovery: {
+            kind: 'revert-upstream',
+            offendingCommitSha: offending,
+            message: recoveryMessage,
+          },
+        },
+      },
+    })
+
+    const res = await callConfigsGitPush(INPUT, 'acme')
+    expect(res.kind).to.equal('denied')
+    if (res.kind === 'denied') {
+      expect(res.suggestedRecovery).to.exist
+      expect(res.suggestedRecovery?.kind).to.equal('revert-upstream')
+      expect(res.suggestedRecovery?.offendingCommitSha).to.equal(offending)
+      expect(res.suggestedRecovery?.message).to.equal(recoveryMessage)
+    }
   })
 
   it('returns {kind: "conflict"} with the server message on 409 (OriginMoved)', async () => {

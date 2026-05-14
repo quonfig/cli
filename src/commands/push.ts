@@ -324,6 +324,18 @@ export function buildRealDeps(
         return 0
       }
     },
+    async getCommitOneline(dir, sha) {
+      // qfg-7429.5: surface the offending commit's identity alongside
+      // the server's §6 recovery hint. Returns '' if the commit isn't
+      // present locally (best-effort — the recovery message is the
+      // load-bearing piece).
+      try {
+        const {stdout} = await runGit(['-C', dir, 'log', '-1', '--pretty=oneline', sha])
+        return stdout.trim()
+      } catch {
+        return ''
+      }
+    },
   }
 
   const deps = {

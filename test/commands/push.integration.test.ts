@@ -310,6 +310,16 @@ function buildTestDeps(args: {
         return 0
       }
     },
+    async getCommitOneline(dir, sha) {
+      try {
+        return execFileSync('git', ['-C', dir, 'log', '-1', '--pretty=oneline', sha], {
+          encoding: 'utf8',
+          env: TEST_ENV,
+        }).trim()
+      } catch {
+        return ''
+      }
+    },
   }
 
   const deps: RunPushDeps = {
