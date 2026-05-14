@@ -33,7 +33,11 @@ interface GitConfigJson {
   variants?: unknown[]
 }
 
-function mapGitValue(gitValue: GitValue): ConfigValue {
+interface WeightedValuesWrapper {
+  weightedValues?: Array<{value: GitValue; weight?: number}>
+}
+
+function mapGitValue(gitValue: GitValue): ConfigValue | null {
   const {type, value} = gitValue
 
   switch (type) {
@@ -41,7 +45,12 @@ function mapGitValue(gitValue: GitValue): ConfigValue {
       return {value: {bool: value as boolean}}
     }
 
-    case 'int': {
+    case 'int':
+    case 'duration': {
+      return {value: {int: value as number}}
+    }
+
+    case 'double': {
       return {value: {int: value as number}}
     }
 
@@ -58,12 +67,20 @@ function mapGitValue(gitValue: GitValue): ConfigValue {
       return {value: {logLevel: value as string}}
     }
 
+    case 'string': {
+      return typeof value === 'string' ? {value: {string: value}} : null
+    }
+
     case 'string_list': {
       return {value: {string: JSON.stringify(value)}}
     }
 
+    // weighted_values is expanded by buildRows (one rule -> N row values).
+    // provided lookups are runtime-only; codegen has no static value to type.
+    // Anything else we don't recognize is dropped rather than corrupting
+    // downstream code that assumes value.string is a string.
     default: {
-      return {value: {string: value as string}}
+      return null
     }
   }
 }
@@ -74,9 +91,22 @@ function buildRows(gitConfig: GitConfigJson): ConfigRow[] {
     ...(gitConfig.environments ?? []).flatMap((env) => env.rules),
   ]
 
-  return allRules.map((rule) => ({
-    values: [mapGitValue(rule.value)],
-  }))
+  return allRules.flatMap((rule) => {
+    if (rule.value?.type === 'weighted_values') {
+      const wrapper = rule.value.value as WeightedValuesWrapper | undefined
+      const variants = wrapper?.weightedValues ?? []
+      const values: ConfigValue[] = []
+      for (const entry of variants) {
+        if (!entry?.value) continue
+        const mapped = mapGitValue(entry.value)
+        if (mapped) values.push(mapped)
+      }
+      return values.length > 0 ? [{values}] : []
+    }
+
+    const mapped = mapGitValue(rule.value)
+    return mapped ? [{values: [mapped]}] : []
+  })
 }
 
 function mapConfigType(gitType: string): 'CONFIG' | 'FEATURE_FLAG' {

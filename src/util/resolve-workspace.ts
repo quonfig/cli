@@ -19,7 +19,6 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
   'Bare workspace slugs are no longer accepted. Update your .env and run `qfg login` if you have not yet migrated.'
 
 export interface ResolvedWorkspace {
-  workspaceId: string
   /**
    * Org slug that owns workspaceId. Empty string in the QUONFIG_API_KEY
    * path because API keys are workspace-scoped and the slug is never
@@ -27,6 +26,7 @@ export interface ResolvedWorkspace {
    * on the env key before consulting it.
    */
   orgSlug: string
+  workspaceId: string
 }
 
 /**
@@ -41,10 +41,7 @@ export interface ResolvedWorkspace {
  * Mirrors the error messages from get-client.ts so behavior feels identical
  * whether you're hitting the API directly or going through Gitea.
  */
-export async function resolveWorkspaceUuid(
-  command: BaseCommand,
-  flagOverride?: string,
-): Promise<ResolvedWorkspace> {
+export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: string): Promise<ResolvedWorkspace> {
   const override = flagOverride ?? process.env.QUONFIG_WORKSPACE
   const apiKey = process.env.QUONFIG_API_KEY
 
@@ -198,10 +195,7 @@ async function resolveOrgScopedWorkspace(command: BaseCommand, override: string)
   if (!match) {
     const inOrg = candidates.filter((w) => w.workosOrgId === workosOrgId).map((w) => w.workspaceSlug)
     const available = inOrg.length > 0 ? inOrg.join(', ') : '(none)'
-    command.error(
-      `Workspace "${workspaceSlug}" not found in org "${orgSlug}". Available: ${available}.`,
-      {exit: 1},
-    )
+    command.error(`Workspace "${workspaceSlug}" not found in org "${orgSlug}". Available: ${available}.`, {exit: 1})
   }
 
   command.verboseLog('OAuth workspace lookup', {orgSlug, workspaceSlug, workosOrgId, workspaceId: match.workspaceId})
@@ -279,10 +273,7 @@ async function recoverAuthConfigFromTokens(command: BaseCommand): Promise<AuthCo
   // cached on the seed token (qfg-kr7 stores this on every login).
   const orgSlug = match.organizationSlug ?? seedTokens.org_slug
   if (!orgSlug) {
-    command.error(
-      'Tokens found but org slug is missing. Run `qfg login` to repopulate.',
-      {exit: 401},
-    )
+    command.error('Tokens found but org slug is missing. Run `qfg login` to repopulate.', {exit: 401})
   }
 
   const recovered: AuthConfig = {

@@ -86,10 +86,7 @@ const semverRolloutNotificationsInbox = (): LaunchConfig => ({
   variants: [{value: {type: 'bool', value: false}}, {value: {type: 'bool', value: true}}],
 })
 
-const buildChange = (
-  changedAt: number,
-  newConfig: LaunchConfig,
-): LegacyChange => ({
+const buildChange = (changedAt: number, newConfig: LaunchConfig): LegacyChange => ({
   changedAt,
   key: 'patients.notifications-inbox.enabled',
   raw: {
@@ -191,10 +188,7 @@ describe('migrate/multi-change history — latest change wins (qfg-g4go)', () =>
   it('writes a semver criterion verbatim into the on-disk JSON', () => {
     const changes: LegacyChange[] = [buildChange(100, semverRolloutNotificationsInbox())]
     writeQuonfigFiles(dir, changes, launchSource)
-    const raw = fs.readFileSync(
-      path.join(dir, 'feature-flags/patients.notifications-inbox.enabled.json'),
-      'utf8',
-    )
+    const raw = fs.readFileSync(path.join(dir, 'feature-flags/patients.notifications-inbox.enabled.json'), 'utf8')
     expect(raw).to.match(/PROP_SEMVER_GREATER_THAN/)
     expect(raw).to.match(/device\.appVersion/)
     expect(raw).to.match(/4\.0\.9/)

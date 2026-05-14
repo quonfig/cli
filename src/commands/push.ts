@@ -1,5 +1,4 @@
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 
 import {Flags} from '@oclif/core'
 
@@ -7,17 +6,30 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {GiteaTokenResponse, mintGiteaToken} from '../util/gitea-api.js'
-import {dirtyTrackedFiles, getOriginMainSha, getRemoteUrl, gitFetch, gitSetRemote, isGitRepo, isLocalBehindOrDivergedFromRemote, runGit} from '../util/git-ops.js'
+import {
+  dirtyTrackedFiles,
+  getAllRemoteUrls,
+  getOriginMainSha,
+  getRemoteUrl,
+  gitFetch,
+  gitSetRemote,
+  isGitRepo,
+  isLocalBehindOrDivergedFromRemote,
+  runGit,
+} from '../util/git-ops.js'
 import {
   PushFatalError,
   runPush,
   type ConfigPushInput,
+  type GitPushInput,
   type GiteaTokenMintResult,
   type GitOps,
 } from '../push/run-push.js'
 import {FileDelta} from '../push/diff-summary.js'
 import {computeBarePathDiff} from '../push/bare-path-diff.js'
-import {callConfigsPush} from '../push/config-push-client.js'
+import {computeClonePathDiff} from '../push/clone-path-diff.js'
+import {callConfigsGitPush, callConfigsPush} from '../push/config-push-client.js'
+import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 
 export default class Push extends BaseCommand {
@@ -29,7 +41,7 @@ Enforces three guards before touching the remote:
   3. A diff summary is shown; destructive changes (10+ deletes, >=25% of
      files, or an unpinned dir) require typing the workspace slug to confirm.
 
-  qfg push                                 # uses QUONFIG_DIR + profile workspace
+  qfg push                                 # resolves dir from cwd, QUONFIG_DIR, or --dir
   qfg push --dir ./our-config
   qfg push --dir ./our-config --workspace acme-prod
   qfg push --dir ./our-config --yes        # skip normal Y/N (never skips typed-slug)
@@ -43,7 +55,8 @@ Enforces three guards before touching the remote:
 
   static flags = {
     dir: Flags.string({
-      description: 'Local directory to push (defaults to QUONFIG_DIR env var)',
+      description:
+        'Local directory to push (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR env var)',
     }),
     workspace: Flags.string({
       description: 'Workspace slug or UUID (defaults to active profile)',
@@ -69,12 +82,16 @@ Enforces three guards before touching the remote:
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Push)
 
-    const dir = flags.dir || process.env.QUONFIG_DIR
-    if (!dir) {
-      return this.err('No directory specified. Use --dir <path> or set QUONFIG_DIR.')
+    const resolved = resolveWorkspaceDir({
+      flagDir: flags.dir,
+      envDir: process.env.QUONFIG_DIR,
+      cwd: process.cwd(),
+    })
+    if (resolved.kind === 'error') {
+      return this.err(resolved.message)
     }
 
-    const resolvedDir = path.resolve(dir)
+    const resolvedDir = resolved.dir
 
     // Resolve requested target. --workspace > QUONFIG_WORKSPACE > active OAuth
     // profile. Supports API-key mode for headless runs so `qfg push` behaves
@@ -89,6 +106,10 @@ Enforces three guards before touching the remote:
           requestedTarget,
           orgSlug,
           yes: flags.yes,
+          // Global `--interactive` / `--no-interactive` flag (BaseCommand
+          // baseFlags). Threaded through so runPush can refuse to prompt
+          // and instead abort with a clear --yes-required message.
+          interactive: flags.interactive,
           skipValidate: flags['skip-validate'],
           noPinWrite: flags['no-pin-write'],
           message: flags.message,
@@ -195,6 +216,9 @@ export function buildRealDeps(
       const url = await getRemoteUrl(dir)
       return url ?? undefined
     },
+    async getAllRemoteUrls(dir) {
+      return getAllRemoteUrls(dir)
+    },
     async setRemoteOrigin(dir, url) {
       await gitSetRemote(dir, url)
     },
@@ -214,7 +238,7 @@ export function buildRealDeps(
       // git diff; it is fast and doesn't require a second clone.
       if (await isGitRepo(dir)) {
         try {
-          return await diffHeadVsOrigin(dir)
+          return await computeClonePathDiff(dir)
         } catch {
           // Fall through to the probe-clone path. This can happen if the dir
           // is a git repo but origin doesn't have a main branch fetched, etc.
@@ -259,8 +283,72 @@ export function buildRealDeps(
       // qfg-gj3i: clone-path returns the local origin/main SHA after
       // fetch. Bare path has no `.git/` to rev-parse — return undefined
       // and let the server apply its bare-path lock policy.
-      if (!(await isGitRepo(dir))) return undefined
+      if (!(await isGitRepo(dir))) return
       return getOriginMainSha(dir)
+    },
+    // Pack-push (qfg-7429.4) — clone-path now ships actual git objects
+    // via `configs.gitPush`. All five hooks below are no-ops on bare
+    // path (the dispatch chooses configs.push instead) and only fire
+    // when the local dir is a clone whose origin matches the backend.
+    async getCurrentBranch(dir) {
+      const {getCurrentBranch} = await import('../push/git-pack.js')
+      return getCurrentBranch(dir)
+    },
+    async getHeadSha(dir) {
+      const {stdout} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
+      return stdout.trim()
+    },
+    async getRemoteBranchSha(dir, branchName): Promise<string | undefined> {
+      try {
+        const {stdout} = await runGit(['-C', dir, 'rev-parse', `origin/${branchName}`])
+        const sha = stdout.trim()
+        return sha.length > 0 ? sha : undefined
+      } catch {
+        // No remote-tracking ref yet — brand-new branch. The pack-push
+        // dispatch interprets `undefined` as zero-OID on the wire.
+        return undefined
+      }
+    },
+    async buildPack(dir, expectedSha, newSha) {
+      const {buildPack} = await import('../push/git-pack.js')
+      return buildPack(dir, expectedSha, newSha)
+    },
+    async countCommitsBetween(dir, expectedSha, newSha) {
+      if (expectedSha === newSha) return 0
+      const ZERO = '0000000000000000000000000000000000000000'
+      const range = expectedSha === ZERO ? newSha : `${expectedSha}..${newSha}`
+      try {
+        const {stdout} = await runGit(['-C', dir, 'rev-list', '--count', range])
+        return Number.parseInt(stdout.trim(), 10) || 0
+      } catch {
+        return 0
+      }
+    },
+    async getCommitOneline(dir, sha) {
+      // qfg-7429.5: surface the offending commit's identity alongside
+      // the server's §6 recovery hint. Returns '' if the commit isn't
+      // present locally (best-effort — the recovery message is the
+      // load-bearing piece).
+      try {
+        const {stdout} = await runGit(['-C', dir, 'log', '-1', '--pretty=oneline', sha])
+        return stdout.trim()
+      } catch {
+        return ''
+      }
+    },
+    async getTreeShaForRef(dir, ref): Promise<string | undefined> {
+      // qfg-7429.6: pack-push conflict handler uses this to detect the
+      // legacy orphan-commit state — local commit SHA != origin's, but
+      // the underlying tree content matches. Return undefined on any
+      // git failure so the caller falls back to the "real conflict"
+      // message rather than aborting on an opaque rev-parse error.
+      try {
+        const {stdout} = await runGit(['-C', dir, 'rev-parse', `${ref}^{tree}`])
+        const sha = stdout.trim()
+        return sha.length > 0 ? sha : undefined
+      } catch {
+        return undefined
+      }
     },
   }
 
@@ -282,6 +370,7 @@ export function buildRealDeps(
     },
     gitOps,
     pushToServer: (input: ConfigPushInput) => callConfigsPush(input, orgSlug),
+    pushPackToServer: (input: GitPushInput) => callConfigsGitPush(input, orgSlug),
     log,
     errLog,
   }
@@ -296,70 +385,6 @@ export function buildRealDeps(
   }
 
   return {deps, cleanup}
-}
-
-/**
- * Diff the working tree (what we are about to push) against origin/main and
- * fill in before/after JSON content for each delta as required by the
- * `configs.push` wire shape (qfg-azk.13).
- *
- *   Added    — afterJson = working tree
- *   Modified — beforeJson = `git show origin/main:<path>`, afterJson = working tree
- *   Deleted  — beforeJson = `git show origin/main:<path>`
- *
- * `git diff A..B` reports B relative to A. So `HEAD..origin/main` tells us
- * what origin has that we don't. We want "local vs remote" with local as the
- * baseline — i.e. origin/main..HEAD.
- */
-async function diffHeadVsOrigin(dir: string): Promise<FileDelta[]> {
-  const {stdout} = await runGit(['-C', dir, 'diff', '--name-status', 'origin/main..HEAD'])
-  const deltas: FileDelta[] = []
-  for (const raw of stdout.split('\n')) {
-    const line = raw.trim()
-    if (!line) continue
-    const [status, ...rest] = line.split(/\s+/)
-    const pathStr = rest.join(' ')
-    if (!pathStr) continue
-    if (status.startsWith('A')) {
-      // eslint-disable-next-line no-await-in-loop
-      const afterJson = await readWorkingTreeFile(dir, pathStr)
-      deltas.push({kind: 'added', path: pathStr, ...(afterJson === undefined ? {} : {afterJson})})
-    } else if (status.startsWith('D')) {
-      // eslint-disable-next-line no-await-in-loop
-      const beforeJson = await showAtRef(dir, 'origin/main', pathStr)
-      deltas.push({kind: 'deleted', path: pathStr, ...(beforeJson === undefined ? {} : {beforeJson})})
-    } else if (status.startsWith('M') || status.startsWith('R') || status.startsWith('C')) {
-      // eslint-disable-next-line no-await-in-loop
-      const beforeJson = await showAtRef(dir, 'origin/main', pathStr)
-      // eslint-disable-next-line no-await-in-loop
-      const afterJson = await readWorkingTreeFile(dir, pathStr)
-      deltas.push({
-        kind: 'modified',
-        path: pathStr,
-        ...(beforeJson === undefined ? {} : {beforeJson}),
-        ...(afterJson === undefined ? {} : {afterJson}),
-      })
-    }
-  }
-
-  return deltas
-}
-
-async function showAtRef(dir: string, ref: string, relPath: string): Promise<string | undefined> {
-  try {
-    const {stdout} = await runGit(['-C', dir, 'show', `${ref}:${relPath}`])
-    return stdout
-  } catch {
-    return undefined
-  }
-}
-
-async function readWorkingTreeFile(dir: string, relPath: string): Promise<string | undefined> {
-  try {
-    return await fs.promises.readFile(path.join(dir, relPath), 'utf8')
-  } catch {
-    return undefined
-  }
 }
 
 async function countTrackedFilesAtRef(dir: string, ref: string): Promise<number> {

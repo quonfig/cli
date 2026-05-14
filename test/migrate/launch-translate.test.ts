@@ -261,7 +261,12 @@ describe('migrate/sources/launch/translate', () => {
           {
             id: '148',
             rules: [
-              {criteria: [{operator: 'PROP_IS_ONE_OF', propertyName: 'tier', valueToMatch: {type: 'string', value: 'pro'}}], value: {type: 'int', value: '50'}},
+              {
+                criteria: [
+                  {operator: 'PROP_IS_ONE_OF', propertyName: 'tier', valueToMatch: {type: 'string', value: 'pro'}},
+                ],
+                value: {type: 'int', value: '50'},
+              },
               {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}},
             ],
           },
@@ -281,9 +286,7 @@ describe('migrate/sources/launch/translate', () => {
     it('coerces empty-string sentinel in default.rules too (qfg-gpnd)', () => {
       const input: LaunchConfig = {
         default: {
-          rules: [
-            {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}},
-          ],
+          rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: ''}}],
         },
         environments: [],
         id: '1',
@@ -341,9 +344,7 @@ describe('migrate/sources/launch/translate', () => {
       // qfg-verify pre-receive hook stops rejecting these pushes.
       const input: LaunchConfig = {
         default: {
-          rules: [
-            {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
-          ],
+          rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}],
         },
         environments: [],
         id: '1',

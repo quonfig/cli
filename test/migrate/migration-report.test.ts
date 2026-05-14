@@ -227,7 +227,15 @@ describe('migrate/migration-report', () => {
       writeMigrationReport(
         tmpdir,
         baseData({
-          counts: {configsMigrated: 0, environmentsMapped: 1, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
+          counts: {
+            configsMigrated: 0,
+            environmentsMapped: 1,
+            flagsMigrated: 2,
+            itemsSkipped: 0,
+            logLevelsMigrated: 0,
+            schemasMigrated: 0,
+            segmentsMigrated: 0,
+          },
         }),
       )
 
@@ -241,7 +249,15 @@ describe('migrate/migration-report', () => {
       writeMigrationReport(
         tmpdir,
         baseData({
-          counts: {configsMigrated: 0, environmentsMapped: 2, flagsMigrated: 10, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 3},
+          counts: {
+            configsMigrated: 0,
+            environmentsMapped: 2,
+            flagsMigrated: 10,
+            itemsSkipped: 0,
+            logLevelsMigrated: 0,
+            schemasMigrated: 0,
+            segmentsMigrated: 3,
+          },
           identifierMap: {'flag-1': 'flag_1', 'flag-2': 'flag_2'},
         }),
       )
@@ -250,7 +266,15 @@ describe('migrate/migration-report', () => {
       writeMigrationReport(
         tmpdir,
         baseData({
-          counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 1, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
+          counts: {
+            configsMigrated: 0,
+            environmentsMapped: 0,
+            flagsMigrated: 1,
+            itemsSkipped: 0,
+            logLevelsMigrated: 0,
+            schemasMigrated: 0,
+            segmentsMigrated: 0,
+          },
           identifierMap: {'flag-3': 'flag_3'},
         }),
       )

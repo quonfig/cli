@@ -96,6 +96,19 @@ describe('set-default', () => {
       .command(['set-default', 'jeffreys.test.key.reforge', '--environment=Staging', '--confirm', '--env-var=GREETING'])
       .it('can create a string provided by an env var', (ctx) => {
         expect(ctx.stdout).to.contain(`Successfully changed default to be provided by \`GREETING\``)
+        // qfg-84df: emitted rule value must match ProvidedValueSchema
+        // ({type: 'provided', value: {source, lookup}}) — server rejects the
+        // legacy {provided: {…}} shape with an `expected string` validation
+        // error on config.defaultValue.value.
+        const body = configsUpdateCapture.body
+        expect(body, 'configs/update was never called').to.not.be.null
+        const environments = body.json.config.environments as Array<{id: string; rules: Array<{value: any}>}>
+        const stagingEnv = environments.find((e) => e.id === 'Staging')
+        expect(stagingEnv, 'staging env missing from update payload').to.exist
+        expect(stagingEnv!.rules[0].value).to.deep.equal({
+          type: 'provided',
+          value: {source: 'ENV_VAR', lookup: 'GREETING'},
+        })
       })
 
     test

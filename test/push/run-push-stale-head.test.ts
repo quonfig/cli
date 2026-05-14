@@ -62,9 +62,9 @@ function makeIo(input?: string) {
 }
 
 interface Captured {
-  pushToServer: ConfigPushInput[]
-  logs: string[]
   errs: string[]
+  logs: string[]
+  pushToServer: ConfigPushInput[]
 }
 
 function makeDeps(opts: {
@@ -78,13 +78,24 @@ function makeDeps(opts: {
   const gitOps: GitOps = {
     isGitRepo: async () => true,
     getRemoteOriginUrl: async () => BACKEND.repoUrl,
+    getAllRemoteUrls: async () => [BACKEND.repoUrl],
     async setRemoteOrigin() {},
     async fetch() {},
     diffHeadVsOrigin: async () => opts.deltas,
     countFilesInRemote: async () => 100,
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
-    getOriginMainSha: async () => undefined,
+    getOriginMainSha: async (): Promise<string | undefined> => undefined,
+    // Pack-push (qfg-7429.4) stubs — the stale-HEAD guard fires before
+    // the pack-push dispatch path. These are present only so the
+    // GitOps interface type-checks.
+    getCurrentBranch: async () => ({kind: 'branch', name: 'main'}),
+    getHeadSha: async () => '0000000000000000000000000000000000000000',
+    getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
+    buildPack: async () => new Uint8Array(0),
+    countCommitsBetween: async () => 0,
+    getCommitOneline: async (_dir: string, sha: string) => sha.slice(0, 7),
+    getTreeShaForRef: async (): Promise<string | undefined> => undefined,
     ...opts.gitOps,
   }
 
@@ -99,6 +110,14 @@ function makeDeps(opts: {
     async pushToServer(input) {
       captured.pushToServer.push(input)
       return opts.pushResult ?? {kind: 'success', commitSha: 'abc1234567890def'}
+    },
+    async pushPackToServer(input) {
+      // Pack-push (qfg-7429.4): clone-path scenarios in this file
+      // (e.g. the dirty-tree warning test) reach the dispatch and need
+      // a successful response. The stale-HEAD refusal test asserts
+      // `pushToServer` was never called — pushPackToServer is similarly
+      // not called because the guard fires before the dispatch.
+      return {kind: 'success', commitSha: input.newSha, ref: input.targetRef}
     },
     confirmIO: makeIo(opts.userInput),
     log: (s) => captured.logs.push(s),
@@ -160,14 +179,12 @@ describe('runPush stale-HEAD guard (qfg-fboj)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
             isGitRepo: async () => false,
-            getRemoteOriginUrl: async () => undefined,
+            getRemoteOriginUrl: async (): Promise<string | undefined> => undefined,
             isLocalBehindRemote: async () => true,
           },
         })
@@ -186,9 +203,7 @@ describe('runPush stale-HEAD guard (qfg-fboj)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {

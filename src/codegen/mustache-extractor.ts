@@ -14,7 +14,7 @@ export class MustacheExtractor {
     template: string,
     log: (category: string | unknown, message?: unknown) => void,
   ): z.ZodObject<Record<string, z.ZodTypeAny>> {
-    if (!template) {
+    if (typeof template !== 'string' || template.length === 0) {
       return z.object({})
     }
 

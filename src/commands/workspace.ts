@@ -34,9 +34,7 @@ export default class Workspace extends BaseCommand {
     const authConfig = await loadAuthConfig()
 
     const orgEntries = Object.entries(store.tokensByOrg)
-    const orgSlugsWithTokens = orgEntries
-      .map(([orgId, t]) => t.org_slug ?? orgId)
-      .sort((a, b) => a.localeCompare(b))
+    const orgSlugsWithTokens = orgEntries.map(([orgId, t]) => t.org_slug ?? orgId).sort((a, b) => a.localeCompare(b))
 
     // /userWorkspaces/list is per-token-org-scoped — a single org's JWT
     // only sees that org's workspaces. Iterate every cached org so the
@@ -94,28 +92,6 @@ export default class Workspace extends BaseCommand {
   }
 
   /**
-   * Pin the default-profile workspaceId to org/ws form by looking it up in
-   * the workspaces list. Returns undefined if the auth config is empty or
-   * the saved workspace doesn't appear in the listing.
-   */
-  private profilePin(
-    authConfig: Awaited<ReturnType<typeof loadAuthConfig>>,
-    allWorkspaces: WorkspaceEntry[],
-  ): string | undefined {
-    if (!authConfig) return undefined
-    const activeProfileName = getActiveProfile()
-    const profile =
-      authConfig.profiles[activeProfileName] || authConfig.profiles[authConfig.defaultProfile || 'default']
-    if (!profile) return undefined
-
-    const match = allWorkspaces.find((w) => w.workspaceId === profile.workspace)
-    if (!match) return undefined
-    const orgSlug = match.organizationSlug ?? slugFromName(match.organizationName)
-    if (!orgSlug) return undefined
-    return `${orgSlug}/${match.workspaceSlug}`
-  }
-
-  /**
    * QUONFIG_WORKSPACE wins over the default profile (matches the resolution
    * order in get-client.ts/resolve-workspace.ts). Bare slugs are ignored
    * here — the status command does NOT throw on a stale env-var, just
@@ -133,15 +109,39 @@ export default class Workspace extends BaseCommand {
       if (pin) {
         const orgId = findOrgIdBySlug(store, pin.orgSlug)
         if (orgId) {
-          const match = allWorkspaces.find(
-            (w) => w.workosOrgId === orgId && w.workspaceSlug === pin.workspaceSlug,
-          )
+          const match = allWorkspaces.find((w) => w.workosOrgId === orgId && w.workspaceSlug === pin.workspaceSlug)
           if (match) return `${pin.orgSlug}/${pin.workspaceSlug}`
         }
       }
     }
 
     return fallback
+  }
+
+  /**
+   * Fan out across every cached org's token and merge the results. One org's
+   * stale token doesn't block the others — we verbose-log and continue.
+   */
+  private async fetchAllOrgsWorkspaces(orgEntries: [string, unknown][]): Promise<WorkspaceEntry[]> {
+    const merged = new Map<string, WorkspaceEntry>()
+    for (const [orgId] of orgEntries) {
+      let jwt: string
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        jwt = await getValidAccessToken(orgId, this.verboseLog)
+      } catch (error) {
+        this.verboseLog('workspace: token refresh failed for org', {orgId, error: String(error)})
+        continue
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const list = await this.fetchWorkspaces(jwt)
+      for (const w of list) {
+        merged.set(w.workspaceId, w)
+      }
+    }
+
+    return [...merged.values()]
   }
 
   private async fetchWorkspaces(jwt: string): Promise<WorkspaceEntry[]> {
@@ -166,31 +166,25 @@ export default class Workspace extends BaseCommand {
   }
 
   /**
-   * Fan out across every cached org's token and merge the results. One org's
-   * stale token doesn't block the others — we verbose-log and continue.
+   * Pin the default-profile workspaceId to org/ws form by looking it up in
+   * the workspaces list. Returns undefined if the auth config is empty or
+   * the saved workspace doesn't appear in the listing.
    */
-  private async fetchAllOrgsWorkspaces(
-    orgEntries: [string, unknown][],
-  ): Promise<WorkspaceEntry[]> {
-    const merged = new Map<string, WorkspaceEntry>()
-    for (const [orgId] of orgEntries) {
-      let jwt: string
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        jwt = await getValidAccessToken(orgId, this.verboseLog)
-      } catch (error) {
-        this.verboseLog('workspace: token refresh failed for org', {orgId, error: String(error)})
-        continue
-      }
+  private profilePin(
+    authConfig: Awaited<ReturnType<typeof loadAuthConfig>>,
+    allWorkspaces: WorkspaceEntry[],
+  ): string | undefined {
+    if (!authConfig) return undefined
+    const activeProfileName = getActiveProfile()
+    const profile =
+      authConfig.profiles[activeProfileName] || authConfig.profiles[authConfig.defaultProfile || 'default']
+    if (!profile) return undefined
 
-      // eslint-disable-next-line no-await-in-loop
-      const list = await this.fetchWorkspaces(jwt)
-      for (const w of list) {
-        merged.set(w.workspaceId, w)
-      }
-    }
-
-    return [...merged.values()]
+    const match = allWorkspaces.find((w) => w.workspaceId === profile.workspace)
+    if (!match) return undefined
+    const orgSlug = match.organizationSlug ?? slugFromName(match.organizationName)
+    if (!orgSlug) return undefined
+    return `${orgSlug}/${match.workspaceSlug}`
   }
 
   private async runApiKeyMode(): Promise<JsonObj | void> {

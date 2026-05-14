@@ -1,4 +1,3 @@
-import * as path from 'node:path'
 import * as fs from 'node:fs'
 
 import {Flags} from '@oclif/core'
@@ -8,10 +7,12 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintAndStoreGiteaReadToken, mintGiteaToken} from '../util/gitea-api.js'
-import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../util/quonfig-json.js'
+import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug, type WorkspacePin} from '../util/quonfig-json.js'
+import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
+  getAllRemoteUrls,
   getRemoteUrl,
   gitFetch,
   gitSetRemote,
@@ -24,6 +25,7 @@ import {
   addAndCommitFile,
   dirtyTrackedFiles,
 } from '../util/git-ops.js'
+import {findQuonfigRemote} from '../push/identity-check.js'
 
 export default class Pull extends BaseCommand {
   static description = `Clone or update a local copy of your workspace config files.
@@ -47,7 +49,8 @@ CLI shortcuts (no JSON editing needed for simple cases):
 
   static flags = {
     dir: Flags.string({
-      description: 'Local directory to clone/update (defaults to QUONFIG_DIR env var)',
+      description:
+        'Local directory to clone/update (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR env var)',
     }),
     rebase: Flags.boolean({
       default: false,
@@ -62,13 +65,19 @@ CLI shortcuts (no JSON editing needed for simple cases):
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Pull)
 
-    // Resolve target directory
-    const dir = flags.dir || process.env.QUONFIG_DIR
-    if (!dir) {
-      return this.err('No directory specified. Use --dir <path> or set QUONFIG_DIR.')
+    // Resolve target directory. The cwd walk is for the "already inside a
+    // workspace" case; for a first-time clone the user passes --dir
+    // explicitly (no quonfig.json exists yet, so the walk would fail).
+    const resolved = resolveWorkspaceDir({
+      flagDir: flags.dir,
+      envDir: process.env.QUONFIG_DIR,
+      cwd: process.cwd(),
+    })
+    if (resolved.kind === 'error') {
+      return this.err(resolved.message)
     }
 
-    const resolvedDir = path.resolve(dir)
+    const resolvedDir = resolved.dir
 
     // Resolve workspace ID — supports both OAuth and QUONFIG_API_KEY paths,
     // mirroring what APICommand does via get-client.ts so `qfg pull` behaves
@@ -85,13 +94,42 @@ CLI shortcuts (no JSON editing needed for simple cases):
     const isRepo = await isGitRepo(resolvedDir)
 
     if (isRepo) {
-      // Existing repo — check remote
-      const existingRemote = await getRemoteUrl(resolvedDir)
+      // Multi-remote support (qfg-glrd.3): walk every configured remote to
+      // find one whose URL matches the backend repo. Customers commonly run
+      // `origin = github.com/<org>/configs` for PR review with a secondary
+      // remote pointing at Quonfig — a single-remote check would falsely
+      // abort here. We accept as long as ANY configured remote matches.
+      const allRemotes = await getAllRemoteUrls(resolvedDir)
+      const matchingRemote = findQuonfigRemote(allRemotes, repoUrl)
       const expectedUrlBase = stripAuth(repoUrl)
 
-      if (existingRemote && stripAuth(existingRemote) !== expectedUrlBase) {
+      if (allRemotes.length > 0 && !matchingRemote) {
+        // No configured remote points at the Quonfig backend. List every
+        // remote we considered so the user can see what's misconfigured —
+        // refuse BEFORE fetching anything from the wrong target.
+        const remoteList = allRemotes.map((r) => `  - ${displayUrl(r)}`).join('\n')
         return this.err(
-          `Directory has a different git remote:\n  existing: ${displayUrl(existingRemote)}\n  expected: ${expectedUrlBase}\n\nResolve manually or use a different --dir.`,
+          `No configured git remote matches the Quonfig backend.\n` +
+            `Configured remotes:\n${remoteList}\n` +
+            `Expected: ${expectedUrlBase}\n\n` +
+            `Resolve manually or use a different --dir.`,
+        )
+      }
+
+      // The Quonfig-matching remote must be `origin` for the current pull
+      // flow, which fetches `origin` and merges `origin/main`. If a non-
+      // origin remote matches, tell the user how to align — refusing
+      // cleanly is safer than silently rewriting `origin` (which would
+      // clobber their PR-review remote URL).
+      const originRemote = await getRemoteUrl(resolvedDir)
+      const originMatches = originRemote !== null && stripAuth(originRemote) === expectedUrlBase
+      if (matchingRemote && !originMatches) {
+        return this.err(
+          `qfg pull requires the Quonfig remote to be named "origin".\n` +
+            `A matching remote was found, but it is not origin:\n` +
+            `  matching remote: ${displayUrl(matchingRemote)}\n` +
+            `  origin:          ${originRemote ? displayUrl(originRemote) : '(unset)'}\n\n` +
+            `Rename the Quonfig remote to origin (replacing the current origin), or set origin to ${expectedUrlBase}.`,
         )
       }
 
@@ -128,9 +166,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
           this.log('Local and origin/main have diverged. Rebasing local commits on top of origin/main...')
           const result = await gitPullRebase(resolvedDir)
           if (result.kind === 'clean') {
-            this.log(
-              `Rebased ${result.commitsRebased} local commit(s) onto origin/main. Run \`qfg push\` to publish.`,
-            )
+            this.log(`Rebased ${result.commitsRebased} local commit(s) onto origin/main. Run \`qfg push\` to publish.`)
             // Fall through to post-pull work (QUONFIG_DIR write, pin backfill).
           } else if (result.kind === 'conflicts') {
             this.log('')
@@ -210,25 +246,6 @@ CLI shortcuts (no JSON editing needed for simple cases):
     await this.backfillWorkspacePin(resolvedDir, tokenEntry, workspaceId, orgSlug)
 
     return {dir: resolvedDir, workspaceId}
-  }
-
-  /**
-   * Wraps `readWorkspaceSlug` so a legacy bare-slug value (`"workspace":
-   * "foo"` instead of `"workspace": "org/foo"`) reads as `undefined`
-   * rather than throwing. The caller then takes the "no pin set" branch
-   * and overwrites with the canonical form, completing the migration.
-   *
-   * Any other parse error still resolves to `undefined` here (and is
-   * verbose-logged) — backfill is non-fatal; the next push surfaces the
-   * real diagnosis.
-   */
-  private async readPinTolerant(dir: string) {
-    try {
-      return await readWorkspaceSlug(dir)
-    } catch (error: unknown) {
-      this.verboseLog('Pull', `quonfig.json workspace pin needs migration: ${String(error)}`)
-      return undefined
-    }
   }
 
   /**
@@ -353,6 +370,26 @@ CLI shortcuts (no JSON editing needed for simple cases):
     } catch {
       // Non-fatal
     }
+  }
+
+  /**
+   * Wraps `readWorkspaceSlug` so a legacy bare-slug value (`"workspace":
+   * "foo"` instead of `"workspace": "org/foo"`) reads as `undefined`
+   * rather than throwing. The caller then takes the "no pin set" branch
+   * and overwrites with the canonical form, completing the migration.
+   *
+   * Any other parse error still resolves to `undefined` here (and is
+   * verbose-logged) — backfill is non-fatal; the next push surfaces the
+   * real diagnosis.
+   */
+  private async readPinTolerant(dir: string): Promise<WorkspacePin | undefined> {
+    let pin: WorkspacePin | undefined
+    try {
+      pin = await readWorkspaceSlug(dir)
+    } catch (error: unknown) {
+      this.verboseLog('Pull', `quonfig.json workspace pin needs migration: ${String(error)}`)
+    }
+    return pin
   }
 
   private async refreshAndGetUrl(workspaceId: string, orgSlug: string): Promise<string> {

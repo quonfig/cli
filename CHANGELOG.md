@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.0.46 - 2026-05-14
+
+- feat(qfg-7429): `qfg push` now ships your actual local git commits to the server as a packfile, instead of shipping file deltas and letting the server fabricate a fresh commit. The commit on origin is the commit you made locally — same SHA, same message, same author. Multi-commit history is preserved (N local commits land as N commits, not squashed). A successful `qfg push` leaves your local repo genuinely in sync with origin: no more phantom "ahead by 1" / "local commits diverge" loop. Authorization is per-commit and file-level on pushes to `main`; pushes to other branches are membership-gated only. Requires app-quonfig with the `configs.gitPush` handler (live in production as of 2026-05-14).
+- feat(qfg-7429.5): push denials now render per-commit attribution — which commit, which file, which permission was missing. When a forbidden change appears to have come from a non-Quonfig upstream remote, the error includes a `revert-upstream` recovery hint pointing at the offending commit.
+- feat(qfg-7429.6): `qfg push` detects the legacy orphan-commit divergence state (created by older CLI versions that fabricated server-side commits) and prints a `git reset --hard origin/<branch>` migration hint instead of failing opaquely.
+- feat(qfg-glrd.2): `qfg push` / `qfg pull` resolve the workspace directory from the current working directory — explicit `--dir` is no longer required when you're standing in a workspace. The error when cwd isn't a workspace is now specific.
+- feat(qfg-glrd.3): the wrong-directory safety check walks all configured git remotes, not just `origin`, when matching the local checkout against the backend repo.
+- fix(qfg-glrd.6): retire the `Pushed-Via` commit trailer. Server-added trailers changed the commit SHA and reintroduced divergence; the push channel is now recorded in the server-side `push_events` audit table instead.
+
+## 0.0.45 - 2026-05-11
+
+- fix(qfg-c3es): bump the hosted JSON Schema URL in `qfg init` templates to `https://api.quonfig.com/schemas/v1/stored-config.json`. 0.0.44 advertised an unversioned URL that didn't actually exist as a route (Next.js served the schema at `/api/schemas/...` while the templates pointed at `/schemas/...`, which 307'd to WorkOS auth on production). app-quonfig now serves the schema at the versioned, no-`/api/`-prefix path; this release aligns the workspace templates so newly-emitted `$schema` references resolve. The `/v1/` segment also gives us an immutable-`$id` escape hatch — future breaking changes ship as `/v2/...` instead of mutating in place.
+
+## 0.0.44 - 2026-05-11
+
+- feat(qfg-sv3c): `qfg init` no longer emits a per-workspace `quonfig.schema.json`. The README.md, CLAUDE.md, and AGENTS.md templates now reference the hosted JSON Schema at `https://api.quonfig.com/schemas/stored-config.json` (served by app-quonfig as of qfg-c3es), so every workspace gets the current schema without needing to re-run `qfg init`. Existing stale `quonfig.schema.json` files in customer repos are left untouched — explicit non-migration decision; they're harmless and the hosted URL takes precedence in `$schema` references. `src/init/schema.ts` is kept (not deleted) because `qfg config-schema --json-schema` and the operator-parity test still import `storedConfigJsonSchema()`.
+- fix(schema): align the hand-curated `storedConfigJsonSchema()` with the Zod `StoredConfigSchema` source-of-truth in app-quonfig. Adds the `readyForCleanup` property (added to Zod in qfg-580q, never ported here) and renames `variant.key` → `variant.name` to match the Zod (the cli copy was stale; no workspace data references either field name). Drift surfaced by the new cross-repo drift check in qfg-svmx; the check now reports "No drift detected".
+
+## 0.0.43 - 2026-05-10
+
+- chore(qfg-y7xh): bump `engines.node` floor to `>=20.9.0` to align with the rest of the Quonfig SDK family (Node 20.9 is the minimum LTS that supports `fetch`, `--import`, and the global `crypto` shape we rely on).
+- feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. (Also shipped in 0.0.42; included here for the intentional release-commit gap that 0.0.42's tag covered.)
+- fix(qfg-3fc6): `qfg push` on the clone path now picks up untracked files in the working tree instead of silently skipping anything not yet `git add`'d. The clone-path stager was using `git diff --name-only` against `HEAD`, which by definition only sees tracked files; switched to a `git status --porcelain`-based enumeration that includes `??` entries so a brand-new config file gets pushed on first try.
+- ci(qfg-uzoo): the cli repo now runs `lint`, `prettier`, `build`, and `test` on every push to `main` (not just PRs) so an admin-merge through a red PR can't silently land a regression. Three "not logged in" tests were leaking the user's real `~/.quonfig/tokens.json` via process-wide env state and have been migrated to the `setupTestAuth` / `cleanupTestAuth` helpers that redirect `~/.quonfig/` to a per-test tmp dir via `QUONFIG_CONFIG_HOME`.
+- fix(qfg-3uks): `qfg push --no-interactive` now aborts with a specific, actionable error when the gitea token mint step fails (e.g. expired session, missing scope) instead of silently falling back to an interactive prompt that no automation can answer. The same mint-failure path on the bare-token bootstrap now reports the underlying gitea error rather than a generic "auth failed".
+- chore(cli): expand the published `package.json` `description` with a one-liner showing `qfg run` usage so the npm registry page surfaces the new env-injection workflow. Add `.beads/` to `.gitignore`.
+
+## 0.0.42 - 2026-05-07
+
+- feat(qfg-7jnb.8): `qfg verify` accepts `IS_PRESENT` and `IS_NOT_PRESENT` operators in rule criteria. These take only `propertyName` and intentionally have no `valueToMatch`. The verify schema's `OperatorSchema` enum, the `PROPERTY_OPERATORS` set (so missing `propertyName` is still flagged), and the Launch migrator allowlist are all extended in lockstep — the existing parity test asserts the migrator and verify enums never drift. The `qfg init` operator-reference table and `qfg config-schema` REFERENCE table both get a new presence-operator row.
+- fix(qfg-7jnb.8): the `QUONFIG_SUPPORTED_OPERATORS` parity test (`test/migrate/operator-validation.test.ts`) now reads the runtime-exported `OPERATORS` tuple from `src/verify/validate.ts` instead of regex-matching an inline `z.enum([...])` literal. The regex hadn't matched since `OPERATORS` was extracted into a `const` (and `z.enum(OPERATORS)` was substituted in its place), so the lockstep guard had been silently failing on `null` — fixed and now actually enforces parity.
+
+## 0.0.41 - 2026-05-06
+
+- fix(qfg-84df): `qfg create … --env-var=X` and `qfg set-default … --env-var=X` no longer fail with `defaultValue.value: Invalid input: expected string, received undefined`. The CLI was emitting `{type: '<scalar>', provided: {…}}`, but the API's `ProvidedValueSchema` is a Zod discriminated union expecting `{type: 'provided', value: {source, lookup}}`. Both write paths now emit the correct shape via the shared `mapConfigValueToDto` helper. Unblocks the encryption-key bootstrap (`qfg create quonfig.secrets.encryption.key --type string --env-var=QUONFIG_ENCRYPTION_KEY`).
+
+## 0.0.40 - 2026-05-06
+
+- feat(qfg-4jya): new `qfg run` command wraps a child process with Quonfig values resolved into env vars — for build steps, migrations, and one-shot scripts that read config from `process.env` before user code runs (e.g. `drizzle-kit migrate`, `next-auth`'s `AUTH_SECRET`). Inline form `qfg run --env DATABASE_URL=db.url -- drizzle-kit migrate` and env-file form `qfg run --env-file=.qfg.env -- next build`. Required `--` separates qfg flags from the child command. Default behavior overrides parent env (`--preserve-env` to skip already-set vars). Fail-fast on missing keys before spawning the child. Auth/environment uses a binary mutually-exclusive rule: Mode A (`QUONFIG_BACKEND_SDK_KEY` set, env encoded in key — error if `--environment` or `QUONFIG_ENVIRONMENT` is also set, even if they would agree) or Mode B (no SDK key, requires exactly one of `--environment` or `QUONFIG_ENVIRONMENT`). Companion docs site update tracked separately (qfg-kj0e).
+
+## 0.0.39 - 2026-05-06
+
+- fix(qfg-57q): `qfg generate` no longer crashes with `template.match is not a function` on workspaces that contain a `weighted_values` rule. The `local-config-reader.mapGitValue` default branch was casting the weighted-values wrapper object into `valueObj.value.string`, and downstream codegen called `.match()` on the object from `MustacheExtractor`. The fix expands `weighted_values` rules into N row values (one per variant) so codegen sees real strings, drops unknown rule types instead of corrupting `value.string`, and adds defensive type guards in `MustacheExtractor.extractSchema` and `SchemaExtractor.getAllStringsAtLocation` so a future malformed row can't crash codegen. JSON-typed configs were always handled correctly via `resolveUserSchema` + `jsonSchemaToZod`; the original bug report's diagnosis ("JSON configs break codegen") was a misattribution — the actual trigger was a sibling string config with a weighted-values rule.
+
+## 0.0.38 - 2026-05-05
+
+- feat(qfg-d6cn): new `qfg activity` namespace surfaces audit-log / history events, with `qfg audit-log`, `qfg history`, and `qfg log` aliases pointing at the same command.
+- fix(qfg-kemk): `qfg info` now passes the environment **name** (not UUID) to `evaluationStats`, fixing the empty-stats output users saw when scoping `qfg info` to a specific environment.
+
 ## 0.0.37 - 2026-05-03
 
 - feat: `qfg push` sends `expectedSha = origin/main HEAD sha at fetch time` to the server-side `configs.push` optimistic lock (qfg-gj3i). CLI half of the atomic flip with the upcoming app-quonfig change that makes the server enforce this. Bare-path pushes (no `.git/`) omit the field entirely so the server applies its bare-path lock policy unchanged.
@@ -18,7 +67,7 @@
 
 ## 0.0.34 - 2026-05-03
 
-- fix: `qfg push` refuses to run when local HEAD is behind or has diverged from origin/main. Previously the clone-path push computed `HEAD..origin/main` after fetch and shipped the *reversal* deltas to the server, silently undoing any commits landed since the user's last `qfg pull`. Working-tree edits the user had not committed were also dropped without warning. Now throws `STALE_HEAD` with a "run `qfg pull` first" message, and warns about every dirty tracked file so the user knows their uncommitted edits were not pushed (qfg-fboj). The same guard also covers the delete-vs-edit silent-revival case (qfg-0j59).
+- fix: `qfg push` refuses to run when local HEAD is behind or has diverged from origin/main. Previously the clone-path push computed `HEAD..origin/main` after fetch and shipped the _reversal_ deltas to the server, silently undoing any commits landed since the user's last `qfg pull`. Working-tree edits the user had not committed were also dropped without warning. Now throws `STALE_HEAD` with a "run `qfg pull` first" message, and warns about every dirty tracked file so the user knows their uncommitted edits were not pushed (qfg-fboj). The same guard also covers the delete-vs-edit silent-revival case (qfg-0j59).
 - feat: `qfg pull --rebase` invokes `git pull --rebase origin main` to replay local commits on top of origin. Conflicts are surfaced via standard git markers with a step-by-step recovery recipe (resolve markers → `git add` → `git rebase --continue` → `qfg push`, plus `git rebase --abort` as the escape hatch) (qfg-4tey).
 - fix: `qfg pull` divergence error now lists concrete recovery options (rebase vs `git reset --hard origin/main`) with the directory path filled in, instead of the previous "resolve manually" message that left non-git-savvy users stranded.
 

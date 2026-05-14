@@ -330,12 +330,12 @@ To see all current values and rules for a flag:
         }
       }
     } else {
-      configValue = {
-        provided: {
-          lookup: envVar,
-          source: ProvidedSource.EnvVar,
-        },
-      }
+      // ValueSchema discriminates on `type`; provided values are
+      // {type: 'provided', value: {source, lookup}}. See qfg-84df.
+      configValue = mapConfigValueToDto(
+        {provided: {lookup: envVar, source: ProvidedSource.EnvVar}},
+        ConfigValueType.String,
+      )
       successMessage = `Successfully changed default to be provided by \`${envVar}\``
     }
 

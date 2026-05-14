@@ -3,7 +3,7 @@ import {expect, test} from '@oclif/test'
 import {resetClientCache} from '../../src/util/get-client.js'
 import * as deleteResponses from '../responses/delete.js'
 import {server} from '../responses/delete.js'
-import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
+import {cleanupTestAuth, disableAuth, setupTestAuth} from '../test-auth-helper.js'
 
 describe('delete', () => {
   before(() => {
@@ -112,7 +112,7 @@ describe('delete', () => {
   describe('not logged in (acceptance #5)', () => {
     let restored = false
     before(() => {
-      cleanupTestAuth()
+      disableAuth()
     })
     after(() => {
       if (!restored) {

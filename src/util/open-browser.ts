@@ -9,7 +9,7 @@ export const openBrowser = (url: string): void => {
     args = [url]
   } else if (process.platform === 'win32') {
     command = 'cmd'
-    args = ['/c', 'start', '""', url.replace(/&/g, '^&')]
+    args = ['/c', 'start', '""', url.replaceAll('&', '^&')]
   } else {
     command = 'xdg-open'
     args = [url]

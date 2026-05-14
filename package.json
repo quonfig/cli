@@ -1,7 +1,7 @@
 {
   "packageManager": "yarn@4.11.0+sha512.4e54aeace9141df2f0177c266b05ec50dc044638157dae128c471ba65994ac802122d7ab35bcd9e81641228b7dcf24867d28e750e0bcae8a05277d600008ad54",
   "name": "@quonfig/cli",
-  "version": "0.0.37",
+  "version": "0.0.46",
   "bugs": {
     "url": "https://github.com/quonfig/cli/issues"
   },
@@ -34,14 +34,14 @@
     "typescript": "^5",
     "zod": "^4.1.12"
   },
-  "description": "Quonfig CLI. For arbitrary targeting rules (email, plan, segment, custom property), run `qfg config-schema` then `qfg pull`.",
+  "description": "Quonfig CLI.\n\n  Inject configs/secrets as env vars (preferred for scripts and CI):\n    qfg run --env DATABASE_URL=db.url --env API_KEY=stripe.key -- ./bin/migrate\n\n  Other common usage:\n    qfg get <key> --environment <env>     read a single value\n    qfg list                              show all keys in the workspace\n    qfg config-schema && qfg pull         set up arbitrary targeting rules (email, plan, segment, custom property)",
   "devDependencies": {
     "@oclif/prettier-config": "^0.2.1",
     "@oclif/test": "^3",
     "@types/chai": "^4",
     "@types/common-tags": "^1.8.4",
     "@types/lodash.camelcase": "^4.3.9",
-    "@types/mocha": "^10",
+    "@types/mocha": "^10.0.10",
     "@types/mustache": "^4.2.5",
     "@types/node": "^18",
     "@types/node-forge": "^1.3.14",
@@ -52,7 +52,7 @@
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-markdown": "^5.1.0",
     "eslint-plugin-only-error": "^1.0.2",
-    "mocha": "^10",
+    "mocha": "^11.7.5",
     "msw": "^2.0.6",
     "oclif": "^4.22.29",
     "prettier": "^3.6.2",
@@ -61,7 +61,7 @@
     "tsx": "^4.21.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.9.0"
   },
   "files": [
     "/bin",
@@ -99,7 +99,8 @@
     "test": "NODE_ENV=test mocha \"test/**/*.test.ts\" --exit",
     "test:ci": "NODE_ENV=test mocha --forbid-only \"test/**/*.test.ts\" --exit",
     "test:debug:single": "node --inspect-brk --loader ts-node/esm --no-warnings=ExperimentalWarning ./node_modules/.bin/mocha --exit",
-    "update-submodule": "git submodule update --remote src/quonfig-common"
+    "update-submodule": "git submodule update --remote src/quonfig-common",
+    "version": "prettier --write CHANGELOG.md README.md && git add CHANGELOG.md README.md"
   },
   "types": "dist/index.d.ts",
   "exports": "./dist/index.js",

@@ -79,13 +79,26 @@ function makeDeps(opts: {
   const gitOps: GitOps = {
     isGitRepo: async () => false,
     getRemoteOriginUrl: async (): Promise<string | undefined> => undefined,
+    getAllRemoteUrls: async (): Promise<string[]> => [],
     async setRemoteOrigin() {},
     async fetch() {},
     diffHeadVsOrigin: async () => opts.deltas,
     countFilesInRemote: async () => 100,
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
-    getOriginMainSha: async () => undefined,
+    getOriginMainSha: async (): Promise<string | undefined> => undefined,
+    // Pack-push (qfg-7429.4) — clone-path now ships via configs.gitPush,
+    // so these tests stay valid only as bare-path coverage. The default
+    // isGitRepo above is false; overrides in individual tests should not
+    // flip it back to true unless they want to drive the pack-push
+    // dispatch (in which case they should test the gitPush wire shape).
+    getCurrentBranch: async () => ({kind: 'branch', name: 'main'}),
+    getHeadSha: async () => '0000000000000000000000000000000000000000',
+    getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
+    buildPack: async () => new Uint8Array(0),
+    countCommitsBetween: async () => 0,
+    getCommitOneline: async (_dir: string, sha: string) => sha.slice(0, 7),
+    getTreeShaForRef: async (): Promise<string | undefined> => undefined,
     ...opts.gitOps,
   }
 
@@ -111,6 +124,11 @@ function makeDeps(opts: {
         }
       )
     },
+    async pushPackToServer() {
+      throw new Error(
+        'pushPackToServer should not run in run-push-config-push tests; they only cover the bare-path configs.push wire shape',
+      )
+    },
     confirmIO: makeIo(opts.userInput),
     log() {},
     errLog() {},
@@ -133,7 +151,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -203,7 +221,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
             ],
           },
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -244,14 +262,12 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps} = makeDeps({
           deltas,
           pushResult: {kind: 'conflict', message: 'configs/a.json was modified (expected ..., got ...)'},
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -287,14 +303,12 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps} = makeDeps({
           deltas,
           pushResult: {kind: 'success', commitSha: 'deadbeef0011223344556677'},
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },
@@ -325,13 +339,11 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
             getOriginMainSha: async () => FAKE_ORIGIN_SHA,
@@ -358,16 +370,14 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
-            getOriginMainSha: async () => undefined,
+            getOriginMainSha: async (): Promise<string | undefined> => undefined,
           },
         })
 
@@ -387,7 +397,7 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         // as optional, and we want bare-path requests to look identical to a
         // pre-qfg-gj3i client (no key) rather than carrying a sentinel.
         expect(sent.expectedSha).to.equal(undefined)
-        expect(Object.prototype.hasOwnProperty.call(sent, 'expectedSha')).to.equal(false)
+        expect(Object.hasOwn(sent, 'expectedSha')).to.equal(false)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
@@ -399,13 +409,11 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
       const dir = tmpDir()
       try {
         fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({workspace: 'acme/acme-prod'}))
-        const deltas: FileDelta[] = [
-          {kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'},
-        ]
+        const deltas: FileDelta[] = [{kind: 'modified', path: 'configs/a.json', beforeJson: '{}', afterJson: '{"v":1}'}]
         const {deps, captured} = makeDeps({
           deltas,
           gitOps: {
-            isGitRepo: async () => true,
+            // qfg-7429.4: bare-path test; clone-path now goes through pack-push which has its own coverage in run-push-pack-path.test.ts
             getRemoteOriginUrl: async () => BACKEND.repoUrl,
             countFilesInRemote: async () => 100,
           },

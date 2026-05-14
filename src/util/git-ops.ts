@@ -36,10 +36,7 @@ export interface RunGitOptions {
  * `GIT_SAFE_ARGS` and merges `GIT_SAFE_ENV` so credential prompts never leak
  * to the user. Errors are re-thrown with tokens redacted from message/stderr.
  */
-export const runGit = async (
-  args: string[],
-  options?: RunGitOptions,
-): Promise<{stdout: string; stderr: string}> => {
+export const runGit = async (args: string[], options?: RunGitOptions): Promise<{stdout: string; stderr: string}> => {
   const env = {...process.env, ...GIT_SAFE_ENV, ...options?.env}
   try {
     return await execFile('git', [...GIT_SAFE_ARGS, ...args], {cwd: options?.cwd, env})
@@ -100,6 +97,43 @@ export const getRemoteUrl = async (dir: string): Promise<string | null> => {
   } catch {
     return null
   }
+}
+
+/**
+ * Return every configured remote URL (one per remote name). Walks the
+ * output of `git remote` and resolves each name's URL via `remote get-url`.
+ *
+ * Returns an empty array when the dir isn't a git repo or has no remotes.
+ * Multi-remote support (qfg-glrd.3): the identity check accepts as long as
+ * any configured remote points at the backend's repo URL.
+ */
+export const getAllRemoteUrls = async (dir: string): Promise<string[]> => {
+  let names: string[]
+  try {
+    const {stdout} = await runGit(['-C', dir, 'remote'])
+    names = stdout
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+
+  const urls: string[] = []
+  for (const name of names) {
+    try {
+      // Sequential by design: each `git remote get-url` spawns its own git
+      // process against the same repo; running them serially keeps git's
+      // index/lock access predictable and the remote count is tiny.
+      // eslint-disable-next-line no-await-in-loop
+      const {stdout} = await runGit(['-C', dir, 'remote', 'get-url', name])
+      const url = stdout.trim()
+      if (url.length > 0) urls.push(url)
+    } catch {
+      /* skip remotes whose URL we can't read */
+    }
+  }
+  return urls
 }
 
 export const isWorkingTreeClean = async (dir: string): Promise<boolean> => {
@@ -165,10 +199,7 @@ export const readFileAtHead = async (dir: string, file: string): Promise<string 
  * made and, if not, why — useful for verbose logging without throwing on
  * the migration path.
  */
-export type PinFixResult =
-  | {kind: 'committed'; slug: string}
-  | {kind: 'clean'}
-  | {kind: 'skipped'; reason: string}
+export type PinFixResult = {kind: 'committed'; slug: string} | {kind: 'clean'} | {kind: 'skipped'; reason: string}
 
 /**
  * Migration helper for legacy state where `qfg pull` wrote the workspace
@@ -181,11 +212,7 @@ export type PinFixResult =
  * changes, when the pin doesn't match the backend slug, or when JSON
  * parsing fails — leaving the user's working tree alone.
  */
-export const commitPinFixIfPinOnly = async (
-  dir: string,
-  file: string,
-  expectedSlug: string,
-): Promise<PinFixResult> => {
+export const commitPinFixIfPinOnly = async (dir: string, file: string, expectedSlug: string): Promise<PinFixResult> => {
   if (!(await hasFileChanges(dir, file))) return {kind: 'clean'}
 
   let workingTreeRaw: string
@@ -222,7 +249,8 @@ export const commitPinFixIfPinOnly = async (
   // Compare working tree vs HEAD ignoring `workspace`. If anything else
   // differs, the user has additional uncommitted edits — leave alone.
   const stripped = (o: Record<string, unknown>): Record<string, unknown> => {
-    const {workspace: _ignored, ...rest} = o
+    const rest = {...o}
+    delete rest.workspace
     return rest
   }
   const a = JSON.stringify(stripped(workingParsed), Object.keys(stripped(workingParsed)).sort())
@@ -338,13 +366,7 @@ export const gitMergeFfOnly = async (dir: string): Promise<string[]> => {
   let newCommits: string[] = []
   try {
     const {stdout: localSha} = await runGit(['-C', dir, 'rev-parse', 'HEAD'])
-    const {stdout: log} = await runGit([
-      '-C',
-      dir,
-      'log',
-      '--pretty=format:%s',
-      `${localSha.trim()}..origin/main`,
-    ])
+    const {stdout: log} = await runGit(['-C', dir, 'log', '--pretty=format:%s', `${localSha.trim()}..origin/main`])
     newCommits = log
       .split('\n')
       .map((s) => s.trim())
@@ -426,7 +448,7 @@ export const gitPullRebase = async (dir: string): Promise<GitPullRebaseResult> =
   try {
     await runGit(['-C', dir, 'pull', '--rebase', 'origin', 'main'])
     return {kind: 'clean', commitsRebased}
-  } catch (err: unknown) {
+  } catch (error: unknown) {
     // Distinguish "rebase paused on conflicts" from "rebase never started".
     // Conflicts: `diff --diff-filter=U` lists the unmerged paths and
     // `.git/rebase-merge/` is present.
@@ -443,7 +465,7 @@ export const gitPullRebase = async (dir: string): Promise<GitPullRebaseResult> =
       // Fall through to 'failed' — diff itself errored.
     }
 
-    const reason = err instanceof Error ? err.message : String(err)
+    const reason = error instanceof Error ? error.message : String(error)
     return {kind: 'failed', reason}
   }
 }

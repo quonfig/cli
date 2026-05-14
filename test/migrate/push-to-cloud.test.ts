@@ -103,7 +103,15 @@ function validFeatureFlag(key: string, value = true): string {
 function emptyReport(source = 'fake'): Parameters<typeof pushMigrationToCloud>[0]['reportData'] {
   return {
     cleanMappings: [],
-    counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 0, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
+    counts: {
+      configsMigrated: 0,
+      environmentsMapped: 0,
+      flagsMigrated: 0,
+      itemsSkipped: 0,
+      logLevelsMigrated: 0,
+      schemasMigrated: 0,
+      segmentsMigrated: 0,
+    },
     dryRun: false,
     environmentMap: [],
     followUp: {mustFixBeforeCutover: [], reviewPostCutover: []},
@@ -147,7 +155,15 @@ describe('pushMigrationToCloud', () => {
           {legacyKey: 'flag-a', quonfigKey: 'flag-a'},
           {legacyKey: 'flag-b', quonfigKey: 'flag-b'},
         ],
-        counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
+        counts: {
+          configsMigrated: 0,
+          environmentsMapped: 0,
+          flagsMigrated: 2,
+          itemsSkipped: 0,
+          logLevelsMigrated: 0,
+          schemasMigrated: 0,
+          segmentsMigrated: 0,
+        },
       },
       source: makeFakeSource(filesByKey),
     })
@@ -185,7 +201,15 @@ describe('pushMigrationToCloud', () => {
       remoteUrl: remote,
       reportData: {
         ...emptyReport(),
-        counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
+        counts: {
+          configsMigrated: 0,
+          environmentsMapped: 0,
+          flagsMigrated: 2,
+          itemsSkipped: 0,
+          logLevelsMigrated: 0,
+          schemasMigrated: 0,
+          segmentsMigrated: 0,
+        },
       },
       source: makeFakeSource(
         new Map([
@@ -197,13 +221,7 @@ describe('pushMigrationToCloud', () => {
 
     // Simulate UI edit: a human flips flag-b's value in the cloud UI (different file than what we'll touch on re-run).
     // The UI-edited file must still verify, otherwise the next migrator push will refuse to commit on top of it (qfg-52qg).
-    addUiCommit(
-      remote,
-      root,
-      'feature-flags/flag-b.json',
-      validFeatureFlag('flag-b', false),
-      'ui: flip flag-b',
-    )
+    addUiCommit(remote, root, 'feature-flags/flag-b.json', validFeatureFlag('flag-b', false), 'ui: flip flag-b')
 
     // Re-run: flag-a is flipped in Launch (updated value) and flag-c is newly added.
     // flag-b is NOT re-exported — simulating that Launch did not change it and we only push the delta.
@@ -219,7 +237,15 @@ describe('pushMigrationToCloud', () => {
           {legacyKey: 'flag-a', quonfigKey: 'flag-a'},
           {legacyKey: 'flag-c', quonfigKey: 'flag-c'},
         ],
-        counts: {configsMigrated: 0, environmentsMapped: 0, flagsMigrated: 2, itemsSkipped: 0, logLevelsMigrated: 0, schemasMigrated: 0, segmentsMigrated: 0},
+        counts: {
+          configsMigrated: 0,
+          environmentsMapped: 0,
+          flagsMigrated: 2,
+          itemsSkipped: 0,
+          logLevelsMigrated: 0,
+          schemasMigrated: 0,
+          segmentsMigrated: 0,
+        },
       },
       source: makeFakeSource(
         new Map([

@@ -1,11 +1,10 @@
 import {expect, test} from '@oclif/test'
 import {http, HttpResponse} from 'msw'
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 
 import {resetClientCache} from '../../../src/util/get-client.js'
 import {conflictHandler, multiOrgHandler, server, unauthorizedHandler} from '../../responses/workspace-create.js'
-import {cleanupTestAuth, setupTestAuth} from '../../test-auth-helper.js'
+import {cleanupTestAuth, setupTestAuth, testTokensPath} from '../../test-auth-helper.js'
 
 // Subcommands with topicSeparator=' ' must be passed as a single id string.
 // See sdk-key.test.ts for the same pattern.
@@ -100,11 +99,7 @@ describe('workspace create — kr7.7 multi-org token resolution', () => {
     return `eyJhbGciOiJSUzI1NiJ9.${payload}.sig`
   }
 
-  const tokensPath = () => {
-    const home = process.env.QUONFIG_CONFIG_HOME
-    if (!home) throw new Error('QUONFIG_CONFIG_HOME unset — setupTestAuth must run before this test')
-    return path.join(home, 'tokens.json')
-  }
+  const tokensPath = testTokensPath
 
   before(() => {
     setupTestAuth()

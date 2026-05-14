@@ -12,6 +12,33 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Inspecting recent changes
+
+When asked "what changed?", "who edited X?", or "did somebody delete Y?", reach
+for the activity commands instead of opening the web app. The CLI wraps the
+server's audit trail directly.
+
+```bash
+# "What changed recently in this workspace?"
+qfg activity feed              # newest first, default 30 entries
+qfg audit-log                  # alias of `activity feed`
+qfg log                        # alias of `activity feed`
+
+# "Who edited my-flag last and when?"
+qfg activity history my-flag   # full per-config commit history
+qfg history my-flag            # alias
+qfg audit-log my-flag          # alias (positional → history)
+
+# "What was deleted, and can I bring it back?"
+qfg activity deleted           # tombstones for unrestored deletions
+qfg activity restore my-flag   # undelete (asks for confirmation)
+```
+
+All commands accept `--json` for scripting. `qfg activity feed --limit N`
+caps the returned entries (1-100). Restore requires a tombstone — if the key
+isn't deleted, the command exits with a clear "not currently deleted" error
+rather than creating a fresh config.
+
 ## Friction Log
 
 Set `QFG_FRICTION_LOG=true` before running `qfg` to capture every nonzero-exit invocation as a JSON line in `.qfg-friction.log` (or pass a file path instead of `true`). Each entry has `ts`, `attempted`, `error`, and `exitCode`.

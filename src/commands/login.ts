@@ -59,7 +59,7 @@ export default class Login extends BaseCommand {
     let browserOpened = false
     const onEnter = (chunk: Buffer): void => {
       if (browserOpened) return
-      if (!chunk.toString().match(/[\r\n]/)) return
+      if (!/[\n\r]/.test(chunk.toString())) return
       browserOpened = true
       openBrowser(deviceAuth.verification_uri_complete)
       this.log('Opening browser...')
@@ -146,9 +146,7 @@ export default class Login extends BaseCommand {
       if (res.ok) {
         const body = (await res.json()) as {json?: WorkspaceEntry[]}
         const list = (body.json ?? body) as unknown as WorkspaceEntry[]
-        const candidates = (Array.isArray(list) ? list : []).filter(
-          (w) => w.workosOrgId === result.defaultOrgId,
-        )
+        const candidates = (Array.isArray(list) ? list : []).filter((w) => w.workosOrgId === result.defaultOrgId)
         candidates.sort((a, b) => a.workspaceSlug.localeCompare(b.workspaceSlug))
         defaultWorkspace = candidates[0]
       } else {

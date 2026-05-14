@@ -92,6 +92,7 @@ function buildBarePathDepsForTest(
   const gitOps: GitOps = {
     isGitRepo: async () => false,
     getRemoteOriginUrl: async (): Promise<string | undefined> => undefined,
+    getAllRemoteUrls: async (): Promise<string[]> => [],
     async setRemoteOrigin() {},
     async fetch() {},
     async diffHeadVsOrigin(dir) {
@@ -104,7 +105,17 @@ function buildBarePathDepsForTest(
     },
     isLocalBehindRemote: async () => false,
     dirtyTrackedFiles: async () => [],
-    getOriginMainSha: async () => undefined,
+    getOriginMainSha: async (): Promise<string | undefined> => undefined,
+    // Pack-push (qfg-7429.4) — bare-path tests never reach the pack-push
+    // dispatch (isGitRepo=false), so these stubs exist purely to satisfy
+    // the GitOps interface type-check.
+    getCurrentBranch: async () => ({kind: 'branch', name: 'main'}),
+    getHeadSha: async () => '0000000000000000000000000000000000000000',
+    getRemoteBranchSha: async (): Promise<string | undefined> => undefined,
+    buildPack: async () => new Uint8Array(0),
+    countCommitsBetween: async () => 0,
+    getCommitOneline: async (_dir: string, sha: string) => sha.slice(0, 7),
+    getTreeShaForRef: async (): Promise<string | undefined> => undefined,
   }
 
   const backend: GiteaTokenMintResult = {
@@ -125,6 +136,9 @@ function buildBarePathDepsForTest(
     async pushToServer(input) {
       calls.pushToServer.push(input)
       return {kind: 'success', commitSha: 'fake-sha-1234'}
+    },
+    async pushPackToServer() {
+      throw new Error('pushPackToServer should not be called in bare-path tests')
     },
     confirmIO: io,
     log() {},

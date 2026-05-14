@@ -70,6 +70,8 @@ export const QUONFIG_SUPPORTED_OPERATORS = new Set<string>([
   'PROP_AFTER',
   'PROP_MATCHES',
   'PROP_DOES_NOT_MATCH',
+  'IS_PRESENT',
+  'IS_NOT_PRESENT',
   'IN_SEG',
   'NOT_IN_SEG',
   'IN_INT_RANGE',

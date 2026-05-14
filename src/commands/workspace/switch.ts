@@ -100,51 +100,6 @@ export default class WorkspaceSwitch extends BaseCommand {
   }
 
   /**
-   * Resolve the user's positional arg against the candidate list.
-   *
-   * - `org/ws` form (preferred) → match by both org slug and workspace slug.
-   * - UUID → workspaceId match (kept for back-compat with scripts that
-   *   pass IDs straight through). Bare slug is rejected with the same
-   *   migration message used elsewhere in the CLI.
-   */
-  private matchByArg(
-    arg: string,
-    candidates: WorkspaceEntry[],
-    store: NonNullable<Awaited<ReturnType<typeof loadTokens>>>,
-  ): {match: WorkspaceEntry} | {error: string} {
-    if (UUID_PATTERN.test(arg)) {
-      const found = candidates.find((w) => w.workspaceId === arg)
-      if (!found) return {error: `Workspace UUID "${arg}" not found among your accessible workspaces.`}
-      return {match: found}
-    }
-
-    const pin = tryParseWorkspacePin(arg)
-    if (!pin) {
-      return {
-        error:
-          'Workspace argument must be in `<org-slug>/<workspace-slug>` form (e.g. acme/production). ' +
-          'Bare workspace slugs are no longer accepted.',
-      }
-    }
-
-    const orgId = findOrgIdBySlug(store, pin.orgSlug)
-    if (!orgId) {
-      return {error: `No token found for org \`${pin.orgSlug}\`. Run \`qfg login\` to add this org.`}
-    }
-
-    const found = candidates.find((w) => w.workosOrgId === orgId && w.workspaceSlug === pin.workspaceSlug)
-    if (!found) {
-      const inOrg = candidates.filter((w) => w.workosOrgId === orgId).map((w) => w.workspaceSlug)
-      const available = inOrg.length > 0 ? inOrg.join(', ') : '(none)'
-      return {
-        error: `Workspace "${pin.workspaceSlug}" not found in org "${pin.orgSlug}". Available: ${available}.`,
-      }
-    }
-
-    return {match: found}
-  }
-
-  /**
    * Iterate every cached org and merge its workspace list. Each org has its
    * own access token; one token only sees one org's workspaces. We tolerate
    * a single org's failure (verbose-log it) so a stale token in one org
@@ -190,6 +145,51 @@ export default class WorkspaceSwitch extends BaseCommand {
     }
 
     return [...merged.values()]
+  }
+
+  /**
+   * Resolve the user's positional arg against the candidate list.
+   *
+   * - `org/ws` form (preferred) → match by both org slug and workspace slug.
+   * - UUID → workspaceId match (kept for back-compat with scripts that
+   *   pass IDs straight through). Bare slug is rejected with the same
+   *   migration message used elsewhere in the CLI.
+   */
+  private matchByArg(
+    arg: string,
+    candidates: WorkspaceEntry[],
+    store: NonNullable<Awaited<ReturnType<typeof loadTokens>>>,
+  ): {match: WorkspaceEntry} | {error: string} {
+    if (UUID_PATTERN.test(arg)) {
+      const found = candidates.find((w) => w.workspaceId === arg)
+      if (!found) return {error: `Workspace UUID "${arg}" not found among your accessible workspaces.`}
+      return {match: found}
+    }
+
+    const pin = tryParseWorkspacePin(arg)
+    if (!pin) {
+      return {
+        error:
+          'Workspace argument must be in `<org-slug>/<workspace-slug>` form (e.g. acme/production). ' +
+          'Bare workspace slugs are no longer accepted.',
+      }
+    }
+
+    const orgId = findOrgIdBySlug(store, pin.orgSlug)
+    if (!orgId) {
+      return {error: `No token found for org \`${pin.orgSlug}\`. Run \`qfg login\` to add this org.`}
+    }
+
+    const found = candidates.find((w) => w.workosOrgId === orgId && w.workspaceSlug === pin.workspaceSlug)
+    if (!found) {
+      const inOrg = candidates.filter((w) => w.workosOrgId === orgId).map((w) => w.workspaceSlug)
+      const available = inOrg.length > 0 ? inOrg.join(', ') : '(none)'
+      return {
+        error: `Workspace "${pin.workspaceSlug}" not found in org "${pin.orgSlug}". Available: ${available}.`,
+      }
+    }
+
+    return {match: found}
   }
 }
 

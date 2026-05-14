@@ -23,6 +23,18 @@ function slugify(value: string): string {
     .replaceAll(/^-|-$/g, '')
 }
 
+function requireSlug(
+  workosOrgId: string,
+  orgSlug: string | undefined,
+): {workosOrgId: string; orgSlug: string} | {error: string} {
+  if (!orgSlug) {
+    return {
+      error: `Org \`${workosOrgId}\` is missing its slug locally. Run \`qfg login\` to refresh your org list.`,
+    }
+  }
+  return {workosOrgId, orgSlug}
+}
+
 type CreateResponse = {
   workspaceId: string
   workspaceSlug: string
@@ -170,6 +182,28 @@ export default class WorkspaceCreate extends BaseCommand {
   }
 
   /**
+   * oRPC surfaces structured errors as {json: {code, message, ...}} or
+   * {error: {...}}. Extract the message for display; fall back to raw
+   * text when the body isn't JSON.
+   */
+  private async extractErrorMessage(res: Response): Promise<string> {
+    try {
+      const body = (await res.clone().json()) as {
+        json?: {message?: string; code?: string}
+        error?: {message?: string; code?: string}
+        message?: string
+      }
+      return body.json?.message || body.error?.message || body.message || ''
+    } catch {
+      try {
+        return await res.text()
+      } catch {
+        return ''
+      }
+    }
+  }
+
+  /**
    * Pick the org for the new workspace from the per-org token store.
    *
    * - 0 orgs → "No orgs found. Run `qfg login` first."
@@ -193,18 +227,13 @@ export default class WorkspaceCreate extends BaseCommand {
 
     const entries = Object.entries(store.tokensByOrg)
 
-    const requireSlug = (workosOrgId: string, orgSlug: string | undefined): {workosOrgId: string; orgSlug: string} | {error: string} => {
-      if (!orgSlug) {
-        return {error: `Org \`${workosOrgId}\` is missing its slug locally. Run \`qfg login\` to refresh your org list.`}
-      }
-      return {workosOrgId, orgSlug}
-    }
-
     if (flagOrg) {
       if (UUID_PATTERN.test(flagOrg)) {
         const tokens = store.tokensByOrg[flagOrg]
         if (!tokens) {
-          return {error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`}
+          return {
+            error: `Org \`${flagOrg}\` not found in your token store. Run \`qfg login\` to refresh your org list.`,
+          }
         }
 
         return requireSlug(flagOrg, tokens.org_slug)
@@ -225,33 +254,11 @@ export default class WorkspaceCreate extends BaseCommand {
 
     const slugList = entries
       .map(([, tokens]) => tokens.org_slug)
-      .filter((s): s is string => Boolean(s))
+      .filter(Boolean)
       .join(', ')
     const orgList = slugList || entries.map(([orgId]) => orgId).join(', ')
     return {
       error: `You are a member of multiple orgs. Specify --org <org-slug> to indicate which org to create the workspace in. Your orgs: ${orgList}.`,
-    }
-  }
-
-  /**
-   * oRPC surfaces structured errors as {json: {code, message, ...}} or
-   * {error: {...}}. Extract the message for display; fall back to raw
-   * text when the body isn't JSON.
-   */
-  private async extractErrorMessage(res: Response): Promise<string> {
-    try {
-      const body = (await res.clone().json()) as {
-        json?: {message?: string; code?: string}
-        error?: {message?: string; code?: string}
-        message?: string
-      }
-      return body.json?.message || body.error?.message || body.message || ''
-    } catch {
-      try {
-        return await res.text()
-      } catch {
-        return ''
-      }
     }
   }
 }

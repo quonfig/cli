@@ -645,7 +645,7 @@ describe('validate', () => {
   })
 
   describe('access enum validation (qfg-azk.1)', () => {
-    function configWithAccess(access: unknown): Map<string, string> {
+    function configWithAccess(access?: unknown): Map<string, string> {
       const config: Record<string, unknown> = {
         key: 'my-config',
         type: 'config',
@@ -683,7 +683,7 @@ describe('validate', () => {
     }
 
     it('accepts a config with no access field (defaults apply)', () => {
-      const result = validateFileMap(configWithAccess(undefined))
+      const result = validateFileMap(configWithAccess())
       expect(result.valid, JSON.stringify(result.issues)).to.be.true
       expect(result.issues).to.be.empty
     })
@@ -762,5 +762,61 @@ describe('validate', () => {
         expect(result.issues).to.be.empty
       })
     }
+  })
+
+  // qfg-7jnb.8: IS_PRESENT / IS_NOT_PRESENT take only `propertyName` and
+  // intentionally have no `valueToMatch`. Verify must accept both shapes.
+  describe('presence operators (IS_PRESENT / IS_NOT_PRESENT)', () => {
+    function flagWithPresence(operator: 'IS_PRESENT' | 'IS_NOT_PRESENT'): Map<string, string> {
+      const flag = {
+        key: 'gated-feature',
+        type: 'feature_flag',
+        valueType: 'bool',
+        default: {
+          rules: [
+            {
+              criteria: [{operator, propertyName: 'user.email'}],
+              value: {type: 'bool', value: true},
+            },
+            {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+          ],
+        },
+        environments: [],
+        variants: [],
+      }
+      return new Map<string, string>([['feature-flags/gated-feature.json', JSON.stringify(flag)]])
+    }
+
+    it('accepts a rule using IS_PRESENT with only propertyName (no valueToMatch)', () => {
+      const result = validateFileMap(flagWithPresence('IS_PRESENT'))
+      expect(result.valid, JSON.stringify(result.issues)).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('accepts a rule using IS_NOT_PRESENT with only propertyName (no valueToMatch)', () => {
+      const result = validateFileMap(flagWithPresence('IS_NOT_PRESENT'))
+      expect(result.valid, JSON.stringify(result.issues)).to.be.true
+      expect(result.issues).to.be.empty
+    })
+
+    it('errors when IS_PRESENT is missing propertyName', () => {
+      const flag = {
+        key: 'gated-feature',
+        type: 'feature_flag',
+        valueType: 'bool',
+        default: {
+          rules: [
+            {criteria: [{operator: 'IS_PRESENT'}], value: {type: 'bool', value: true}},
+            {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+          ],
+        },
+        environments: [],
+        variants: [],
+      }
+      const result = validateFileMap(new Map([['feature-flags/gated-feature.json', JSON.stringify(flag)]]))
+      expect(result.valid).to.be.false
+      const propIssues = result.issues.filter((i) => i.message.includes('requires propertyName'))
+      expect(propIssues, JSON.stringify(result.issues)).to.have.length(1)
+    })
   })
 })

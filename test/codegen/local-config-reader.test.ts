@@ -131,6 +131,33 @@ describe('LocalConfigReader', () => {
       expect(JSON.parse(firstValue.value.json!.json)).to.deep.equal({name: 'example', count: 42})
     })
 
+    it('expands weighted_values rules into multiple row values, one per variant', async () => {
+      // Regression: pre-fix, mapGitValue's default branch put the
+      // weighted_values wrapper object into valueObj.value.string, so
+      // codegen later called .match() on it and crashed. See
+      // mhw-works/forcerankit homepage.hero.headline for the live example.
+      const reader = new LocalConfigReader(FIXTURE_DIR)
+      const result = await reader.read()
+
+      const config = result.configs.find((c) => c.key === 'my.weighted-string-config')
+      expect(config).to.exist
+      // 1 default rule (string) + 1 production rule (weighted_values, 2 variants)
+      expect(config!.rows).to.have.length(2)
+
+      const defaultRow = config!.rows[0]
+      expect(defaultRow.values).to.have.length(1)
+      expect(defaultRow.values[0].value.string).to.equal('default')
+
+      const weightedRow = config!.rows[1]
+      expect(weightedRow.values).to.have.length(2)
+      expect(weightedRow.values[0].value.string).to.equal('Hello, {{name}}!')
+      expect(weightedRow.values[1].value.string).to.equal('Hi {{firstName}}')
+      // Every value.string is an actual string, not the wrapper object.
+      for (const v of weightedRow.values) {
+        expect(v.value.string).to.be.a('string')
+      }
+    })
+
     it('reads schemas directory', async () => {
       const reader = new LocalConfigReader(FIXTURE_DIR)
       const result = await reader.read()

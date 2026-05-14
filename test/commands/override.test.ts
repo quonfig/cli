@@ -3,7 +3,7 @@ import {expect, test} from '@oclif/test'
 import {resetClientCache} from '../../src/util/get-client.js'
 import * as overrideResponses from '../responses/override.js'
 import {TEST_USER_EMAIL, server} from '../responses/override.js'
-import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
+import {cleanupTestAuth, disableAuth, setupTestAuth} from '../test-auth-helper.js'
 
 describe('override', () => {
   before(() => {
@@ -159,7 +159,7 @@ describe('override', () => {
     // Use a private describe block: tear down auth before, restore after.
     let restored = false
     before(() => {
-      cleanupTestAuth()
+      disableAuth()
     })
     after(() => {
       if (!restored) {
