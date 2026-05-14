@@ -14,11 +14,18 @@ async function git(dir: string, ...args: string[]): Promise<string> {
   return stdout
 }
 
+async function configureIdentity(dir: string): Promise<void> {
+  // CI runners have no global git identity; a freshly cloned repo inherits
+  // nothing, so commits abort with "empty ident name". Set a fake identity
+  // on every repo we commit into (qfg-fboj).
+  await git(dir, 'config', 'user.email', 'test@quonfig.invalid')
+  await git(dir, 'config', 'user.name', 'qfg test')
+  await git(dir, 'config', 'commit.gpgsign', 'false')
+}
+
 async function initRepo(dir: string): Promise<void> {
   await git(dir, 'init', '-q', '-b', 'main')
-  await git(dir, 'config', 'user.email', 'test@quonfig.test')
-  await git(dir, 'config', 'user.name', 'Test')
-  await git(dir, 'config', 'commit.gpgsign', 'false')
+  await configureIdentity(dir)
 }
 
 async function commitFile(dir: string, file: string, content: string, msg: string): Promise<void> {
@@ -76,6 +83,7 @@ describe('isLocalBehindOrDivergedFromRemote (qfg-fboj)', () => {
 
       // Local clones at HEAD = commit one.
       await execFile('git', ['clone', '-q', remote, local])
+      await configureIdentity(local)
 
       // Producer adds commit two, pushes to remote — local is now stale.
       await commitFile(producer, 'a.json', '{"v":2}', 'two')
@@ -101,6 +109,7 @@ describe('isLocalBehindOrDivergedFromRemote (qfg-fboj)', () => {
       await git(producer, 'push', '-q', 'origin', 'main')
 
       await execFile('git', ['clone', '-q', remote, local])
+      await configureIdentity(local)
 
       // Local commits something on top of base.
       await commitFile(local, 'b.json', '{"local":true}', 'local-only')
