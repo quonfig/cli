@@ -44,10 +44,7 @@
               "propertyName": "user.key",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "alice",
-                  "bob"
-                ]
+                "value": ["alice", "bob"]
               }
             }
           ],

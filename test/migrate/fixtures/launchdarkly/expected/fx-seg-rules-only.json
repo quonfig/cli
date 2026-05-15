@@ -11,9 +11,7 @@
             "propertyName": "user.country",
             "valueToMatch": {
               "type": "string_list",
-              "value": [
-                "US"
-              ]
+              "value": ["US"]
             }
           }
         ],

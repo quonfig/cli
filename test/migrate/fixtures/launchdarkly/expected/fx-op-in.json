@@ -44,10 +44,7 @@
               "propertyName": "user.email",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "a@x.com",
-                  "b@x.com"
-                ]
+                "value": ["a@x.com", "b@x.com"]
               }
             }
           ],

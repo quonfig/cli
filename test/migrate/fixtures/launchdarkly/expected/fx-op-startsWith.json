@@ -44,9 +44,7 @@
               "propertyName": "user.name",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "test-"
-                ]
+                "value": ["test-"]
               }
             }
           ],

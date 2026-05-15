@@ -44,10 +44,7 @@
               "propertyName": "organization.key",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "org-acme",
-                  "org-globex"
-                ]
+                "value": ["org-acme", "org-globex"]
               }
             }
           ],

@@ -44,9 +44,7 @@
               "propertyName": "organization.plan",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "enterprise"
-                ]
+                "value": ["enterprise"]
               }
             }
           ],

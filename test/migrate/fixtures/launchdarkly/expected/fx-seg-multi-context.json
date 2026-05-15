@@ -11,9 +11,7 @@
             "propertyName": "organization.key",
             "valueToMatch": {
               "type": "string_list",
-              "value": [
-                "org-c"
-              ]
+              "value": ["org-c"]
             }
           }
         ],
@@ -29,10 +27,7 @@
             "propertyName": "organization.key",
             "valueToMatch": {
               "type": "string_list",
-              "value": [
-                "org-b",
-                "org-a"
-              ]
+              "value": ["org-b", "org-a"]
             }
           }
         ],

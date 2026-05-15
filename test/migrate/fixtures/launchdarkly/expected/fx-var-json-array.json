@@ -12,11 +12,7 @@
         ],
         "value": {
           "type": "json",
-          "value": [
-            1,
-            2,
-            3
-          ]
+          "value": [1, 2, 3]
         }
       }
     ]
@@ -33,11 +29,7 @@
           ],
           "value": {
             "type": "json",
-            "value": [
-              "a",
-              "b",
-              "c"
-            ]
+            "value": ["a", "b", "c"]
           }
         }
       ]
@@ -53,11 +45,7 @@
           ],
           "value": {
             "type": "json",
-            "value": [
-              1,
-              2,
-              3
-            ]
+            "value": [1, 2, 3]
           }
         }
       ]
@@ -67,22 +55,14 @@
     {
       "value": {
         "type": "json",
-        "value": [
-          1,
-          2,
-          3
-        ]
+        "value": [1, 2, 3]
       },
       "name": "[1, 2, 3]"
     },
     {
       "value": {
         "type": "json",
-        "value": [
-          "a",
-          "b",
-          "c"
-        ]
+        "value": ["a", "b", "c"]
       },
       "name": "['a', 'b', 'c']"
     },

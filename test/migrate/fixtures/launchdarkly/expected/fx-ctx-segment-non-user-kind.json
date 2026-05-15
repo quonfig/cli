@@ -11,10 +11,7 @@
             "propertyName": "device.key",
             "valueToMatch": {
               "type": "string_list",
-              "value": [
-                "device-1",
-                "device-2"
-              ]
+              "value": ["device-1", "device-2"]
             }
           }
         ],

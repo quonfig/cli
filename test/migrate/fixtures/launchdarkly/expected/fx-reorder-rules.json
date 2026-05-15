@@ -44,9 +44,7 @@
               "propertyName": "user.country",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "GB"
-                ]
+                "value": ["GB"]
               }
             }
           ],
@@ -62,9 +60,7 @@
               "propertyName": "user.country",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "CA"
-                ]
+                "value": ["CA"]
               }
             }
           ],
@@ -80,9 +76,7 @@
               "propertyName": "user.country",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "US"
-                ]
+                "value": ["US"]
               }
             }
           ],

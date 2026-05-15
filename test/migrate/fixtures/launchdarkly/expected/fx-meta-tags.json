@@ -69,11 +69,5 @@
   ],
   "name": "fx meta tags",
   "description": "",
-  "tags": [
-    "alpha-1",
-    "beta_2",
-    "imp0rt",
-    "release-2025",
-    "ui"
-  ]
+  "tags": ["alpha-1", "beta_2", "imp0rt", "release-2025", "ui"]
 }

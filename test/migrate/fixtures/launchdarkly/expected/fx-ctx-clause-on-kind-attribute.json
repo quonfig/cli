@@ -44,9 +44,7 @@
               "propertyName": "user.kind",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "organization"
-                ]
+                "value": ["organization"]
               }
             }
           ],

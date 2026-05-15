@@ -44,9 +44,7 @@
               "propertyName": "user.email",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "+beta"
-                ]
+                "value": ["+beta"]
               }
             }
           ],

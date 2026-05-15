@@ -44,9 +44,7 @@
               "propertyName": "user.key",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "carol"
-                ]
+                "value": ["carol"]
               }
             }
           ],
@@ -62,9 +60,7 @@
               "propertyName": "organization.key",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "org-initech"
-                ]
+                "value": ["org-initech"]
               }
             }
           ],

@@ -44,9 +44,7 @@
               "propertyName": "user.email",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "@acme.com"
-                ]
+                "value": ["@acme.com"]
               }
             },
             {
@@ -54,9 +52,7 @@
               "propertyName": "user.role",
               "valueToMatch": {
                 "type": "string_list",
-                "value": [
-                  "admin"
-                ]
+                "value": ["admin"]
               }
             }
           ],

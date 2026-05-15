@@ -11,9 +11,7 @@
             "propertyName": "user.country",
             "valueToMatch": {
               "type": "string_list",
-              "value": [
-                "US"
-              ]
+              "value": ["US"]
             }
           }
         ],
@@ -29,9 +27,7 @@
             "propertyName": "user.country",
             "valueToMatch": {
               "type": "string_list",
-              "value": [
-                "CA"
-              ]
+              "value": ["CA"]
             }
           }
         ],
