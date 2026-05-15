@@ -372,6 +372,20 @@ const renderRebucketedRollouts = (notes: ConversionNote[] | undefined): null | s
   return lines.join('\n')
 }
 
+/**
+ * Categories that are pure informational noise (drowned out the signal in the
+ * 172-note LD migration report — see qfg-ve5w). Render as a 1-line rollup +
+ * collapsible `<details>` block instead of N top-level bullets.
+ */
+const COLLAPSED_CATEGORIES: Partial<Record<ConversionNoteCategory, (count: number) => string>> = {
+  'dropped-maintainer': (count) =>
+    `${count} flag${count === 1 ? '' : 's'} had a maintainer ID dropped. Intentional — Quonfig authorship lives in ` +
+    `git history. No action required.`,
+  'dropped-mobile-key-availability': (count) =>
+    `${count} flag${count === 1 ? '' : 's'} had \`usingMobileKey:true\` collapsed into the single \`sendToClientSdk\` ` +
+    `boolean. No action required.`,
+}
+
 const renderConversionNotes = (notes: ConversionNote[] | undefined): null | string => {
   // `skipped-config` (own section) and `rebucketed-rollout` (own section) are
   // rendered elsewhere — everything else is grouped by category here.
@@ -389,6 +403,17 @@ const renderConversionNotes = (notes: ConversionNote[] | undefined): null | stri
     if (forCategory.length === 0) continue
     lines.push('', `### ${CONVERSION_NOTE_HEADINGS[category]}`, '')
     const sorted = [...forCategory].sort((a, b) => a.key.localeCompare(b.key))
+    const rollup = COLLAPSED_CATEGORIES[category]
+    if (rollup) {
+      lines.push(rollup(sorted.length), '', '<details><summary>Per-flag list</summary>', '')
+      for (const note of sorted) {
+        lines.push(`- \`${note.key}\` — ${note.detail}`)
+      }
+
+      lines.push('', '</details>')
+      continue
+    }
+
     for (const note of sorted) {
       lines.push(`- \`${note.key}\` — ${note.detail}`)
     }

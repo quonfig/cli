@@ -267,6 +267,95 @@ describe('migrate/migration-report', () => {
         )
         expect(md).to.not.match(/^##\s*Conversion notes/m)
       })
+
+      const sliceSubsection = (md: string, heading: string): string => {
+        const start = md.indexOf(heading)
+        if (start === -1) return ''
+        const nextHeader = md.indexOf('\n## ', start)
+        const nextSubheader = md.indexOf('\n### ', start + 1)
+        const candidates = [nextHeader, nextSubheader].filter((i) => i > -1)
+        const sectionEnd = candidates.length === 0 ? md.length : Math.min(...candidates)
+        return md.slice(start, sectionEnd)
+      }
+
+      const countTopLevelBullets = (section: string): number => {
+        let insideDetails = false
+        let count = 0
+        for (const line of section.split('\n')) {
+          if (line.includes('<details')) insideDetails = true
+          if (!insideDetails && line.startsWith('- ')) count++
+          if (line.includes('</details>')) insideDetails = false
+        }
+
+        return count
+      }
+
+      it('collapses dropped-maintainer entries into a 1-line rollup + <details> block (qfg-ve5w)', () => {
+        const maintainerNotes: ConversionNote[] = []
+        for (let i = 0; i < 80; i++) {
+          maintainerNotes.push({
+            category: 'dropped-maintainer',
+            detail: `maintainerId user-${i} dropped`,
+            key: `flag-${i.toString().padStart(3, '0')}`,
+          })
+        }
+
+        const md = buildMigrationReport(baseData({conversionNotes: maintainerNotes, source: 'launchdarkly'}))
+        const section = sliceSubsection(md, '### Dropped maintainer metadata')
+        expect(section, 'subsection present').to.not.equal('')
+
+        // The per-flag list is inside <details>, so it is NOT rendered as 80
+        // top-level bullets at the section level.
+        expect(countTopLevelBullets(section), 'top-level bullets in maintainer subsection').to.equal(0)
+
+        expect(section).to.include('<details>')
+        expect(section).to.include('</details>')
+        expect(section).to.match(/80 flag/i)
+        // Per-flag entries are still present (just collapsed).
+        expect(section).to.include('flag-000')
+        expect(section).to.include('flag-079')
+      })
+
+      it('collapses dropped-mobile-key-availability entries into a 1-line rollup + <details> block (qfg-ve5w)', () => {
+        const mobileNotes: ConversionNote[] = []
+        for (let i = 0; i < 80; i++) {
+          mobileNotes.push({
+            category: 'dropped-mobile-key-availability',
+            detail: 'usingMobileKey:true collapsed into sendToClientSdk',
+            key: `mflag-${i.toString().padStart(3, '0')}`,
+          })
+        }
+
+        const md = buildMigrationReport(baseData({conversionNotes: mobileNotes, source: 'launchdarkly'}))
+        const section = sliceSubsection(md, '### Dropped mobile-key availability')
+        expect(section, 'subsection present').to.not.equal('')
+
+        expect(section).to.include('<details>')
+        expect(section).to.match(/80 flag/i)
+        expect(section).to.include('mflag-000')
+      })
+
+      it('keeps signal categories (prereqs, individual-targets, unexportable-segments) as un-collapsed per-flag bullets', () => {
+        const md = buildMigrationReport(
+          baseData({
+            conversionNotes: [
+              {category: 'dropped-prerequisite', detail: 'prereq dropped', key: 'gated-a'},
+              {category: 'dropped-prerequisite', detail: 'prereq dropped', key: 'gated-b'},
+              {category: 'individual-target-as-rule', detail: 'targets to rule', key: 'vip-flag'},
+              {category: 'unexportable-segment-membership', detail: 'big segment', key: 'big-seg'},
+            ],
+            source: 'launchdarkly',
+          }),
+        )
+        const section = md.slice(md.indexOf('## Conversion notes'))
+        // None of the signal subsections wrap their bullets in <details>.
+        const prereqStart = section.indexOf('### Dropped prerequisites')
+        const prereqEnd = section.indexOf('\n### ', prereqStart + 1)
+        const prereqBody = section.slice(prereqStart, prereqEnd > -1 ? prereqEnd : undefined)
+        expect(prereqBody).to.not.include('<details>')
+        expect(prereqBody).to.include('- `gated-a`')
+        expect(prereqBody).to.include('- `gated-b`')
+      })
     })
 
     describe('Before you cut over (TL;DR — qfg-e8md)', () => {
