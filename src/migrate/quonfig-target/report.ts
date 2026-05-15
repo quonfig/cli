@@ -52,6 +52,12 @@ export interface ConversionNote {
   detail: string
   /** Source key the note is about (flag or segment key). */
   key: string
+  /**
+   * Structured prereq edges on `dropped-prerequisite` notes — the renderer uses
+   * this to produce the inverted "orphaned parent → downstream consumers" view
+   * (qfg-nb4n). Absent on every other category.
+   */
+  prerequisites?: Array<{parentKey: string; variation: number}>
 }
 
 /**
@@ -66,8 +72,15 @@ export class ConversionReport {
     return this.notes.length
   }
 
-  add(category: ConversionNoteCategory, key: string, detail: string): void {
-    this.notes.push({category, detail, key})
+  add(
+    category: ConversionNoteCategory,
+    key: string,
+    detail: string,
+    extras?: {prerequisites?: Array<{parentKey: string; variation: number}>},
+  ): void {
+    const note: ConversionNote = {category, detail, key}
+    if (extras?.prerequisites) note.prerequisites = extras.prerequisites
+    this.notes.push(note)
   }
 
   /** All notes, in insertion order. */

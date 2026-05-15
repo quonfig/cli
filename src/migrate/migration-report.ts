@@ -398,6 +398,61 @@ const COLLAPSED_CATEGORIES: Partial<Record<ConversionNoteCategory, (count: numbe
     `boolean. Each flag is still client-visible via \`usingEnvironmentId\`. No action required.`,
 }
 
+/**
+ * Render the `dropped-prerequisite` subsection (qfg-nb4n): one multi-line entry
+ * per child flag with nested parent bullets naming each variation index, plus
+ * a trailing inverted view that lists each orphaned parent and its downstream
+ * consumers. Returns the rendered lines (without the `### …` header — that is
+ * pushed by the caller so the section grouping stays consistent).
+ */
+const renderDroppedPrerequisiteBody = (notes: ConversionNote[]): string[] => {
+  const sorted = [...notes].sort((a, b) => a.key.localeCompare(b.key))
+  const lines: string[] = []
+
+  // Forward view: child flag → parents.
+  for (const note of sorted) {
+    const edges = note.prerequisites
+    if (!edges || edges.length === 0) {
+      // Backward-compat fallback when a future caller forgets the structured payload.
+      lines.push(`- \`${note.key}\` — ${note.detail}`)
+      continue
+    }
+
+    lines.push(
+      `- \`${note.key}\` evaluated independently of its ${edges.length} parent${edges.length === 1 ? '' : 's'}:`,
+    )
+    for (const edge of edges) {
+      lines.push(`  - was gated on \`${edge.parentKey}\` = variation ${edge.variation}`)
+    }
+
+    lines.push('  To preserve the gate, add a leading rule matching the same parent state, or wrap reads in app code.')
+  }
+
+  // Inverted view: parent → children that depended on it.
+  const parentToChildren = new Map<string, Set<string>>()
+  for (const note of sorted) {
+    for (const edge of note.prerequisites ?? []) {
+      const set = parentToChildren.get(edge.parentKey) ?? new Set<string>()
+      set.add(note.key)
+      parentToChildren.set(edge.parentKey, set)
+    }
+  }
+
+  if (parentToChildren.size > 0) {
+    lines.push('', '#### Orphaned parent flags (inverted view)', '')
+    const parents = [...parentToChildren.keys()].sort((a, b) => a.localeCompare(b))
+    for (const parent of parents) {
+      const children = [...(parentToChildren.get(parent) ?? [])].sort((a, b) => a.localeCompare(b))
+      const childList = children.map((c) => `\`${c}\``).join(', ')
+      lines.push(
+        `- **\`${parent}\`** is now an orphaned dependency. Downstream flags that depended on it: ${childList}.`,
+      )
+    }
+  }
+
+  return lines
+}
+
 const renderConversionNotes = (notes: ConversionNote[] | undefined): null | string => {
   // `skipped-config` (own section) and `rebucketed-rollout` (own section) are
   // rendered elsewhere — everything else is grouped by category here.
@@ -423,6 +478,11 @@ const renderConversionNotes = (notes: ConversionNote[] | undefined): null | stri
       }
 
       lines.push('', '</details>')
+      continue
+    }
+
+    if (category === 'dropped-prerequisite') {
+      lines.push(...renderDroppedPrerequisiteBody(sorted))
       continue
     }
 

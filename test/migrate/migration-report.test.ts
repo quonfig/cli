@@ -376,6 +376,54 @@ describe('migrate/migration-report', () => {
         expect(section).to.include('- `mobile-only-b`')
       })
 
+      it('renders enriched dropped-prerequisite forward bullets + inverted orphan-parent view (qfg-nb4n)', () => {
+        const md = buildMigrationReport(
+          baseData({
+            conversionNotes: [
+              {
+                category: 'dropped-prerequisite',
+                detail: 'evaluated independently of 2 parent(s)',
+                key: 'fx-prereq-multiple',
+                prerequisites: [
+                  {parentKey: 'fx-prereq-target-bool', variation: 0},
+                  {parentKey: 'fx-prereq-target-bool-2', variation: 1},
+                ],
+              },
+              {
+                category: 'dropped-prerequisite',
+                detail: 'evaluated independently of 1 parent',
+                key: 'fx-prereq-single-boolean',
+                prerequisites: [{parentKey: 'fx-prereq-target-bool', variation: 0}],
+              },
+            ],
+            source: 'launchdarkly',
+          }),
+        )
+
+        const start = md.indexOf('### Dropped prerequisites')
+        const end = md.indexOf('\n### ', start + 1)
+        const section = md.slice(start, end === -1 ? undefined : end)
+
+        // Forward view: child flag + parent variation indices appear together.
+        expect(section).to.include('fx-prereq-multiple')
+        expect(section).to.include('fx-prereq-target-bool')
+        expect(section).to.include('fx-prereq-target-bool-2')
+        expect(section).to.match(/variation 0/)
+        expect(section).to.match(/variation 1/)
+        // Remediation copy is rendered.
+        expect(section).to.match(/leading rule|wrap reads|app code/i)
+
+        // Inverted view: an orphan-parent rollup names each parent and its
+        // downstream consumers (children that gated on it).
+        expect(section).to.match(/orphaned/i)
+        // fx-prereq-target-bool is depended on by BOTH children.
+        const orphanIdx = section.indexOf('orphaned')
+        const orphanBlock = section.slice(orphanIdx)
+        expect(orphanBlock).to.include('fx-prereq-target-bool')
+        expect(orphanBlock).to.include('fx-prereq-multiple')
+        expect(orphanBlock).to.include('fx-prereq-single-boolean')
+      })
+
       it('keeps signal categories (prereqs, individual-targets, unexportable-segments) as un-collapsed per-flag bullets', () => {
         const md = buildMigrationReport(
           baseData({

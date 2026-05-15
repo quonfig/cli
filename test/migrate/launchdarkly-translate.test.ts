@@ -143,6 +143,69 @@ describe('migrate/sources/launchdarkly/translate', () => {
       expect(report.byCategory('dropped-mobile-key-now-server-only')).to.have.length(0)
     })
 
+    it('enriches a dropped-prerequisite note with each parent variation index + remediation copy (qfg-nb4n)', () => {
+      // A flag gated on TWO parents in LaunchDarkly. The conversion-note should
+      // name both parent keys, both variation indices, and include a one-line
+      // remediation hint so a human knows how to restore the gate.
+      const report = new ConversionReport()
+      const flag: LDFlag = {
+        environments: {
+          production: {
+            fallthrough: {variation: 0},
+            on: true,
+            prerequisites: [
+              {key: 'fx-prereq-target-bool', variation: 0},
+              {key: 'fx-prereq-target-bool-2', variation: 1},
+            ],
+          },
+        },
+        key: 'fx-prereq-multiple',
+        kind: 'boolean',
+        variations: [{value: true}, {value: false}],
+      }
+      translateFlag(flag, report)
+
+      const notes = report.byCategory('dropped-prerequisite')
+      expect(notes, 'one consolidated note per child flag').to.have.length(1)
+      const note = notes[0]
+      expect(note.key).to.equal('fx-prereq-multiple')
+      expect(note.detail).to.include('fx-prereq-target-bool')
+      expect(note.detail).to.include('fx-prereq-target-bool-2')
+      // Both variation indices must be named, not just the parent keys.
+      expect(note.detail).to.match(/variation 0/)
+      expect(note.detail).to.match(/variation 1/)
+      // Structured payload so the renderer can produce the inverted parent view.
+      expect(note.prerequisites).to.deep.equal([
+        {parentKey: 'fx-prereq-target-bool', variation: 0},
+        {parentKey: 'fx-prereq-target-bool-2', variation: 1},
+      ])
+      // A one-line remediation hint so the report tells humans what to do.
+      expect(note.detail).to.match(/leading rule|wrap reads|app code/i)
+    })
+
+    it('dedupes prereqs across environments so each child flag gets one note (qfg-nb4n)', () => {
+      const report = new ConversionReport()
+      const flag: LDFlag = {
+        environments: {
+          production: {
+            fallthrough: {variation: 0},
+            on: true,
+            prerequisites: [{key: 'kill-switch', variation: 0}],
+          },
+          staging: {
+            fallthrough: {variation: 0},
+            on: true,
+            prerequisites: [{key: 'kill-switch', variation: 0}],
+          },
+        },
+        key: 'fx-multi-env',
+        kind: 'boolean',
+        variations: [{value: true}, {value: false}],
+      }
+      translateFlag(flag, report)
+      expect(report.byCategory('dropped-prerequisite')).to.have.length(1)
+    })
+
     it('never emits sendToClientSdk on a feature flag (qfg-verify would reject it)', () => {
       const flag: LDFlag = {
         clientSideAvailability: {usingEnvironmentId: true, usingMobileKey: false},

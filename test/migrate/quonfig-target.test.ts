@@ -224,15 +224,16 @@ describe('migrate/quonfig-target', () => {
       expect(report.byCategory('individual-target-as-rule')).to.have.length(1)
     })
 
-    it('reports dropped prerequisites but still converts the rest of the environment', () => {
+    it('drops prerequisites silently and still converts the rest of the environment (reporting is owned by translateFlag — qfg-nb4n)', () => {
       const report = new ConversionReport()
       const rules = collapseEnvironment(
         {fallthrough: {variation: 0}, on: true, prerequisites: [{key: 'other-flag', variation: 0}]},
         ctx({report}),
       )
       expect(rules).to.have.length(1) // fallthrough still produced
-      expect(report.byCategory('dropped-prerequisite')).to.have.length(1)
-      expect(report.byCategory('dropped-prerequisite')[0].detail).to.match(/other-flag/)
+      // collapseEnvironment no longer emits the note — translateFlag dedupes
+      // across envs and emits one enriched note per child flag instead.
+      expect(report.byCategory('dropped-prerequisite')).to.have.length(0)
     })
   })
 })

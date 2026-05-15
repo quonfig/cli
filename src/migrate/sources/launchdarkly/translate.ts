@@ -39,6 +39,27 @@ function slugifyEnvKey(key: string): string {
     .replaceAll(/^-+|-+$/g, '')
 }
 
+/**
+ * Gather every prerequisite edge declared across all of a flag's environments
+ * and dedupe by parent key — the orphan-parent view is per-flag, not
+ * per-environment. First occurrence wins for the variation index when an
+ * unusual config gates on the same parent at different variations in different
+ * envs (rare; the typical case is identical edges in every env).
+ */
+function collectPrerequisiteEdges(flag: LDFlag): Array<{parentKey: string; variation: number}> {
+  const seen = new Set<string>()
+  const edges: Array<{parentKey: string; variation: number}> = []
+  for (const envState of Object.values(flag.environments)) {
+    for (const prereq of envState.prerequisites ?? []) {
+      if (seen.has(prereq.key)) continue
+      seen.add(prereq.key)
+      edges.push({parentKey: prereq.key, variation: prereq.variation})
+    }
+  }
+
+  return edges
+}
+
 export function flagOutputPath(key: string): string {
   return `feature-flags/${normalizeKey(key)}.json`
 }
@@ -104,6 +125,21 @@ export function translateFlag(flag: LDFlag, report: ConversionReport): Record<st
       flag.key,
       `customProperties (${Object.keys(flag.customProperties).join(', ')}) dropped — report-only in v1 (D6)`,
     )
+  }
+
+  // Prerequisites — dedupe across environments by parent key so a flag gated on
+  // the same parent in N environments emits one note, not N (qfg-nb4n). The
+  // detail spells out every parent's variation index plus a one-line remediation
+  // so a human knows exactly how to restore the gate; the structured
+  // `prerequisites` payload feeds the inverted orphan-parent view in the report.
+  const prereqEdges = collectPrerequisiteEdges(flag)
+  if (prereqEdges.length > 0) {
+    const parentList = prereqEdges.map((e) => `\`${e.parentKey}\` = variation ${e.variation}`).join(', ')
+    const detail =
+      `evaluated independently of ${prereqEdges.length} parent${prereqEdges.length === 1 ? '' : 's'} ` +
+      `(${parentList}). To preserve the gate, add a leading rule matching the same parent state, ` +
+      `or wrap reads in app code — Quonfig v1 has no cross-flag dependency operator.`
+    report.add('dropped-prerequisite', flag.key, detail, {prerequisites: prereqEdges})
   }
 
   const variants = flag.variations.map((v) => {

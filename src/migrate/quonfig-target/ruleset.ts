@@ -279,15 +279,10 @@ export function collapseEnvironment(env: SourceFlagEnvironment, ctx: RulesetCont
 
   const rules: QuonfigRule[] = []
 
-  if (env.prerequisites && env.prerequisites.length > 0) {
-    ctx.report.add(
-      'dropped-prerequisite',
-      ctx.sourceKey,
-      `${env.prerequisites.length} prerequisite(s) dropped (${env.prerequisites
-        .map((p) => p.key)
-        .join(', ')}) — Quonfig has no cross-flag dependency operator`,
-    )
-  }
+  // Prerequisites are dropped (no cross-flag dependency operator in Quonfig v1)
+  // but their reporting is owned by the caller (translateFlag), which dedupes
+  // across environments and emits one enriched note per child flag (qfg-nb4n).
+  // collapseEnvironment intentionally stays silent here.
 
   // Individual + context targets evaluate before rules in LaunchDarkly, so
   // they become leading rules. Lossy: the LD UI affordance is gone (plan §5.4).
