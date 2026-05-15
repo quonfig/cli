@@ -247,6 +247,112 @@ const CONVERSION_NOTE_HEADINGS: Record<
   'unexportable-segment-membership': 'Unexportable segment membership',
 }
 
+/**
+ * "Before you cut over" — top-of-document TL;DR (qfg-e8md). Rolls up the
+ * 1-N signal categories that need a human decision this run, and an optional
+ * "You can ignore" line for the high-volume informational categories.
+ *
+ * Suppressed entirely when no signal categories have entries — there is
+ * nothing for a human to act on.
+ */
+type SignalCategory = 'dropped-prerequisite' | 'rebucketed-rollout' | 'skipped-rule' | 'unexportable-segment-membership'
+
+interface SignalSpec {
+  /** Renders the headline bullet given count and example keys. */
+  render: (count: number, exampleKeys: string[]) => string
+}
+
+const SIGNAL_SPECS: Record<SignalCategory, SignalSpec> = {
+  'dropped-prerequisite': {
+    render: (count, keys) =>
+      `**${count} flag${count === 1 ? '' : 's'} lost cross-flag dependencies** (${keys.map((k) => `\`${k}\``).join(', ')}). ` +
+      `The Quonfig copy now serves its variations independently of its parent flag. ` +
+      `Review §'Dropped prerequisites' below.`,
+  },
+  'rebucketed-rollout': {
+    render: (count) =>
+      `**${count} flag${count === 1 ? '' : 's'} will re-bucket users.** Coordinate comms or drain affected ` +
+      `rollouts — see 'Users will be re-bucketed' below.`,
+  },
+  'skipped-rule': {
+    render: (count, keys) =>
+      `**${count} flag${count === 1 ? '' : 's'} had rules skipped** (${keys.map((k) => `\`${k}\``).join(', ')}) — ` +
+      `a clause used an unsupported operator. Rebuild the rule by hand before cutover.`,
+  },
+  'unexportable-segment-membership': {
+    render: (count, keys) =>
+      `**${count} segment${count === 1 ? '' : 's'} ${count === 1 ? 'has' : 'have'} missing membership** (${keys
+        .map((k) => `\`${k}\``)
+        .join(', ')}). Re-author or sync from your IdP before cutover.`,
+  },
+}
+
+const SIGNAL_ORDER: SignalCategory[] = [
+  'dropped-prerequisite',
+  'rebucketed-rollout',
+  'unexportable-segment-membership',
+  'skipped-rule',
+]
+
+const MAX_EXAMPLE_KEYS = 3
+
+const groupKeysByCategory = (notes: ConversionNote[]): Map<string, string[]> => {
+  const map = new Map<string, string[]>()
+  for (const note of notes) {
+    const list = map.get(note.category) ?? []
+    list.push(note.key)
+    map.set(note.category, list)
+  }
+
+  return map
+}
+
+const renderBeforeYouCutOver = (notes: ConversionNote[] | undefined): null | string => {
+  if (!notes || notes.length === 0) return null
+  const byCategory = groupKeysByCategory(notes)
+
+  const items: string[] = []
+  for (const category of SIGNAL_ORDER) {
+    const keys = byCategory.get(category)
+    if (!keys || keys.length === 0) continue
+    const sortedKeys = [...keys].sort((a, b) => a.localeCompare(b))
+    const example = sortedKeys.slice(0, MAX_EXAMPLE_KEYS)
+    const truncated = sortedKeys.length > MAX_EXAMPLE_KEYS ? [...example, '…'] : example
+    items.push(SIGNAL_SPECS[category].render(sortedKeys.length, truncated))
+  }
+
+  if (items.length === 0) return null
+
+  const lines: string[] = [
+    '## Before you cut over',
+    '',
+    `${items.length} thing${items.length === 1 ? ' needs' : 's need'} a human decision before flipping the SDK:`,
+    '',
+  ]
+  items.forEach((item, idx) => {
+    lines.push(`${idx + 1}. ${item}`)
+  })
+
+  const ignoreParts: string[] = []
+  const maintainerCount = byCategory.get('dropped-maintainer')?.length ?? 0
+  if (maintainerCount > 0) {
+    ignoreParts.push(`dropped maintainer metadata (${maintainerCount} entries — git authorship replaces it)`)
+  }
+
+  const mobileKeyCount = byCategory.get('dropped-mobile-key-availability')?.length ?? 0
+  if (mobileKeyCount > 0) {
+    ignoreParts.push(
+      `dropped mobile-key availability (${mobileKeyCount} entries — all still client-visible via usingEnvironmentId)`,
+    )
+  }
+
+  if (ignoreParts.length > 0) {
+    lines.push('', `You can ignore: ${ignoreParts.join(', ')}.`)
+  }
+
+  return lines.join('\n')
+}
+
 const renderRebucketedRollouts = (notes: ConversionNote[] | undefined): null | string => {
   const rollouts = (notes ?? []).filter((n) => n.category === 'rebucketed-rollout')
   if (rollouts.length === 0) return null
@@ -380,6 +486,12 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   sections.push(
     `# Migration Report (from ${data.source})`,
     `_Reflects only the changes produced by this run. Re-running overwrites this file._`,
+  )
+
+  const beforeYouCutOver = renderBeforeYouCutOver(data.conversionNotes)
+  if (beforeYouCutOver !== null) sections.push(beforeYouCutOver)
+
+  sections.push(
     renderCounts(data.counts),
     renderCleanMappings(data.cleanMappings),
     renderLossyMappings(data.lossyMappings),

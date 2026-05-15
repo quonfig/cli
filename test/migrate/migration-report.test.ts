@@ -8,6 +8,7 @@ import {
   type MigrationReportData,
   writeMigrationReport,
 } from '../../src/migrate/migration-report.js'
+import type {ConversionNote} from '../../src/migrate/quonfig-target/report.js'
 
 const baseData = (overrides: Partial<MigrationReportData> = {}): MigrationReportData => ({
   cleanMappings: [],
@@ -265,6 +266,115 @@ describe('migrate/migration-report', () => {
           }),
         )
         expect(md).to.not.match(/^##\s*Conversion notes/m)
+      })
+    })
+
+    describe('Before you cut over (TL;DR — qfg-e8md)', () => {
+      it('renders the section before Counts when any signal category is present', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [
+              {
+                category: 'dropped-prerequisite',
+                key: 'gated-flag',
+                detail: '1 prerequisite dropped',
+              },
+            ],
+          }),
+        )
+        expect(md).to.match(/^##\s*Before you cut over/m)
+        const beforeIdx = md.indexOf('## Before you cut over')
+        const countsIdx = md.indexOf('## Counts')
+        expect(beforeIdx).to.be.greaterThan(-1)
+        expect(beforeIdx).to.be.lessThan(countsIdx)
+      })
+
+      it('lists dropped-prerequisite, rebucketed-rollout, unexportable-segment-membership, and skipped-rule items with counts and example keys', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [
+              {category: 'dropped-prerequisite', key: 'fx-prereq-multiple', detail: '2 prerequisite(s) dropped'},
+              {category: 'dropped-prerequisite', key: 'fx-prereq-single', detail: '1 prerequisite dropped'},
+              {category: 'dropped-prerequisite', key: 'fx-prereq-third', detail: '1 prerequisite dropped'},
+              {category: 'rebucketed-rollout', key: 'roll-a', detail: 'rollout'},
+              {category: 'rebucketed-rollout', key: 'roll-b', detail: 'rollout'},
+              {category: 'unexportable-segment-membership', key: 'fx-seg-big-synced', detail: 'big segment'},
+              {category: 'skipped-rule', key: 'op-flag', detail: 'unsupported operator'},
+            ],
+          }),
+        )
+        const section = md.slice(md.indexOf('## Before you cut over'), md.indexOf('## Counts'))
+        expect(section).to.match(/3 flags lost cross-flag dependencies/)
+        expect(section).to.include('fx-prereq-multiple')
+        expect(section).to.match(/2 flags will re-bucket users/)
+        expect(section).to.match(/1 segment has missing membership/)
+        expect(section).to.include('fx-seg-big-synced')
+        expect(section).to.match(/1 flag had rules skipped/i)
+        expect(section).to.include('op-flag')
+      })
+
+      it('includes a "You can ignore" line listing dropped-maintainer and dropped-mobile-key-availability counts', () => {
+        const maintainerNotes: ConversionNote[] = []
+        for (let i = 0; i < 78; i++) {
+          maintainerNotes.push({category: 'dropped-maintainer', detail: 'maintainer dropped', key: `flag-${i}`})
+        }
+
+        const mobileKeyNotes: ConversionNote[] = []
+        for (let i = 0; i < 80; i++) {
+          mobileKeyNotes.push({
+            category: 'dropped-mobile-key-availability',
+            detail: 'mobile-key dropped',
+            key: `mflag-${i}`,
+          })
+        }
+
+        const md = buildMigrationReport(
+          baseData({
+            conversionNotes: [
+              {category: 'dropped-prerequisite', detail: 'prereq dropped', key: 'gated-flag'},
+              ...maintainerNotes,
+              ...mobileKeyNotes,
+            ],
+            source: 'launchdarkly',
+          }),
+        )
+        const section = md.slice(md.indexOf('## Before you cut over'), md.indexOf('## Counts'))
+        expect(section).to.match(/you can ignore/i)
+        expect(section).to.include('78')
+        expect(section).to.include('80')
+        expect(section).to.match(/maintainer/i)
+        expect(section).to.match(/mobile-key/i)
+      })
+
+      it('omits the section entirely when no signal categories are present', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [
+              {category: 'dropped-maintainer', key: 'flag-1', detail: 'maintainer dropped'},
+              {category: 'individual-target-as-rule', key: 'vip-flag', detail: 'targets to rule'},
+            ],
+          }),
+        )
+        expect(md).to.not.match(/Before you cut over/)
+      })
+
+      it('omits the section when conversionNotes is undefined', () => {
+        const md = buildMigrationReport(baseData())
+        expect(md).to.not.match(/Before you cut over/)
+      })
+
+      it('omits "You can ignore" line when no informational categories have entries', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [{category: 'dropped-prerequisite', key: 'gated-flag', detail: 'prereq dropped'}],
+          }),
+        )
+        const section = md.slice(md.indexOf('## Before you cut over'), md.indexOf('## Counts'))
+        expect(section).to.not.match(/you can ignore/i)
       })
     })
   })
