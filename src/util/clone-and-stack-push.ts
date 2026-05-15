@@ -96,10 +96,18 @@ const runGit = async (cwd: string, args: string[]): Promise<{stdout: string; std
   }
 }
 
+/**
+ * True only when `dir` is itself the root of a git repo. `rev-parse --git-dir`
+ * walks UP the filesystem; match `--show-toplevel` against `dir` to scope the
+ * check so we don't treat a subdir of an ancestor repo as the workspace.
+ * Compare canonical paths so a symlinked `dir` (e.g. macOS tmpdir under
+ * /var/folders → /private/var/folders) still matches (qfg-wu85, same shape as
+ * the local-write fix).
+ */
 const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    await runGitSafe(['-C', dir, 'rev-parse', '--git-dir'])
-    return true
+    const {stdout} = await runGitSafe(['-C', dir, 'rev-parse', '--show-toplevel'])
+    return fs.realpathSync(stdout.trim()) === fs.realpathSync(dir)
   } catch {
     return false
   }

@@ -192,6 +192,60 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       expect(report).to.not.match(/Users will be re-bucketed/)
       expect(report).to.not.match(/^##\s*Conversion notes/m)
     })
+
+    it('initializes a fresh git repo at the target when --dir is inside an ancestor repo (qfg-wu85)', async () => {
+      // Regression test for the isGitRepo walk-up bug: `git rev-parse --git-dir`
+      // climbs the filesystem, so when a user runs `qfg migrate --dir ./sub` from
+      // inside their own repo, the migrator used to "reuse" the ancestor repo
+      // and commit the migration into it (with the wrong author and sweeping in
+      // any unrelated uncommitted changes). The fix: scope the check to the
+      // target dir via `--show-toplevel`.
+      const ancestor = fs.mkdtempSync(path.join(rootTmp, 'ancestor-'))
+      run(ancestor, 'init', '--initial-branch=main')
+      run(ancestor, 'config', 'user.email', 'ancestor@test')
+      run(ancestor, 'config', 'user.name', 'Ancestor')
+      // An unrelated uncommitted file sitting in the ancestor — would have been
+      // swept into the bad migration commit pre-fix.
+      fs.writeFileSync(path.join(ancestor, 'unrelated.txt'), 'do not commit me\n')
+      run(ancestor, 'add', 'unrelated.txt')
+      const ancestorHeadBefore = (() => {
+        try {
+          return run(ancestor, 'rev-parse', 'HEAD')
+        } catch {
+          return null // no commits yet, expected for a fresh init
+        }
+      })()
+
+      const localDir = path.join(ancestor, 'workspace')
+      const {changes, environments} = await collectChanges()
+      const result = await applyLocalMigration({
+        changes,
+        environments,
+        importState: {source: 'launchdarkly'},
+        localDir,
+        reportData: emptyReport(),
+        source: launchdarklySource,
+      })
+
+      expect(result.committed).to.equal(true)
+      // The target dir is its OWN git repo, not the ancestor's. Compare realpaths
+      // because macOS tmpdir (/var/folders/...) symlinks to /private/var/...,
+      // which git canonicalizes in --show-toplevel.
+      expect(fs.realpathSync(run(localDir, 'rev-parse', '--show-toplevel'))).to.equal(fs.realpathSync(localDir))
+      // The migration commit message lives on the target's HEAD.
+      expect(run(localDir, 'log', '-1', '--pretty=%s')).to.match(/launchdarkly/i)
+      // The ancestor's HEAD is unchanged — nothing was committed there.
+      const ancestorHeadAfter = (() => {
+        try {
+          return run(ancestor, 'rev-parse', 'HEAD')
+        } catch {
+          return null
+        }
+      })()
+      expect(ancestorHeadAfter).to.equal(ancestorHeadBefore)
+      // The unrelated staged file is still staged, never landed in any commit.
+      expect(run(ancestor, 'status', '--porcelain', 'unrelated.txt')).to.match(/^A\s+unrelated\.txt/)
+    })
   })
 
   describe('--push cloud mode (pushMigrationToCloud)', () => {
