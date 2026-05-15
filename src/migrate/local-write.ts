@@ -282,6 +282,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
   const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
   const conversionNotes = opts.source.getConversionNotes?.() ?? null
+  const environmentMap = opts.source.getEnvironmentMap?.() ?? null
   const duplicateResolutions: DuplicateResolutionSummary | null =
     resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
   const skippedTotal = (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
@@ -289,6 +290,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const reportData: MigrationReportData = {
     ...opts.reportData,
     counts,
+    ...(environmentMap && environmentMap.length > 0 ? {environmentMap} : {}),
     followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
     ...(coercedSentinels ? {coercedSentinels} : {}),
     ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
@@ -466,6 +468,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
     const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
     const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
     const conversionNotes = opts.source.getConversionNotes?.() ?? null
+    const environmentMap = opts.source.getEnvironmentMap?.() ?? null
     const duplicateResolutions: DuplicateResolutionSummary | null =
       resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
 
@@ -477,6 +480,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
     const reportData: MigrationReportData = {
       ...opts.reportData,
       counts,
+      ...(environmentMap && environmentMap.length > 0 ? {environmentMap} : {}),
       followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
       ...(coercedSentinels ? {coercedSentinels} : {}),
       ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),

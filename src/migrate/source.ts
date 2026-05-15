@@ -15,6 +15,18 @@ export interface QuonfigFile {
   path: string
 }
 
+/**
+ * One row of the "Environment mapping table" in MIGRATION_REPORT.md. Sources
+ * implement `getEnvironmentMap()` to expose the source-name → Quonfig-name
+ * pairs they translated; the report renderer just formats the rows.
+ */
+export interface EnvironmentMapEntry {
+  /** The Quonfig-side environment name (slugified key). */
+  quonfigName: string
+  /** The user-facing source-system name (e.g. LD env display name). */
+  sourceName: string
+}
+
 export interface DroppedOverrideSummary {
   /** Per-envId → per-output-path count of dropped override sections. */
   byEnv: Record<string, Record<string, number>>
@@ -113,6 +125,13 @@ export interface MigrationSource {
    * report so customers can review the loss.
    */
   getDroppedOverrides?(): DroppedOverrideSummary | null
+  /**
+   * qfg-1t7m: source-name → Quonfig-name pairs for the "Environment mapping table"
+   * section of MIGRATION_REPORT.md. Returns the rows the source actually
+   * translated this run; callers thread these into report data. Sources that
+   * don't expose user-facing env names omit this and the table renders `_(none)_`.
+   */
+  getEnvironmentMap?(): EnvironmentMapEntry[] | null
   /**
    * Optional post-translate accumulator. Returns any configs that translate() soft-
    * skipped due to invalid source data (e.g. variant/valueType mismatch). Null when

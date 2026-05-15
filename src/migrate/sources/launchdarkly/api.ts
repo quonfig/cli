@@ -171,11 +171,24 @@ async function paginate<TItem, TResponse extends {_links?: {next?: {href: string
 
 /** Probe used by `validateAuth` — a cheap authenticated call that 401s on a bad token. */
 export async function fetchProjectEnvironments(apiKey: string, projectKey: string): Promise<string[]> {
-  const items = await paginate<{key: string; name: string}, LDEnvironmentsResponse>(
+  const items = await fetchProjectEnvironmentsDetailed(apiKey, projectKey)
+  return items.map((e) => e.key)
+}
+
+/**
+ * Same call as `fetchProjectEnvironments` but returns the full `{key, name}`
+ * pairs. The display `name` is needed for the MIGRATION_REPORT.md "Environment
+ * mapping table" — the bare key alone hides the customer-facing env label
+ * (qfg-1t7m).
+ */
+export async function fetchProjectEnvironmentsDetailed(
+  apiKey: string,
+  projectKey: string,
+): Promise<Array<{key: string; name: string}>> {
+  return paginate<{key: string; name: string}, LDEnvironmentsResponse>(
     `/projects/${encodeURIComponent(projectKey)}/environments?limit=${PAGE_LIMIT}`,
     apiKey,
   )
-  return items.map((e) => e.key)
 }
 
 export async function fetchContextKinds(apiKey: string, projectKey: string): Promise<string[]> {

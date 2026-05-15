@@ -16,12 +16,18 @@ import * as path from 'node:path'
 import {type ConversionNote, ConversionReport} from '../quonfig-target/report.js'
 import {
   type CommitMeta,
+  type EnvironmentMapEntry,
   type LegacyChange,
   type MigrationSource,
   type QuonfigFile,
   type SkippedConfigSummary,
 } from '../source.js'
-import {fetchProjectEnvironments, fetchSegmentsForEnv, fetchSnapshot} from './launchdarkly/api.js'
+import {
+  fetchProjectEnvironments,
+  fetchProjectEnvironmentsDetailed,
+  fetchSegmentsForEnv,
+  fetchSnapshot,
+} from './launchdarkly/api.js'
 import {
   type LaunchDarklyFlagAuditRaw,
   type RetentionHorizon,
@@ -60,6 +66,13 @@ interface LaunchDarklyState {
   apiKey: null | string
   /** Environment keys from the last snapshot, slug-normalized for listEnvironments(). */
   environments: string[]
+  /**
+   * qfg-1t7m: source-side `{key, name}` pairs from the most recent
+   * fetchProjectEnvironments call. Surfaced as the report's "Environment mapping
+   * table" via getEnvironmentMap() — preserves the user-facing LD env display
+   * name that bare keys lose.
+   */
+  environmentSourceNames: Array<{key: string; name: string}>
   /** `--full-summary` — when true, fetchChanges walks the Phase-2 audit log. */
   fullSummary: boolean
   projectKey: string
@@ -82,6 +95,7 @@ function resolveProjectKey(): string {
 const state: LaunchDarklyState = {
   apiKey: null,
   environments: [],
+  environmentSourceNames: [],
   fullSummary: false,
   projectKey: resolveProjectKey(),
   report: new ConversionReport(),
@@ -138,10 +152,13 @@ function slugifyEnvKey(key: string): string {
 
 async function validateAuthImpl(apiKey: string): Promise<void> {
   // A cheap authenticated call — 401s on a bad token, 404s on a bad project.
-  await fetchProjectEnvironments(apiKey, state.projectKey)
+  // Use the detailed call so we can stash {key, name} for the report's env
+  // mapping table (qfg-1t7m) without a second round-trip.
+  const detailed = await fetchProjectEnvironmentsDetailed(apiKey, state.projectKey)
   state.apiKey = apiKey
   state.report = new ConversionReport()
   state.environments = []
+  state.environmentSourceNames = detailed
   state.retentionHorizon = null
 
   // Plan §4.1.1: under --full-summary, probe the audit-log retention window
@@ -156,8 +173,9 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
 
 async function listEnvironmentsImpl(): Promise<string[]> {
   const apiKey = requireApiKey('listEnvironments')
-  const envKeys = await fetchProjectEnvironments(apiKey, state.projectKey)
-  state.environments = envKeys.map((k) => slugifyEnvKey(k))
+  const detailed = await fetchProjectEnvironmentsDetailed(apiKey, state.projectKey)
+  state.environmentSourceNames = detailed
+  state.environments = detailed.map((e) => slugifyEnvKey(e.key))
   return [...new Set(state.environments)]
 }
 
@@ -307,6 +325,27 @@ export function getConversionReport(): ConversionReport {
 }
 
 /**
+ * qfg-1t7m: source-name → Quonfig-name pairs for the report's "Environment
+ * mapping table". The source name is LD's user-facing env display name; the
+ * Quonfig name is the slugified env key. De-duped on the slugified key — two
+ * source envs that collapse to the same slug get one row (the first wins),
+ * since that is the row that will exist in quonfig.json.
+ */
+function getEnvironmentMapImpl(): EnvironmentMapEntry[] | null {
+  if (state.environmentSourceNames.length === 0) return null
+  const seen = new Set<string>()
+  const entries: EnvironmentMapEntry[] = []
+  for (const env of state.environmentSourceNames) {
+    const quonfigName = slugifyEnvKey(env.key)
+    if (seen.has(quonfigName)) continue
+    seen.add(quonfigName)
+    entries.push({quonfigName, sourceName: env.name})
+  }
+
+  return entries.length === 0 ? null : entries
+}
+
+/**
  * Every structured conversion note from this run — re-bucketed rollouts,
  * dropped prerequisites, lossy individual-target conversions, etc. The write
  * paths (`local-write.ts` / `push-to-cloud.ts`) thread this into
@@ -339,6 +378,7 @@ export const launchdarklySource: MigrationSource = {
   },
   getCommitMeta: getCommitMetaImpl,
   getConversionNotes: getConversionNotesImpl,
+  getEnvironmentMap: getEnvironmentMapImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
   name: SOURCE_NAME,
@@ -349,6 +389,7 @@ export const launchdarklySource: MigrationSource = {
 export function __resetLaunchDarklySourceForTests(): void {
   state.apiKey = null
   state.environments = []
+  state.environmentSourceNames = []
   state.fullSummary = false
   state.projectKey = resolveProjectKey()
   state.report = new ConversionReport()

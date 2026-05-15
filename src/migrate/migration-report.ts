@@ -7,8 +7,11 @@ import type {
   CoercedSentinelSummary,
   DroppedOverrideSummary,
   DuplicateResolutionSummary,
+  EnvironmentMapEntry,
   SkippedConfigSummary,
 } from './source.js'
+
+export type {EnvironmentMapEntry} from './source.js'
 
 export interface MigrationReportCounts {
   configsMigrated: number
@@ -34,11 +37,6 @@ export interface LossyMapping {
 export interface UnsupportedFeature {
   feature: string
   note?: string
-}
-
-export interface EnvironmentMapEntry {
-  quonfigName: string
-  sourceName: string
 }
 
 export interface FollowUpChecklist {

@@ -160,6 +160,67 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       expect(postCutover).to.match(/^- \[ ].*gradual-rollout.*re-bucket/im)
     })
 
+    it('renders a row per source environment in the Environment mapping table (qfg-1t7m)', async () => {
+      // Regression for qfg-1t7m: the Counts section showed "Environments mapped: N"
+      // but the Environment mapping table downstream rendered `_(none)_` because the
+      // LaunchDarkly source never produced an environmentMap for the report builder.
+      // With two LD environments, both rows should appear with their LD display name
+      // on the source side and the slugified key on the Quonfig side.
+      server.close()
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/projects/default/environments`, () =>
+          HttpResponse.json({
+            items: [
+              {key: 'production', name: 'Production'},
+              {key: 'staging', name: 'Staging'},
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/flags/default`, () =>
+          HttpResponse.json({
+            items: [
+              {
+                environments: {
+                  production: {fallthrough: {variation: 0}, on: true},
+                  staging: {fallthrough: {variation: 0}, on: true},
+                },
+                key: 'plain-flag',
+                kind: 'boolean',
+                variations: [{value: true}, {value: false}],
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/segments/default/production`, () => HttpResponse.json({items: []})),
+        http.get(`${TEST_BASE_URL}/segments/default/staging`, () => HttpResponse.json({items: []})),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+      __resetLaunchDarklySourceForTests()
+
+      const localDir = path.join(rootTmp, 'env-map-workspace')
+      const {changes, environments} = await collectChanges()
+      await applyLocalMigration({
+        changes,
+        environments,
+        importState: {source: 'launchdarkly'},
+        localDir,
+        reportData: emptyReport(),
+        source: launchdarklySource,
+      })
+
+      const report = fs.readFileSync(path.join(localDir, 'MIGRATION_REPORT.md'), 'utf8')
+      const tableStart = report.indexOf('## Environment mapping table')
+      const nextHeading = report.indexOf('\n## ', tableStart + 1)
+      const tableSection = report.slice(tableStart, nextHeading === -1 ? undefined : nextHeading)
+      // Counts and table must agree.
+      expect(report).to.match(/Environments mapped: 2/)
+      expect(tableSection).to.not.include('_(none)_')
+      // One markdown row per source env, source-name -> Quonfig-name pairs.
+      expect(tableSection).to.match(/\|\s*Production\s*\|\s*production\s*\|/)
+      expect(tableSection).to.match(/\|\s*Staging\s*\|\s*staging\s*\|/)
+    })
+
     it('omits both sections when the source produced no conversion notes', async () => {
       // A flag with a plain single-variation fallthrough and no prerequisites.
       server.close()
