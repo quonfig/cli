@@ -67,6 +67,7 @@ export interface LDAuditLogListEntry {
 export interface LDAuditLogEntry extends LDAuditLogListEntry {
   app?: {name?: string}
   comment?: string
+  currentVersion?: LDFlag
   /** Null for semantic-patch updates — never relied on; see file header. */
   delta?: unknown
   description?: string
@@ -75,7 +76,6 @@ export interface LDAuditLogEntry extends LDAuditLogListEntry {
   shortDescription?: string
   target?: {name?: string; resources?: string[]}
   token?: {name?: string}
-  currentVersion?: LDFlag
 }
 
 interface LDAuditLogPage {
@@ -154,8 +154,8 @@ export async function* walkAuditLog(apiKey: string, opts: WalkAuditLogOptions = 
   while (true) {
     // eslint-disable-next-line no-await-in-loop
     const page = await fetchAuditLogPage(apiKey, {
-      ...(opts.after !== undefined ? {after: opts.after} : {}),
-      ...(before !== undefined ? {before} : {}),
+      ...(opts.after === undefined ? {} : {after: opts.after}),
+      ...(before === undefined ? {} : {before}),
       ...(opts.spec ? {spec: opts.spec} : {}),
     })
 
@@ -175,7 +175,8 @@ export async function* walkAuditLog(apiKey: string, opts: WalkAuditLogOptions = 
     if (crossedFloor) break
 
     // The oldest entry on the page is the cursor for the next (older) page.
-    const nextBefore = page.items[page.items.length - 1].date
+    // Empty-page guard above (line 161) means at(-1) is defined here; bang for TS.
+    const nextBefore = page.items.at(-1)!.date
     // eslint-disable-next-line no-await-in-loop
     if (opts.onCheckpoint) await opts.onCheckpoint(nextBefore)
 

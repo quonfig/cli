@@ -233,7 +233,7 @@ async function* fetchAuditHistory(apiKey: string): AsyncIterable<LegacyChange> {
   const flagChanges: LegacyChange[] = []
   for await (const entry of walkAuditLog(apiKey, {
     spec,
-    ...(startBefore !== undefined ? {startBefore} : {}),
+    ...(startBefore === undefined ? {} : {startBefore}),
     onCheckpoint(before: number) {
       writeAuditCheckpoint(checkpointPath, before)
     },

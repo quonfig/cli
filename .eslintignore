@@ -9,3 +9,8 @@ reforge.*.config.json
 test/fixtures
 # Raw provider-export corpora — byte-faithful third-party JSON, not our code to style.
 test/migrate/fixtures/**/raw/
+# Expected-output golden corpora — fixture data, parsed not styled. Numeric
+# literals match the converter's emitted JSON; unicorn/numeric-separators-style
+# fires on big numeric IDs but JSON disallows the separator, so the rule would
+# auto-fix to invalid JSON.
+test/migrate/fixtures/**/expected/

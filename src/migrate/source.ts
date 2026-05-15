@@ -91,6 +91,12 @@ export interface MigrationSource {
    */
   getCoercedSentinels?(): CoercedSentinelSummary | null
   /**
+   * Optional. qfg-wbkj: per-change commit metadata used by --full-summary. Returns
+   * null if the change carries no usable author/date/summary (e.g. legacy or
+   * synthesized entries) and the caller should fall back to the migrator identity.
+   */
+  getCommitMeta?(change: LegacyChange): CommitMeta | null
+  /**
    * Optional post-translate accumulator. Returns the structured conversion notes
    * collected during translate() — re-bucketed rollouts, dropped prerequisites,
    * lossy individual-target conversions, etc. (the LaunchDarkly converter set).
@@ -99,12 +105,6 @@ export interface MigrationSource {
    * notable happened during conversion.
    */
   getConversionNotes?(): ConversionNote[] | null
-  /**
-   * Optional. qfg-wbkj: per-change commit metadata used by --full-summary. Returns
-   * null if the change carries no usable author/date/summary (e.g. legacy or
-   * synthesized entries) and the caller should fall back to the migrator identity.
-   */
-  getCommitMeta?(change: LegacyChange): CommitMeta | null
   /**
    * Optional post-translate accumulator. Returns any override sections that were
    * dropped during translate() calls because the env.id was not present in the
