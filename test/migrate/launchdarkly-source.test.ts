@@ -3,7 +3,11 @@ import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 
 import {setLaunchDarklyBaseUrl} from '../../src/migrate/sources/launchdarkly/api.js'
-import {__resetLaunchDarklySourceForTests, launchdarklySource} from '../../src/migrate/sources/launchdarkly.js'
+import {
+  __resetLaunchDarklySourceForTests,
+  launchdarklySource,
+  setLaunchDarklyProjectKey,
+} from '../../src/migrate/sources/launchdarkly.js'
 import {validateFileMap} from '../../src/verify/validate.js'
 
 const TEST_BASE_URL = 'https://ld.test/api/v2'
@@ -42,6 +46,21 @@ describe('migrate/sources/launchdarkly — MigrationSource wiring', () => {
       } catch (error) {
         expect((error as Error).message).to.match(/401/)
       }
+    })
+  })
+
+  describe('setLaunchDarklyProjectKey', () => {
+    it('routes every API call at the configured project key instead of "default"', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/projects/acme-mobile/environments`, () =>
+          HttpResponse.json({items: [{key: 'test', name: 'Test'}]}),
+        ),
+      )
+      // onUnhandledRequest:'error' means a stray /projects/default/... call fails the test.
+      server.listen({onUnhandledRequest: 'error'})
+
+      setLaunchDarklyProjectKey('acme-mobile')
+      await launchdarklySource.validateAuth('token')
     })
   })
 

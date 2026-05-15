@@ -30,9 +30,10 @@ interface LaunchDarklyState {
 }
 
 /**
- * LaunchDarkly requires a project key on every endpoint. v1 reads it from
- * `LAUNCHDARKLY_PROJECT_KEY` (default `default`); a `--project` flag is part
- * of the write-mode wiring epic.
+ * LaunchDarkly requires a project key on every endpoint. The env var
+ * `LAUNCHDARKLY_PROJECT_KEY` (default `default`) is the module-load fallback;
+ * the `qfg migrate` command overrides it per-run via `setLaunchDarklyProjectKey()`
+ * from its `--project` flag (Epic 5 write-mode wiring).
  */
 function resolveProjectKey(): string {
   return process.env.LAUNCHDARKLY_PROJECT_KEY ?? 'default'
@@ -43,6 +44,16 @@ const state: LaunchDarklyState = {
   environments: [],
   projectKey: resolveProjectKey(),
   report: new ConversionReport(),
+}
+
+/**
+ * Override the LaunchDarkly project key for this run. Called by the `qfg migrate`
+ * command from its `--project` flag (which itself falls back to the
+ * `LAUNCHDARKLY_PROJECT_KEY` env var). Mirrors `applyLaunchDarklyBaseUrl()` —
+ * the command layer threads run-scoped config into the source singleton.
+ */
+export function setLaunchDarklyProjectKey(projectKey: string): void {
+  state.projectKey = projectKey
 }
 
 class MissingAuthError extends Error {

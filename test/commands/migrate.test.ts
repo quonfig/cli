@@ -5,6 +5,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import {applyLaunchDarklyBaseUrl} from '../../src/migrate/sources/launchdarkly/api.js'
+import {__resetLaunchDarklySourceForTests} from '../../src/migrate/sources/launchdarkly.js'
 import {__resetLaunchSourceForTests} from '../../src/migrate/sources/launch.js'
 
 const LAUNCH_PROD_URL = 'https://api.reforge.com'
@@ -214,5 +216,93 @@ describe('migrate', () => {
           expect(payload.fetched).to.equal(1)
         })
     })
+  })
+
+  // Epic 5 write-mode wiring for --from launchdarkly. Two command-layer gaps:
+  // migrate.ts never called applyLaunchDarklyBaseUrl() (so LAUNCHDARKLY_API_URL
+  // was unreachable) and had no --project flag (so non-default LD projects were
+  // env-var-only). Both are exercised here at once.
+  describe('launchdarkly dry-run (mocked API)', () => {
+    const LD_TEST_URL = 'https://ld.test/api/v2'
+    const server = setupServer()
+
+    before(() => {
+      server.listen({onUnhandledRequest: 'error'})
+    })
+
+    afterEach(() => {
+      server.resetHandlers()
+      delete process.env.LAUNCHDARKLY_API_URL
+      delete process.env.LAUNCHDARKLY_PROJECT_KEY
+      applyLaunchDarklyBaseUrl()
+      __resetLaunchDarklySourceForTests()
+    })
+
+    after(() => {
+      server.close()
+    })
+
+    // Mounts the LaunchDarkly snapshot endpoints under a SINGLE project key. If
+    // the command fails to thread --project through to the source it requests
+    // /projects/default/... instead and MSW raises an unhandled-request error;
+    // likewise if applyLaunchDarklyBaseUrl() is never called it hits the prod
+    // host. So this doubles as the revert test for both wiring gaps.
+    const mockLaunchDarklyApi = (baseUrl: string, projectKey: string) => {
+      server.use(
+        http.get(`${baseUrl}/projects/${projectKey}/environments`, () =>
+          HttpResponse.json({items: [{key: 'test', name: 'Test'}]}),
+        ),
+        http.get(`${baseUrl}/projects/${projectKey}/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${baseUrl}/flags/${projectKey}`, () =>
+          HttpResponse.json({
+            items: [
+              {
+                environments: {test: {fallthrough: {variation: 0}, on: true}},
+                key: 'my-flag',
+                kind: 'boolean',
+                variations: [{value: true}, {value: false}],
+              },
+            ],
+          }),
+        ),
+        http.get(`${baseUrl}/segments/${projectKey}/test`, () => HttpResponse.json({items: []})),
+      )
+    }
+
+    test
+      .do(() => {
+        process.env.LAUNCHDARKLY_API_URL = LD_TEST_URL
+        mockLaunchDarklyApi(LD_TEST_URL, 'acme-mobile')
+      })
+      .stdout()
+      .command([
+        'migrate',
+        '--from',
+        'launchdarkly',
+        '--source-api-key',
+        'k',
+        '--project',
+        'acme-mobile',
+        '--dry-run',
+        '--json',
+      ])
+      .it('--project threads the LaunchDarkly project key into the source API calls', (ctx) => {
+        const payload = JSON.parse(ctx.stdout)
+        expect(payload.from).to.equal('launchdarkly')
+        expect(payload.fetched).to.equal(1)
+      })
+
+    test
+      .do(() => {
+        process.env.LAUNCHDARKLY_API_URL = LD_TEST_URL
+        process.env.LAUNCHDARKLY_PROJECT_KEY = 'env-project'
+        mockLaunchDarklyApi(LD_TEST_URL, 'env-project')
+      })
+      .stdout()
+      .command(['migrate', '--from', 'launchdarkly', '--source-api-key', 'k', '--dry-run', '--json'])
+      .it('falls back to the LAUNCHDARKLY_PROJECT_KEY env var when --project is omitted', (ctx) => {
+        const payload = JSON.parse(ctx.stdout)
+        expect(payload.fetched).to.equal(1)
+      })
   })
 })

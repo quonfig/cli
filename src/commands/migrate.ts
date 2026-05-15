@@ -23,6 +23,8 @@ import {
 } from '../migrate/source.js'
 import {missingSourceApiKeyMessage, resolveSourceApiKey} from '../migrate/source-api-key.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
+import {applyLaunchDarklyBaseUrl} from '../migrate/sources/launchdarkly/api.js'
+import {setLaunchDarklyProjectKey} from '../migrate/sources/launchdarkly.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
@@ -71,6 +73,13 @@ export default class Migrate extends BaseCommand {
         'Reify the full source-side audit log into per-change git commits ' +
         '(author = original user, date = original timestamp, message = change summary). ' +
         'Only valid on first-run imports — pass --reset to re-import everything from scratch with this flag.',
+    }),
+    project: Flags.string({
+      default: 'default',
+      description:
+        'LaunchDarkly project key to migrate from (or set LAUNCHDARKLY_PROJECT_KEY). ' +
+        'Scoped to `--from launchdarkly`; ignored by other sources.',
+      env: 'LAUNCHDARKLY_PROJECT_KEY',
     }),
     push: Flags.boolean({
       default: false,
@@ -170,6 +179,14 @@ export default class Migrate extends BaseCommand {
 
     if (flags.from === 'launch') {
       applyLaunchBaseUrl(flags.staging)
+    }
+
+    if (flags.from === 'launchdarkly') {
+      // Thread run-scoped source config in before the first API call. The base
+      // URL honours the LAUNCHDARKLY_API_URL escape hatch; --project (env-backed
+      // by LAUNCHDARKLY_PROJECT_KEY) selects which LD project to snapshot.
+      applyLaunchDarklyBaseUrl()
+      setLaunchDarklyProjectKey(flags.project)
     }
 
     let source
