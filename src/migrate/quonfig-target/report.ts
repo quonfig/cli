@@ -27,8 +27,18 @@ export type ConversionNoteCategory =
   | 'dropped-maintainer'
   /** `customProperties` dropped — report-only in v1 (D6). */
   | 'dropped-custom-properties'
-  /** clientSideAvailability mobile-key dimension dropped. */
-  | 'dropped-mobile-key-availability'
+  /**
+   * `usingMobileKey:true` collapsed into Quonfig's single client-visibility bool,
+   * but the flag is still client-visible because `usingEnvironmentId` is also true.
+   * No action required — pure rollup noise.
+   */
+  | 'dropped-mobile-key-still-visible'
+  /**
+   * `usingMobileKey:true` but `usingEnvironmentId:false` — the flag was
+   * mobile-only in LD and will no longer reach mobile clients after migration.
+   * Must-fix before cutover.
+   */
+  | 'dropped-mobile-key-now-server-only'
   /** A percentage rollout that will re-bucket users post-migration (plan §5.4). */
   | 'rebucketed-rollout'
   /** A big/synced segment whose membership is not exportable via REST. */

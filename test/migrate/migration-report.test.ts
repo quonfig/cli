@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import {
   buildMigrationReport,
+  deriveFollowUpFromConversionNotes,
   type MigrationReportData,
   writeMigrationReport,
 } from '../../src/migrate/migration-report.js'
@@ -316,23 +317,63 @@ describe('migrate/migration-report', () => {
         expect(section).to.include('flag-079')
       })
 
-      it('collapses dropped-mobile-key-availability entries into a 1-line rollup + <details> block (qfg-ve5w)', () => {
+      it('collapses dropped-mobile-key-still-visible entries into a 1-line rollup + <details> block (qfg-iv69)', () => {
         const mobileNotes: ConversionNote[] = []
         for (let i = 0; i < 80; i++) {
           mobileNotes.push({
-            category: 'dropped-mobile-key-availability',
+            category: 'dropped-mobile-key-still-visible',
             detail: 'usingMobileKey:true collapsed into sendToClientSdk',
             key: `mflag-${i.toString().padStart(3, '0')}`,
           })
         }
 
         const md = buildMigrationReport(baseData({conversionNotes: mobileNotes, source: 'launchdarkly'}))
-        const section = sliceSubsection(md, '### Dropped mobile-key availability')
+        const section = sliceSubsection(md, '### Dropped mobile-key availability (still client-visible)')
         expect(section, 'subsection present').to.not.equal('')
 
         expect(section).to.include('<details>')
         expect(section).to.match(/80 flag/i)
         expect(section).to.include('mflag-000')
+      })
+
+      it('routes dropped-mobile-key-now-server-only into mustFixBeforeCutover (qfg-iv69)', () => {
+        const notes: ConversionNote[] = [
+          {
+            category: 'dropped-mobile-key-now-server-only',
+            detail: 'usingMobileKey:true + usingEnvironmentId:false — flag will not reach mobile clients',
+            key: 'mobile-only-flag',
+          },
+        ]
+        const followUp = deriveFollowUpFromConversionNotes({mustFixBeforeCutover: [], reviewPostCutover: []}, notes)
+        expect(followUp.mustFixBeforeCutover).to.have.length(1)
+        expect(followUp.mustFixBeforeCutover[0]).to.match(/mobile-only-flag/)
+        expect(followUp.mustFixBeforeCutover[0]).to.match(/mobile/i)
+        expect(followUp.reviewPostCutover).to.have.length(0)
+      })
+
+      it('renders dropped-mobile-key-now-server-only as un-collapsed per-flag bullets (it is must-fix, not noise)', () => {
+        const md = buildMigrationReport(
+          baseData({
+            conversionNotes: [
+              {
+                category: 'dropped-mobile-key-now-server-only',
+                detail: 'flag will not reach mobile clients',
+                key: 'mobile-only-a',
+              },
+              {
+                category: 'dropped-mobile-key-now-server-only',
+                detail: 'flag will not reach mobile clients',
+                key: 'mobile-only-b',
+              },
+            ],
+            source: 'launchdarkly',
+          }),
+        )
+        const section = sliceSubsection(md, '### Dropped mobile-key availability (now server-only)')
+        expect(section, 'subsection present').to.not.equal('')
+        expect(section).to.not.include('<details>')
+        expect(section).to.include('- `mobile-only-a`')
+        expect(section).to.include('- `mobile-only-b`')
       })
 
       it('keeps signal categories (prereqs, individual-targets, unexportable-segments) as un-collapsed per-flag bullets', () => {
@@ -404,7 +445,7 @@ describe('migrate/migration-report', () => {
         expect(section).to.include('op-flag')
       })
 
-      it('includes a "You can ignore" line listing dropped-maintainer and dropped-mobile-key-availability counts', () => {
+      it('includes a "You can ignore" line listing dropped-maintainer and dropped-mobile-key-still-visible counts', () => {
         const maintainerNotes: ConversionNote[] = []
         for (let i = 0; i < 78; i++) {
           maintainerNotes.push({category: 'dropped-maintainer', detail: 'maintainer dropped', key: `flag-${i}`})
@@ -413,8 +454,8 @@ describe('migrate/migration-report', () => {
         const mobileKeyNotes: ConversionNote[] = []
         for (let i = 0; i < 80; i++) {
           mobileKeyNotes.push({
-            category: 'dropped-mobile-key-availability',
-            detail: 'mobile-key dropped',
+            category: 'dropped-mobile-key-still-visible',
+            detail: 'mobile-key dropped (still visible)',
             key: `mflag-${i}`,
           })
         }

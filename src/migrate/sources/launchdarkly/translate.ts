@@ -71,13 +71,23 @@ export function translateFlag(flag: LDFlag, report: ConversionReport): Record<st
 
   // clientSideAvailability: feature flags are always client-visible in Quonfig,
   // so `sendToClientSdk` is invalid on them — we cannot carry the dimension.
-  // Report the mobile-key drop rather than silently losing it.
+  // Split the drop by usingEnvironmentId co-state (qfg-iv69):
+  //  - usingEnvironmentId:true  → flag is still client-visible, pure rollup noise.
+  //  - usingEnvironmentId:false → flag was mobile-only, now server-only post-migration (must-fix).
   if (flag.clientSideAvailability?.usingMobileKey) {
-    report.add(
-      'dropped-mobile-key-availability',
-      flag.key,
-      `clientSideAvailability.usingMobileKey was true — Quonfig has one client-visibility bool, the mobile-key dimension is dropped`,
-    )
+    if (flag.clientSideAvailability.usingEnvironmentId) {
+      report.add(
+        'dropped-mobile-key-still-visible',
+        flag.key,
+        `clientSideAvailability.usingMobileKey was true; usingEnvironmentId was also true — flag remains client-visible via Quonfig's sendToClientSdk, the mobile-key dimension itself is dropped`,
+      )
+    } else {
+      report.add(
+        'dropped-mobile-key-now-server-only',
+        flag.key,
+        `clientSideAvailability.usingMobileKey was true but usingEnvironmentId was false — flag was mobile-only in LaunchDarkly and will not reach mobile clients post-migration; rebuild client-side access by hand before cutover`,
+      )
+    }
   }
 
   if (flag.maintainerId || flag.maintainerTeamKey) {

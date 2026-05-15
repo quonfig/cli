@@ -109,7 +109,38 @@ describe('migrate/sources/launchdarkly/translate', () => {
       expect(report.byCategory('dropped-prerequisite')[0].detail).to.match(/parent-flag/)
       expect(report.byCategory('dropped-maintainer')).to.have.length(1)
       expect(report.byCategory('dropped-custom-properties')).to.have.length(1)
-      expect(report.byCategory('dropped-mobile-key-availability')).to.have.length(1)
+      // Both surfaces enabled — flag is still client-visible via usingEnvironmentId.
+      expect(report.byCategory('dropped-mobile-key-still-visible')).to.have.length(1)
+      expect(report.byCategory('dropped-mobile-key-now-server-only')).to.have.length(0)
+    })
+
+    it('classifies usingMobileKey:true + usingEnvironmentId:false as now-server-only (must-fix)', () => {
+      const report = new ConversionReport()
+      const flag: LDFlag = {
+        clientSideAvailability: {usingEnvironmentId: false, usingMobileKey: true},
+        environments: {test: {fallthrough: {variation: 0}, on: true}},
+        key: 'fx-mobile-only',
+        kind: 'boolean',
+        variations: [{value: true}, {value: false}],
+      }
+      translateFlag(flag, report)
+      expect(report.byCategory('dropped-mobile-key-now-server-only')).to.have.length(1)
+      expect(report.byCategory('dropped-mobile-key-still-visible')).to.have.length(0)
+      expect(report.byCategory('dropped-mobile-key-now-server-only')[0].detail).to.match(/mobile/i)
+    })
+
+    it('emits no mobile-key note when usingMobileKey is false', () => {
+      const report = new ConversionReport()
+      const flag: LDFlag = {
+        clientSideAvailability: {usingEnvironmentId: true, usingMobileKey: false},
+        environments: {test: {fallthrough: {variation: 0}, on: true}},
+        key: 'fx-no-mobile',
+        kind: 'boolean',
+        variations: [{value: true}, {value: false}],
+      }
+      translateFlag(flag, report)
+      expect(report.byCategory('dropped-mobile-key-still-visible')).to.have.length(0)
+      expect(report.byCategory('dropped-mobile-key-now-server-only')).to.have.length(0)
     })
 
     it('never emits sendToClientSdk on a feature flag (qfg-verify would reject it)', () => {

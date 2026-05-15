@@ -237,7 +237,8 @@ const CONVERSION_NOTE_HEADINGS: Record<
   'dropped-custom-properties': 'Dropped custom properties',
   'dropped-experiment-metadata': 'Dropped experiment metadata',
   'dropped-maintainer': 'Dropped maintainer metadata',
-  'dropped-mobile-key-availability': 'Dropped mobile-key availability',
+  'dropped-mobile-key-now-server-only': 'Dropped mobile-key availability (now server-only)',
+  'dropped-mobile-key-still-visible': 'Dropped mobile-key availability (still client-visible)',
   'dropped-prerequisite': 'Dropped prerequisites',
   'dropped-private-attribute': 'Dropped private attributes',
   'individual-target-as-rule': 'Individual targets converted to rules',
@@ -253,7 +254,12 @@ const CONVERSION_NOTE_HEADINGS: Record<
  * Suppressed entirely when no signal categories have entries — there is
  * nothing for a human to act on.
  */
-type SignalCategory = 'dropped-prerequisite' | 'rebucketed-rollout' | 'skipped-rule' | 'unexportable-segment-membership'
+type SignalCategory =
+  | 'dropped-mobile-key-now-server-only'
+  | 'dropped-prerequisite'
+  | 'rebucketed-rollout'
+  | 'skipped-rule'
+  | 'unexportable-segment-membership'
 
 interface SignalSpec {
   /** Renders the headline bullet given count and example keys. */
@@ -261,6 +267,13 @@ interface SignalSpec {
 }
 
 const SIGNAL_SPECS: Record<SignalCategory, SignalSpec> = {
+  'dropped-mobile-key-now-server-only': {
+    render: (count, keys) =>
+      `**${count} flag${count === 1 ? '' : 's'} ${count === 1 ? 'will' : 'will'} stop reaching mobile clients** ` +
+      `(${keys.map((k) => `\`${k}\``).join(', ')}). LaunchDarkly had \`usingMobileKey:true\` with ` +
+      `\`usingEnvironmentId:false\` — these were mobile-only and won't be visible to mobile SDKs post-migration. ` +
+      `Rebuild client-side access by hand before cutover.`,
+  },
   'dropped-prerequisite': {
     render: (count, keys) =>
       `**${count} flag${count === 1 ? '' : 's'} lost cross-flag dependencies** (${keys.map((k) => `\`${k}\``).join(', ')}). ` +
@@ -286,6 +299,7 @@ const SIGNAL_SPECS: Record<SignalCategory, SignalSpec> = {
 }
 
 const SIGNAL_ORDER: SignalCategory[] = [
+  'dropped-mobile-key-now-server-only',
   'dropped-prerequisite',
   'rebucketed-rollout',
   'unexportable-segment-membership',
@@ -337,7 +351,7 @@ const renderBeforeYouCutOver = (notes: ConversionNote[] | undefined): null | str
     ignoreParts.push(`dropped maintainer metadata (${maintainerCount} entries — git authorship replaces it)`)
   }
 
-  const mobileKeyCount = byCategory.get('dropped-mobile-key-availability')?.length ?? 0
+  const mobileKeyCount = byCategory.get('dropped-mobile-key-still-visible')?.length ?? 0
   if (mobileKeyCount > 0) {
     ignoreParts.push(
       `dropped mobile-key availability (${mobileKeyCount} entries — all still client-visible via usingEnvironmentId)`,
@@ -379,9 +393,9 @@ const COLLAPSED_CATEGORIES: Partial<Record<ConversionNoteCategory, (count: numbe
   'dropped-maintainer': (count) =>
     `${count} flag${count === 1 ? '' : 's'} had a maintainer ID dropped. Intentional — Quonfig authorship lives in ` +
     `git history. No action required.`,
-  'dropped-mobile-key-availability': (count) =>
+  'dropped-mobile-key-still-visible': (count) =>
     `${count} flag${count === 1 ? '' : 's'} had \`usingMobileKey:true\` collapsed into the single \`sendToClientSdk\` ` +
-    `boolean. No action required.`,
+    `boolean. Each flag is still client-visible via \`usingEnvironmentId\`. No action required.`,
 }
 
 const renderConversionNotes = (notes: ConversionNote[] | undefined): null | string => {
@@ -430,6 +444,11 @@ const renderConversionNotes = (notes: ConversionNote[] | undefined): null | stri
 const FOLLOW_UP_BUCKETS: Partial<
   Record<ConversionNoteCategory, {bucket: 'mustFixBeforeCutover' | 'reviewPostCutover'; hint: (key: string) => string}>
 > = {
+  'dropped-mobile-key-now-server-only': {
+    bucket: 'mustFixBeforeCutover',
+    hint: (key) =>
+      `\`${key}\` — flag was mobile-only in LaunchDarkly (usingMobileKey:true, usingEnvironmentId:false) and will not reach mobile SDKs after migration; restore client-side access by hand.`,
+  },
   'dropped-prerequisite': {
     bucket: 'mustFixBeforeCutover',
     hint: (key) =>
