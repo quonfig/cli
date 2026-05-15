@@ -133,6 +133,15 @@ export interface MigrationSource {
    */
   getEnvironmentMap?(): EnvironmentMapEntry[] | null
   /**
+   * qfg-l8uz: maintainerId → email pairs for the report's "Identifier map"
+   * section. Sources that fetch a member directory (e.g. LD's /members) expose
+   * the lookup here so the report renderer can swap opaque IDs for readable
+   * emails and decorate the `dropped-maintainer` rollup. Null when the source
+   * couldn't fetch members (auth scope, hidden member data) or has none to
+   * surface — the rest of the report still renders.
+   */
+  getMaintainerMap?(): null | Record<string, string>
+  /**
    * Optional post-translate accumulator. Returns any configs that translate() soft-
    * skipped due to invalid source data (e.g. variant/valueType mismatch). Null when
    * nothing was skipped.

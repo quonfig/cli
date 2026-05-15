@@ -23,6 +23,7 @@ import {
   type SkippedConfigSummary,
 } from '../source.js'
 import {
+  fetchMembers,
   fetchProjectEnvironments,
   fetchProjectEnvironmentsDetailed,
   fetchSegmentsForEnv,
@@ -64,8 +65,6 @@ type LaunchDarklyRaw = {data: LDFlag; kind: 'flag'} | {data: LDSegment; kind: 's
 
 interface LaunchDarklyState {
   apiKey: null | string
-  /** Environment keys from the last snapshot, slug-normalized for listEnvironments(). */
-  environments: string[]
   /**
    * qfg-1t7m: source-side `{key, name}` pairs from the most recent
    * fetchProjectEnvironments call. Surfaced as the report's "Environment mapping
@@ -73,8 +72,17 @@ interface LaunchDarklyState {
    * name that bare keys lose.
    */
   environmentSourceNames: Array<{key: string; name: string}>
+  /** Environment keys from the last snapshot, slug-normalized for listEnvironments(). */
+  environments: string[]
   /** `--full-summary` — when true, fetchChanges walks the Phase-2 audit log. */
   fullSummary: boolean
+  /**
+   * qfg-l8uz: account-wide `maintainerId → email` map fetched once during
+   * validateAuth via `/members`. Null when the call failed or the API token
+   * lacks member-read permission — translate() and the report renderer must
+   * tolerate that.
+   */
+  maintainerMap: null | Record<string, string>
   projectKey: string
   /** Conversion notes collected across all translate() calls in a run. */
   report: ConversionReport
@@ -97,6 +105,7 @@ const state: LaunchDarklyState = {
   environments: [],
   environmentSourceNames: [],
   fullSummary: false,
+  maintainerMap: null,
   projectKey: resolveProjectKey(),
   report: new ConversionReport(),
   retentionHorizon: null,
@@ -160,6 +169,7 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   state.environments = []
   state.environmentSourceNames = detailed
   state.retentionHorizon = null
+  state.maintainerMap = null
 
   // Plan §4.1.1: under --full-summary, probe the audit-log retention window
   // here — the earliest authenticated hook — so the command can tell the user
@@ -168,6 +178,28 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   // get thirty days.
   if (state.fullSummary) {
     state.retentionHorizon = await probeRetentionHorizon(apiKey, {spec: buildFlagAuditSpec(state.projectKey)})
+  }
+}
+
+/**
+ * qfg-l8uz: best-effort `/members` lookup so MIGRATION_REPORT.md can render
+ * `maintainerId → email`. Project-scoped tokens or accounts that hide member
+ * data will 403 here — that's fine, the migration must not fail just because
+ * the rollup loses a label. Returns null on any error, the empty map when the
+ * endpoint returns no members, and a stripped map otherwise (members without
+ * an email are skipped — we have nothing useful to render for them).
+ */
+async function loadMaintainerMap(apiKey: string): Promise<null | Record<string, string>> {
+  try {
+    const members = await fetchMembers(apiKey)
+    const map: Record<string, string> = {}
+    for (const member of members) {
+      if (member.email) map[member._id] = member.email
+    }
+
+    return map
+  } catch {
+    return null
   }
 }
 
@@ -190,6 +222,12 @@ async function listEnvironmentsImpl(): Promise<string[]> {
  */
 async function* fetchChangesImpl(): AsyncIterable<LegacyChange> {
   const apiKey = requireApiKey('fetchChanges')
+
+  // qfg-l8uz: load the account-wide member directory once so the report can
+  // render maintainerId → email pairs. Deliberately best-effort — a failed
+  // call (project-scoped token, hidden member data) just leaves the rollup
+  // showing opaque hex IDs.
+  state.maintainerMap = await loadMaintainerMap(apiKey)
 
   if (state.fullSummary) {
     yield* fetchAuditHistory(apiKey)
@@ -325,6 +363,18 @@ export function getConversionReport(): ConversionReport {
 }
 
 /**
+ * qfg-l8uz: maintainerId → email map produced by `/members` during
+ * validateAuth, or null when the call failed (project-scoped token, account
+ * hides members, etc.). The report renderer surfaces this as a sub-table on
+ * `## Identifier map` and decorates `dropped-maintainer` rollups so a reader
+ * sees real emails alongside the opaque hex IDs.
+ */
+function getMaintainerMapImpl(): null | Record<string, string> {
+  if (state.maintainerMap === null) return null
+  return Object.keys(state.maintainerMap).length === 0 ? null : {...state.maintainerMap}
+}
+
+/**
  * qfg-1t7m: source-name → Quonfig-name pairs for the report's "Environment
  * mapping table". The source name is LD's user-facing env display name; the
  * Quonfig name is the slugified env key. De-duped on the slugified key — two
@@ -379,6 +429,7 @@ export const launchdarklySource: MigrationSource = {
   getCommitMeta: getCommitMetaImpl,
   getConversionNotes: getConversionNotesImpl,
   getEnvironmentMap: getEnvironmentMapImpl,
+  getMaintainerMap: getMaintainerMapImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
   name: SOURCE_NAME,
@@ -391,6 +442,7 @@ export function __resetLaunchDarklySourceForTests(): void {
   state.environments = []
   state.environmentSourceNames = []
   state.fullSummary = false
+  state.maintainerMap = null
   state.projectKey = resolveProjectKey()
   state.report = new ConversionReport()
   state.retentionHorizon = null

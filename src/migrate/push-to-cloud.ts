@@ -168,6 +168,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
               resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
             const conversionNotes = opts.source.getConversionNotes?.() ?? null
             const environmentMap = opts.source.getEnvironmentMap?.() ?? null
+            const maintainerMap = opts.source.getMaintainerMap?.() ?? null
             const skippedTotal =
               (acc.skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
             const environmentsCount = opts.environments?.length ?? 0
@@ -182,6 +183,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
               ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
               ...(acc.droppedOverrides ? {droppedOverrides: acc.droppedOverrides} : {}),
               ...(acc.duplicateResolutions ? {duplicateResolutions: acc.duplicateResolutions} : {}),
+              ...(maintainerMap && Object.keys(maintainerMap).length > 0 ? {maintainerMap} : {}),
               ...(acc.skippedConfigs ? {skippedConfigs: acc.skippedConfigs} : {}),
             }
             writeMigrationReport(dir, reportData)

@@ -283,6 +283,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
   const conversionNotes = opts.source.getConversionNotes?.() ?? null
   const environmentMap = opts.source.getEnvironmentMap?.() ?? null
+  const maintainerMap = opts.source.getMaintainerMap?.() ?? null
   const duplicateResolutions: DuplicateResolutionSummary | null =
     resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
   const skippedTotal = (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
@@ -296,6 +297,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
     ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
     ...(droppedOverrides ? {droppedOverrides} : {}),
     ...(duplicateResolutions ? {duplicateResolutions} : {}),
+    ...(maintainerMap && Object.keys(maintainerMap).length > 0 ? {maintainerMap} : {}),
     ...(skippedConfigs ? {skippedConfigs} : {}),
   }
   writeMigrationReport(opts.localDir, reportData)
@@ -469,6 +471,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
     const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
     const conversionNotes = opts.source.getConversionNotes?.() ?? null
     const environmentMap = opts.source.getEnvironmentMap?.() ?? null
+    const maintainerMap = opts.source.getMaintainerMap?.() ?? null
     const duplicateResolutions: DuplicateResolutionSummary | null =
       resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
 
@@ -486,6 +489,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
       ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
       ...(droppedOverrides ? {droppedOverrides} : {}),
       ...(duplicateResolutions ? {duplicateResolutions} : {}),
+      ...(maintainerMap && Object.keys(maintainerMap).length > 0 ? {maintainerMap} : {}),
       ...(skippedConfigs ? {skippedConfigs} : {}),
     }
     writeMigrationReport(dir, reportData)

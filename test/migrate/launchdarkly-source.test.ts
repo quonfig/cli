@@ -80,6 +80,7 @@ describe('migrate/sources/launchdarkly — MigrationSource wiring', () => {
           HttpResponse.json({items: [{key: 'test', name: 'Test'}]}),
         ),
         http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
         http.get(`${TEST_BASE_URL}/flags/default`, () =>
           HttpResponse.json({
             items: [
@@ -147,6 +148,7 @@ describe('migrate/sources/launchdarkly — MigrationSource wiring', () => {
           }),
         ),
         http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
         http.get(`${TEST_BASE_URL}/flags/default`, () =>
           HttpResponse.json({
             items: [
@@ -279,6 +281,7 @@ describe('migrate/sources/launchdarkly — MigrationSource wiring', () => {
             shortDescription: `change ${id}`,
           })
         }),
+        http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
         // Current-state segments are still re-snapshotted so --full-summary
         // doesn't silently drop them (the audit log is flag-scoped).
         http.get(`${TEST_BASE_URL}/projects/default/environments`, () =>
@@ -333,6 +336,67 @@ describe('migrate/sources/launchdarkly — MigrationSource wiring', () => {
 
       await launchdarklySource.validateAuth('token')
       expect(getLaunchDarklyRetentionHorizon()).to.equal(null)
+    })
+  })
+
+  describe('getMaintainerMap (qfg-l8uz)', () => {
+    it('returns id → email pairs from /members after fetchChanges runs', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/projects/default/environments`, () =>
+          HttpResponse.json({items: [{key: 'test', name: 'Test'}]}),
+        ),
+        http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () =>
+          HttpResponse.json({
+            items: [
+              {_id: '6a01c58d51b2060a7e9178e1', email: 'ada@acme.test'},
+              {_id: '7b02d691f1c12abc1234efef', email: 'bob@acme.test'},
+              // Members with no email are skipped (nothing useful to render).
+              {_id: '8c03e7a0aaaabbbbccccdddd'},
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/flags/default`, () => HttpResponse.json({items: []})),
+        http.get(`${TEST_BASE_URL}/segments/default/test`, () => HttpResponse.json({items: []})),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchdarklySource.validateAuth('token')
+      // Drain — the map is loaded as a side-effect of the snapshot fetch.
+      const drained: LegacyChange[] = []
+      for await (const change of launchdarklySource.fetchChanges(null)) {
+        drained.push(change)
+      }
+
+      expect(drained).to.be.an('array')
+      const map = launchdarklySource.getMaintainerMap!()
+      expect(map).to.deep.equal({
+        '6a01c58d51b2060a7e9178e1': 'ada@acme.test',
+        '7b02d691f1c12abc1234efef': 'bob@acme.test',
+      })
+    })
+
+    it('returns null when /members is forbidden — migration still runs', async () => {
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/projects/default/environments`, () =>
+          HttpResponse.json({items: [{key: 'test', name: 'Test'}]}),
+        ),
+        http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () => new HttpResponse('forbidden', {status: 403})),
+        http.get(`${TEST_BASE_URL}/flags/default`, () => HttpResponse.json({items: []})),
+        http.get(`${TEST_BASE_URL}/segments/default/test`, () => HttpResponse.json({items: []})),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      await launchdarklySource.validateAuth('token')
+      // Drain — no flags, but the loader still runs.
+      const drained: LegacyChange[] = []
+      for await (const change of launchdarklySource.fetchChanges(null)) {
+        drained.push(change)
+      }
+
+      expect(drained).to.have.length(0)
+      expect(launchdarklySource.getMaintainerMap!()).to.equal(null)
     })
   })
 })

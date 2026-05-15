@@ -79,6 +79,14 @@ export interface MigrationReportData {
   identifierMap: IdentifierMap
   lossyMappings: LossyMapping[]
   /**
+   * qfg-l8uz: source maintainerId → email pairs. Rendered as a sub-table on
+   * `## Identifier map` so the reader sees who owned each dropped-maintainer
+   * note, and consumed by the renderer to decorate the dropped-maintainer
+   * rollup with emails. Optional/undefined when the source has no member
+   * lookup (or it failed) — both the table and the decoration just no-op.
+   */
+  maintainerMap?: null | Record<string, string>
+  /**
    * Configs soft-skipped by translate() because the source data was invalid
    * (e.g. variant/valueType mismatch). Null when nothing was skipped.
    */
@@ -133,13 +141,37 @@ const renderEnvironmentMap = (entries: EnvironmentMapEntry[]): string => {
   return [header, '', '| Source | Quonfig |', '| --- | --- |', ...rows].join('\n')
 }
 
-const renderIdentifierMap = (map: IdentifierMap): string => {
+const renderIdentifierMap = (map: IdentifierMap, maintainerMap?: null | Record<string, string>): string => {
   const header = '## Identifier map'
+  const sections: string[] = []
   const keys = Object.keys(map)
-  if (keys.length === 0) return `${header}\n\n${NONE}`
-  const sorted = [...keys].sort()
-  const rows = sorted.map((k) => `| \`${k}\` | \`${map[k]}\` |`)
-  return [header, '', '| Legacy key | Quonfig key |', '| --- | --- |', ...rows].join('\n')
+  if (keys.length > 0) {
+    const sorted = [...keys].sort()
+    const rows = sorted.map((k) => `| \`${k}\` | \`${map[k]}\` |`)
+    sections.push(['### Legacy keys', '', '| Legacy key | Quonfig key |', '| --- | --- |', ...rows].join('\n'))
+  }
+
+  const maintainerIds = maintainerMap ? Object.keys(maintainerMap) : []
+  if (maintainerIds.length > 0) {
+    const sorted = [...maintainerIds].sort()
+    const rows = sorted.map((id) => `| \`${id}\` | ${maintainerMap![id]} |`)
+    sections.push(
+      [
+        '### Maintainer IDs',
+        '',
+        `Resolved **${sorted.length}** maintainer ID${sorted.length === 1 ? '' : 's'} via the LaunchDarkly /members ` +
+          `endpoint. Use this table to read 'Dropped maintainer metadata' below — each \`maintainerId\` there maps to the ` +
+          `email here.`,
+        '',
+        '| maintainerId | email |',
+        '| --- | --- |',
+        ...rows,
+      ].join('\n'),
+    )
+  }
+
+  if (sections.length === 0) return `${header}\n\n${NONE}`
+  return [header, '', ...sections].join('\n\n')
 }
 
 const renderDroppedOverrides = (dropped: DroppedOverrideSummary | null | undefined): null | string => {
@@ -453,7 +485,25 @@ const renderDroppedPrerequisiteBody = (notes: ConversionNote[]): string[] => {
   return lines
 }
 
-const renderConversionNotes = (notes: ConversionNote[] | undefined): null | string => {
+/**
+ * qfg-l8uz: substitute every `<hex maintainerId>` in a dropped-maintainer
+ * detail with `<id> (<email>)` so the per-flag rollup reads as a human label
+ * instead of an opaque hex string. No-op when the map is empty/missing or the
+ * ID isn't in it (team-key drops, partial member visibility) — the unsubstituted
+ * line is still informative.
+ */
+const decorateMaintainerDetail = (detail: string, maintainerMap?: null | Record<string, string>): string => {
+  if (!maintainerMap) return detail
+  return detail.replaceAll(/[\da-f]{24}/g, (match) => {
+    const email = maintainerMap[match]
+    return email ? `${match} (${email})` : match
+  })
+}
+
+const renderConversionNotes = (
+  notes: ConversionNote[] | undefined,
+  maintainerMap?: null | Record<string, string>,
+): null | string => {
   // `skipped-config` (own section) and `rebucketed-rollout` (own section) are
   // rendered elsewhere — everything else is grouped by category here.
   const grouped = (notes ?? []).filter((n) => n.category !== 'rebucketed-rollout' && n.category !== 'skipped-config')
@@ -474,7 +524,9 @@ const renderConversionNotes = (notes: ConversionNote[] | undefined): null | stri
     if (rollup) {
       lines.push(rollup(sorted.length), '', '<details><summary>Per-flag list</summary>', '')
       for (const note of sorted) {
-        lines.push(`- \`${note.key}\` — ${note.detail}`)
+        const detail =
+          category === 'dropped-maintainer' ? decorateMaintainerDetail(note.detail, maintainerMap) : note.detail
+        lines.push(`- \`${note.key}\` — ${detail}`)
       }
 
       lines.push('', '</details>')
@@ -623,7 +675,7 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
     renderLossyMappings(data.lossyMappings),
     renderUnsupported(data.unsupportedFeatures),
     renderEnvironmentMap(data.environmentMap),
-    renderIdentifierMap(data.identifierMap),
+    renderIdentifierMap(data.identifierMap, data.maintainerMap),
   )
 
   const dropped = renderDroppedOverrides(data.droppedOverrides)
@@ -641,7 +693,7 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   const rebucketed = renderRebucketedRollouts(data.conversionNotes)
   if (rebucketed !== null) sections.push(rebucketed)
 
-  const conversionNotes = renderConversionNotes(data.conversionNotes)
+  const conversionNotes = renderConversionNotes(data.conversionNotes, data.maintainerMap)
   if (conversionNotes !== null) sections.push(conversionNotes)
 
   sections.push(renderFollowUp(data.followUp))

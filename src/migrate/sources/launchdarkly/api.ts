@@ -16,6 +16,8 @@ import type {
   LDEnvironmentsResponse,
   LDFlag,
   LDFlagsResponse,
+  LDMember,
+  LDMembersResponse,
   LDSegment,
   LDSegmentsResponse,
   LDSnapshot,
@@ -221,6 +223,20 @@ export async function fetchFlags(
   for (const env of envKeys) params.append('env', env)
   if (opts.archived) params.set('archived', 'true')
   return paginate<LDFlag, LDFlagsResponse>(`/flags/${encodeURIComponent(projectKey)}?${params}`, apiKey)
+}
+
+/**
+ * Account-wide member list — used to resolve flag `maintainerId` hex strings
+ * to readable emails for MIGRATION_REPORT.md (qfg-l8uz). Members live above
+ * projects in LD's hierarchy, so this call is project-independent.
+ *
+ * Some API tokens (project-scoped, or accounts with member visibility
+ * restrictions) can't read members and get a 403. Callers should treat the
+ * member map as best-effort and downgrade gracefully — the migration must not
+ * fail because we couldn't enrich the maintainer rollup.
+ */
+export async function fetchMembers(apiKey: string): Promise<LDMember[]> {
+  return paginate<LDMember, LDMembersResponse>(`/members?limit=${PAGE_LIMIT}`, apiKey)
 }
 
 /** Segments are a per-environment resource — caller loops env keys and de-dupes. */

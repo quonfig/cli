@@ -162,6 +162,7 @@ describe('migrate/sources/launchdarkly — --full-summary end-to-end (Epic 6)', 
         })
       }),
       http.get(`${TEST_BASE_URL}/segments/default/production`, () => HttpResponse.json({items: []})),
+      http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
     )
     server.listen({onUnhandledRequest: 'error'})
 
@@ -266,6 +267,7 @@ describe('migrate/sources/launchdarkly — --full-summary end-to-end (Epic 6)', 
         })
       }),
       http.get(`${TEST_BASE_URL}/segments/default/production`, () => HttpResponse.json({items: []})),
+      http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
     )
     server.listen({onUnhandledRequest: 'error'})
 

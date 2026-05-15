@@ -180,6 +180,67 @@ describe('migrate/migration-report', () => {
       expect(idSection).to.include('z_flag')
     })
 
+    describe('Identifier map maintainer rows (qfg-l8uz)', () => {
+      it('renders a Maintainer IDs sub-table when maintainerMap is supplied', () => {
+        const md = buildMigrationReport(
+          baseData({
+            maintainerMap: {
+              '6a01c58d51b2060a7e9178e1': 'ada@acme.test',
+              '7b02d691f1c12abc1234efef': 'bob@acme.test',
+            },
+          }),
+        )
+        const start = md.indexOf('## Identifier map')
+        const next = md.indexOf('\n## ', start + 1)
+        const section = md.slice(start, next === -1 ? undefined : next)
+        expect(section).to.include('### Maintainer IDs')
+        expect(section).to.include('| maintainerId | email |')
+        expect(section).to.include('6a01c58d51b2060a7e9178e1')
+        expect(section).to.include('ada@acme.test')
+        expect(section).to.include('bob@acme.test')
+      })
+
+      it('decorates dropped-maintainer rollup entries with `(email)` when the ID resolves', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [
+              {
+                category: 'dropped-maintainer',
+                key: 'flag-a',
+                detail: 'maintainer 6a01c58d51b2060a7e9178e1 dropped — Quonfig authorship lives in git history',
+              },
+              {
+                category: 'dropped-maintainer',
+                key: 'flag-b',
+                detail: 'maintainer 7b02d691f1c12abc1234efef dropped — Quonfig authorship lives in git history',
+              },
+            ],
+            maintainerMap: {
+              '6a01c58d51b2060a7e9178e1': 'ada@acme.test',
+            },
+          }),
+        )
+        // Resolved ID is decorated; unresolved one is left untouched (no spurious "()" or empty parens).
+        expect(md).to.include('6a01c58d51b2060a7e9178e1 (ada@acme.test)')
+        expect(md).to.include('7b02d691f1c12abc1234efef dropped')
+        expect(md).to.not.include('7b02d691f1c12abc1234efef (')
+      })
+
+      it('falls back to legacy "(none)" placeholder when neither identifierMap nor maintainerMap has entries', () => {
+        const md = buildMigrationReport(baseData())
+        const start = md.indexOf('## Identifier map')
+        const next = md.indexOf('\n## ', start + 1)
+        const section = md.slice(start, next === -1 ? undefined : next)
+        expect(section.toLowerCase()).to.include('(none)')
+      })
+
+      it('omits the Maintainer IDs sub-table when maintainerMap is empty', () => {
+        const md = buildMigrationReport(baseData({maintainerMap: {}}))
+        expect(md).to.not.include('### Maintainer IDs')
+      })
+    })
+
     it('splits the follow-up checklist into "Must fix before cutover" and "Review post-cutover"', () => {
       const md = buildMigrationReport(
         baseData({
@@ -594,7 +655,7 @@ describe('migrate/migration-report', () => {
         const md = buildMigrationReport(baseData({source: 'launchdarkly'}))
         const appendix = md.slice(md.indexOf('## Behavioral differences post-cutover'))
         expect(appendix, 'targets/contextTargets').to.match(/contextTargets/)
-        expect(appendix, "'off' toggle").to.match(/['"`]off['"`] toggle/)
+        expect(appendix, "'off' toggle").to.match(/["'`]off["'`] toggle/)
         expect(appendix, 'offVariation').to.match(/offVariation/)
         expect(appendix, 'mobile SDK keys').to.match(/[Mm]obile SDK keys/)
         expect(appendix, 'maintainer').to.match(/[Mm]aintainer/)

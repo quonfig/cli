@@ -151,6 +151,23 @@ export interface LDContextKindsResponse {
 }
 
 /**
+ * One row from `GET /members` — only the fields the migrator surfaces are
+ * typed. `_id` is what flag JSON references as `maintainerId`; `email` is the
+ * human-readable label we resolve into MIGRATION_REPORT.md.
+ */
+export interface LDMember {
+  _id: string
+  email?: string
+}
+
+/** `GET /members` — offset-paginated. */
+export interface LDMembersResponse {
+  _links?: {next?: {href: string}}
+  items: LDMember[]
+  totalCount?: number
+}
+
+/**
  * The full Phase-1 config snapshot — what the fetcher stitches together and
  * what `translate()` consumes. One of these is produced per migration run.
  */

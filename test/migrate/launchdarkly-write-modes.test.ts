@@ -43,6 +43,7 @@ function ldServer(): ReturnType<typeof setupServer> {
       HttpResponse.json({items: [{key: 'production', name: 'Production'}]}),
     ),
     http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+    http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
     http.get(`${TEST_BASE_URL}/flags/default`, () =>
       HttpResponse.json({
         items: [
@@ -177,6 +178,7 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
           }),
         ),
         http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
         http.get(`${TEST_BASE_URL}/flags/default`, () =>
           HttpResponse.json({
             items: [
@@ -229,6 +231,7 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
           HttpResponse.json({items: [{key: 'production', name: 'Production'}]}),
         ),
         http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
         http.get(`${TEST_BASE_URL}/flags/default`, () =>
           HttpResponse.json({
             items: [
