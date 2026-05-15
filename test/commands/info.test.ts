@@ -8,6 +8,7 @@ import {
   keyWithEvaluations,
   keyWithNoEvaluations,
   rawSecret,
+  rolloutRuleKey,
   secretKey,
   server,
 } from '../responses/info.js'
@@ -170,6 +171,18 @@ No evaluations found for the past 24 hours
       .it('renders JSON default as JSON (not [object Object])', (ctx) => {
         expect(ctx.stdout).not.contains('[object Object]')
         expect(ctx.stdout).contains('Default: {"maxTokens":500,"model":"claude"}')
+      })
+
+    // qfg-5j9i: env whose conditional rule serves a `weighted_values` rollout
+    // used to render as "[override] [object Object]" because formatValue did
+    // not unwrap the {type: 'weighted_values', value: {weightedValues: [...]}}
+    // shape emitted by the LaunchDarkly migrator.
+    test
+      .stdout()
+      .command(['info', rolloutRuleKey, '--exclude-evaluations'])
+      .it('renders [see rules] for an env with a weighted_values rollout (qfg-5j9i)', (ctx) => {
+        expect(ctx.stdout).not.contains('[object Object]')
+        expect(ctx.stdout).contains('jeffrey: [see rules]')
       })
   })
 

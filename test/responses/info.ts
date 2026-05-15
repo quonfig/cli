@@ -8,6 +8,7 @@ export const keyWithNoEvaluations = 'jeffreys.test.key.reforge'
 export const secretKey = 'a.secret.config'
 export const confidentialKey = 'a.confidential.config'
 export const jsonKey = 'question.max-response.override'
+export const rolloutRuleKey = 'fx-rule-rollout'
 
 export const rawSecret = `875247386844c18c58a97c--b307b97a8288ac9da3ce0cf2--7ab0c32e044869e355586ed653a435de`
 
@@ -140,6 +141,46 @@ const jsonConfig = {
   environments: [],
 }
 
+// Config whose `test` env serves a weighted_values rollout via a conditional
+// rule — the LaunchDarkly migrator produces this shape, and it tripped the
+// "[override] [object Object]" bug (qfg-5j9i). The rule's value is wrapped:
+//   {type: 'weighted_values', value: {hashByPropertyName, weightedValues: [...]}}
+const rolloutRuleConfig = {
+  key: rolloutRuleKey,
+  type: 'feature_flag',
+  valueType: 'bool',
+  default: {
+    rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}],
+  },
+  environments: [
+    {
+      id: '588',
+      rules: [
+        {
+          criteria: [
+            {
+              operator: 'PROP_IS_ONE_OF',
+              propertyName: 'user.key',
+              valueToMatch: {type: 'string_list', value: ['alice', 'bob']},
+            },
+          ],
+          value: {
+            type: 'weighted_values',
+            value: {
+              hashByPropertyName: 'user.key',
+              weightedValues: [
+                {value: {type: 'bool', value: true}, weight: 50_000},
+                {value: {type: 'bool', value: false}, weight: 50_000},
+              ],
+            },
+          },
+        },
+        {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+      ],
+    },
+  ],
+}
+
 const confidentialConfig = {
   key: confidentialKey,
   type: 'config',
@@ -192,6 +233,15 @@ const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
           description: '',
         },
         {key: jsonKey, type: 'config', valueType: 'json', version: 1, id: 5, name: 'JSON Override', description: ''},
+        {
+          key: rolloutRuleKey,
+          type: 'feature_flag',
+          valueType: 'bool',
+          version: 1,
+          id: 6,
+          name: 'Rollout Rule',
+          description: '',
+        },
       ],
     },
   }),
@@ -220,6 +270,10 @@ const configHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, asyn
 
   if (key === jsonKey) {
     return HttpResponse.json({json: jsonConfig})
+  }
+
+  if (key === rolloutRuleKey) {
+    return HttpResponse.json({json: rolloutRuleConfig})
   }
 
   return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})

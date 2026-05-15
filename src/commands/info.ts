@@ -370,6 +370,32 @@ Related commands:
     return true
   }
 
+  // A rule value is a "simple scalar" if it carries a literal value that can be
+  // rendered inline next to "[override]". Rollouts ({type: 'weighted_values',
+  // ...}, or anything else where `value.value` is itself an object) cannot —
+  // String(obj) yields "[object Object]" (qfg-5j9i), and a percent split is
+  // never a one-token override anyway.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private isSimpleScalarRuleValue(value: any): boolean {
+    if (!value || typeof value !== 'object') return false
+    if (value.type === 'weighted_values' || Array.isArray(value.weightedValues)) return false
+    // Old format: {type: 'string'|'bool'|'int'|'double'|'stringList'|'json', value: X}
+    if (typeof value.type === 'string' && value.value !== undefined) {
+      // A `json` payload may legitimately be an object — render it as JSON, not [object Object].
+      if (value.type === 'json') return true
+      return typeof value.value !== 'object' || Array.isArray(value.value)
+    }
+    // New format: {string: X} / {bool: X} / {int: X} / {double: X} / {stringList: [...]} / {json: ...}
+    return (
+      value.string !== undefined ||
+      value.bool !== undefined ||
+      value.int !== undefined ||
+      value.double !== undefined ||
+      value.stringList !== undefined ||
+      value.json !== undefined
+    )
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private parseConfig(config: any, environments: Environment[], url: string) {
     const contents: string[] = []
@@ -425,10 +451,11 @@ Related commands:
           // Has conditional rules - show [override] with the conditional value
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const overrideRule = envConfig.rules.find((r: any) => this.hasNonTrivialCriteria(r))
-          if (overrideRule) {
+          if (overrideRule && this.isSimpleScalarRuleValue(overrideRule.value)) {
             const overrideValue = this.formatValue(overrideRule.value, false)
             displayValue = `[override] \`${overrideValue}\``
           } else {
+            // Rollouts / weighted_values / anything we can't render inline → defer to the URL (qfg-5j9i).
             displayValue = '[see rules]'
           }
         } else {
