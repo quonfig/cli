@@ -9,24 +9,64 @@
  * Design is frozen in `launchdarkly.README.md` / `project/plans/migrator-launch-darkly.md`.
  */
 
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+
 import {type ConversionNote, ConversionReport} from '../quonfig-target/report.js'
-import {type LegacyChange, type MigrationSource, type QuonfigFile, type SkippedConfigSummary} from '../source.js'
-import {fetchProjectEnvironments, fetchSnapshot} from './launchdarkly/api.js'
+import {
+  type CommitMeta,
+  type LegacyChange,
+  type MigrationSource,
+  type QuonfigFile,
+  type SkippedConfigSummary,
+} from '../source.js'
+import {fetchProjectEnvironments, fetchSegmentsForEnv, fetchSnapshot} from './launchdarkly/api.js'
+import {
+  type LaunchDarklyFlagAuditRaw,
+  type RetentionHorizon,
+  auditEntryToLegacyChange,
+  buildFlagAuditSpec,
+  getCommitMetaForAuditEntry,
+  probeRetentionHorizon,
+  walkAuditLog,
+} from './launchdarkly/audit.js'
 import {flagOutputPath, segmentOutputPath, translateFlag, translateSegment} from './launchdarkly/translate.js'
 import type {LDFlag, LDSegment} from './launchdarkly/types.js'
 
 const SOURCE_NAME = 'launchdarkly'
 
-/** Raw payload carried on each LegacyChange — discriminated by `kind`. */
-type LaunchDarklyRaw = {data: LDFlag; kind: 'flag'} | {data: LDSegment; kind: 'segment'}
+/**
+ * Resume cursor for a crashed Phase-2 walk. Lives in `os.tmpdir()` keyed by
+ * project key — NOT inside the target workspace, because `--push` mode requires
+ * the local clone dir to be empty before cloning (and a checkpoint sitting in
+ * `.qf/` would clobber that). OS-tmpdir is fine for in-session crash recovery;
+ * cross-reboot recovery is out of scope for this walker.
+ */
+function auditCheckpointFilename(projectKey: string): string {
+  const safeKey = projectKey.replaceAll(/[^\w.-]+/g, '_')
+  return `qfg-ld-audit-${safeKey}.json`
+}
+
+/**
+ * Raw payload carried on each LegacyChange — discriminated by `kind`. The flag
+ * variant may additionally carry a Phase-2 `auditEntry` (see
+ * `LaunchDarklyFlagAuditRaw`); `translate()` ignores it, `getCommitMeta()` reads
+ * it to reify the original author/date/message.
+ */
+type LaunchDarklyRaw = {data: LDFlag; kind: 'flag'} | {data: LDSegment; kind: 'segment'} | LaunchDarklyFlagAuditRaw
 
 interface LaunchDarklyState {
   apiKey: null | string
   /** Environment keys from the last snapshot, slug-normalized for listEnvironments(). */
   environments: string[]
+  /** `--full-summary` — when true, fetchChanges walks the Phase-2 audit log. */
+  fullSummary: boolean
   projectKey: string
   /** Conversion notes collected across all translate() calls in a run. */
   report: ConversionReport
+  /** Result of the up-front retention pre-flight; null until full-summary validateAuth runs. */
+  retentionHorizon: null | RetentionHorizon
 }
 
 /**
@@ -42,8 +82,10 @@ function resolveProjectKey(): string {
 const state: LaunchDarklyState = {
   apiKey: null,
   environments: [],
+  fullSummary: false,
   projectKey: resolveProjectKey(),
   report: new ConversionReport(),
+  retentionHorizon: null,
 }
 
 /**
@@ -54,6 +96,25 @@ const state: LaunchDarklyState = {
  */
 export function setLaunchDarklyProjectKey(projectKey: string): void {
   state.projectKey = projectKey
+}
+
+/**
+ * Enable Phase-2 history backfill for this run. When set, `fetchChanges` walks
+ * the LaunchDarkly audit log instead of taking a current-state snapshot, and
+ * `validateAuth` runs the retention pre-flight. Called by `qfg migrate` from
+ * its `--full-summary` flag.
+ */
+export function setLaunchDarklyFullSummary(on: boolean): void {
+  state.fullSummary = on
+}
+
+/**
+ * The retention pre-flight result from the last full-summary `validateAuth`,
+ * or null. The command reads this and tells the user the real history horizon
+ * BEFORE the slow audit walk starts (plan §4.1.1).
+ */
+export function getLaunchDarklyRetentionHorizon(): null | RetentionHorizon {
+  return state.retentionHorizon
 }
 
 class MissingAuthError extends Error {
@@ -81,6 +142,16 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   state.apiKey = apiKey
   state.report = new ConversionReport()
   state.environments = []
+  state.retentionHorizon = null
+
+  // Plan §4.1.1: under --full-summary, probe the audit-log retention window
+  // here — the earliest authenticated hook — so the command can tell the user
+  // the real history horizon BEFORE the slow Phase-2 walk starts. The walk can
+  // take hours; nobody should wait that long expecting two years and silently
+  // get thirty days.
+  if (state.fullSummary) {
+    state.retentionHorizon = await probeRetentionHorizon(apiKey, {spec: buildFlagAuditSpec(state.projectKey)})
+  }
 }
 
 async function listEnvironmentsImpl(): Promise<string[]> {
@@ -96,9 +167,17 @@ async function listEnvironmentsImpl(): Promise<string[]> {
  * still feeds the framework's "what changed since last run" reporting, but the
  * fetch itself is unconditional. Every flag and segment is yielded as one
  * `LegacyChange`; the converter runs in `translate()`.
+ *
+ * Under `--full-summary` this delegates to the Phase-2 audit-log walk instead.
  */
 async function* fetchChangesImpl(): AsyncIterable<LegacyChange> {
   const apiKey = requireApiKey('fetchChanges')
+
+  if (state.fullSummary) {
+    yield* fetchAuditHistory(apiKey)
+    return
+  }
+
   const snapshot = await fetchSnapshot(apiKey, state.projectKey)
   state.environments = snapshot.environments.map((k) => slugifyEnvKey(k))
 
@@ -107,6 +186,81 @@ async function* fetchChangesImpl(): AsyncIterable<LegacyChange> {
   }
 
   for (const segment of snapshot.segments) {
+    yield {key: segment.key, raw: {data: segment, kind: 'segment'} satisfies LaunchDarklyRaw, source: SOURCE_NAME}
+  }
+}
+
+/** Path to this run's audit-walk resume cursor (always under os.tmpdir; see filename comment). */
+function auditCheckpointPath(): string {
+  return path.join(os.tmpdir(), auditCheckpointFilename(state.projectKey))
+}
+
+/** Read the persisted `before` cursor from a crashed walk, or undefined if none. */
+function readAuditCheckpoint(checkpointPath: string): number | undefined {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(checkpointPath, 'utf8')) as {before?: unknown}
+    return typeof parsed.before === 'number' ? parsed.before : undefined
+  } catch {
+    // No checkpoint (fresh run) or an unreadable one — start from newest.
+    return undefined
+  }
+}
+
+function writeAuditCheckpoint(checkpointPath: string, before: number): void {
+  fs.writeFileSync(checkpointPath, JSON.stringify({before}, null, 2) + '\n', 'utf8')
+}
+
+/**
+ * Phase-2 history backfill (`--full-summary`). Walks the LaunchDarkly audit log
+ * newest-to-oldest, reifying each flag change into a `LegacyChange` that carries
+ * both the point-in-time flag snapshot (for `translate()`) and the originating
+ * audit entry (for `getCommitMeta()`). The walk is checkpointed to an os.tmpdir
+ * file so a crashed multi-hour run resumes instead of restarting; the
+ * checkpoint is cleared once the walk completes.
+ *
+ * The audit log is flag-scoped (plan §4.1), so current-state segments are still
+ * re-snapshotted and appended — `--full-summary` must not silently drop them.
+ * Flag changes are emitted oldest-first so the write paths build chronological
+ * git history.
+ */
+async function* fetchAuditHistory(apiKey: string): AsyncIterable<LegacyChange> {
+  const spec = buildFlagAuditSpec(state.projectKey)
+  const checkpointPath = auditCheckpointPath()
+  const startBefore = readAuditCheckpoint(checkpointPath)
+
+  // The audit log is newest-first; collect then reverse so changes commit in
+  // chronological order.
+  const flagChanges: LegacyChange[] = []
+  for await (const entry of walkAuditLog(apiKey, {
+    spec,
+    ...(startBefore !== undefined ? {startBefore} : {}),
+    onCheckpoint(before: number) {
+      writeAuditCheckpoint(checkpointPath, before)
+    },
+  })) {
+    const change = auditEntryToLegacyChange(entry)
+    if (change) flagChanges.push(change)
+  }
+
+  // Walk finished cleanly — drop the resume cursor so a later run starts fresh.
+  if (fs.existsSync(checkpointPath)) fs.rmSync(checkpointPath)
+
+  flagChanges.reverse()
+  for (const change of flagChanges) yield change
+
+  // Re-snapshot current-state segments (flag-scoped audit log can't carry them).
+  const envKeys = await fetchProjectEnvironments(apiKey, state.projectKey)
+  state.environments = envKeys.map((k) => slugifyEnvKey(k))
+  const segmentsByKey = new Map<string, LDSegment>()
+  for (const envKey of envKeys) {
+    // eslint-disable-next-line no-await-in-loop
+    const segs = await fetchSegmentsForEnv(apiKey, state.projectKey, envKey)
+    for (const seg of segs) {
+      if (!segmentsByKey.has(seg.key)) segmentsByKey.set(seg.key, seg)
+    }
+  }
+
+  for (const segment of segmentsByKey.values()) {
     yield {key: segment.key, raw: {data: segment, kind: 'segment'} satisfies LaunchDarklyRaw, source: SOURCE_NAME}
   }
 }
@@ -166,10 +320,24 @@ function getConversionNotesImpl(): ConversionNote[] | null {
   return notes.length === 0 ? null : notes
 }
 
+/**
+ * Per-change commit metadata for `--full-summary` (plan §7). Reifies the
+ * original LaunchDarkly member, timestamp and description from the audit entry
+ * carried on the change's `raw` payload. Returns null for current-state changes
+ * (segments, or a flag with no `auditEntry`) so the write paths fall back to
+ * the migrator identity.
+ */
+function getCommitMetaImpl(change: LegacyChange): CommitMeta | null {
+  const raw = change.raw as LaunchDarklyRaw | undefined
+  if (!raw || typeof raw !== 'object' || !('auditEntry' in raw)) return null
+  return getCommitMetaForAuditEntry(raw.auditEntry)
+}
+
 export const launchdarklySource: MigrationSource = {
   fetchChanges(): AsyncIterable<LegacyChange> {
     return fetchChangesImpl()
   },
+  getCommitMeta: getCommitMetaImpl,
   getConversionNotes: getConversionNotesImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
@@ -181,6 +349,16 @@ export const launchdarklySource: MigrationSource = {
 export function __resetLaunchDarklySourceForTests(): void {
   state.apiKey = null
   state.environments = []
+  state.fullSummary = false
   state.projectKey = resolveProjectKey()
   state.report = new ConversionReport()
+  state.retentionHorizon = null
+
+  // Clear any stray checkpoint from a previous test's resumability assertion.
+  try {
+    const cp = auditCheckpointPath()
+    if (fs.existsSync(cp)) fs.rmSync(cp)
+  } catch {
+    /* best-effort */
+  }
 }

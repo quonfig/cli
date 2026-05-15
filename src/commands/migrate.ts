@@ -24,7 +24,11 @@ import {
 import {missingSourceApiKeyMessage, resolveSourceApiKey} from '../migrate/source-api-key.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {applyLaunchDarklyBaseUrl} from '../migrate/sources/launchdarkly/api.js'
-import {setLaunchDarklyProjectKey} from '../migrate/sources/launchdarkly.js'
+import {
+  getLaunchDarklyRetentionHorizon,
+  setLaunchDarklyFullSummary,
+  setLaunchDarklyProjectKey,
+} from '../migrate/sources/launchdarkly.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
@@ -184,9 +188,12 @@ export default class Migrate extends BaseCommand {
     if (flags.from === 'launchdarkly') {
       // Thread run-scoped source config in before the first API call. The base
       // URL honours the LAUNCHDARKLY_API_URL escape hatch; --project (env-backed
-      // by LAUNCHDARKLY_PROJECT_KEY) selects which LD project to snapshot.
+      // by LAUNCHDARKLY_PROJECT_KEY) selects which LD project to snapshot;
+      // --full-summary swaps the snapshot for the Phase-2 audit-log walk (the
+      // walk's own resume cursor lives in os.tmpdir, not in `dir`).
       applyLaunchDarklyBaseUrl()
       setLaunchDarklyProjectKey(flags.project)
+      setLaunchDarklyFullSummary(flags['full-summary'])
     }
 
     let source
@@ -201,6 +208,15 @@ export default class Migrate extends BaseCommand {
     try {
       await source.validateAuth(sourceApiKey)
       const environments = await source.listEnvironments()
+
+      // Plan §4.1.1: tell the user the real history horizon BEFORE the slow
+      // Phase-2 walk starts. validateAuth populated this for LD under
+      // --full-summary; the message also names the Developer-plan ≤ 30 days
+      // ceiling explicitly when that's what we observed.
+      if (flags.from === 'launchdarkly' && flags['full-summary']) {
+        const horizon = getLaunchDarklyRetentionHorizon()
+        if (horizon) this.log(`History pre-flight: ${horizon.label}`)
+      }
 
       const existing = readImportState(dir)
       const sinceEpochMs = computeSince(flags, existing)

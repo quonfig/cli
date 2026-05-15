@@ -90,8 +90,12 @@ function backoffMsFromHeaders(headers: Headers): number {
  * Single GET with header auth, 429 backoff against `X-Ratelimit-Reset`, and a
  * pre-throttle when `X-Ratelimit-Global-Remaining` runs low. Non-429 errors
  * throw immediately — only rate limiting is retried.
+ *
+ * Exported so the Phase-2 audit-log walker (`audit.ts`) reuses the exact same
+ * rate-limit handling — `/auditlog` is account-wide and the slowest endpoint,
+ * so it must not bypass the shared 429 backoff.
  */
-async function apiFetch(path: string, apiKey: string): Promise<unknown> {
+export async function apiFetch(path: string, apiKey: string): Promise<unknown> {
   const url = path.startsWith('http') ? path : `${baseUrl}${path}`
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
