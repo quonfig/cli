@@ -303,7 +303,10 @@ export function collapseEnvironment(env: SourceFlagEnvironment, ctx: RulesetCont
     ctx.report.add(
       'individual-target-as-rule',
       ctx.sourceKey,
-      `${target.values.length} ${kind} target(s) converted to a leading PROP_IS_ONE_OF rule on ${kind}.key`,
+      `${target.values.length} ${kind} key(s) inlined into a leading PROP_IS_ONE_OF rule on ${kind}.key. ` +
+        `**Trade-off:** you lost the LD 'targets' UI pane — adding/removing an individual now requires a ` +
+        `config edit (qfg set / web UI), not a separate UI. If this was used for beta-list-style toggling, ` +
+        `consider authoring a \`beta_user\` context attribute instead.`,
     )
   }
 

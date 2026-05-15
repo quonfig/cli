@@ -224,6 +224,25 @@ describe('migrate/quonfig-target', () => {
       expect(report.byCategory('individual-target-as-rule')).to.have.length(1)
     })
 
+    it('enriches the individual-target-as-rule note with the LD targets-pane UI-loss trade-off + beta_user alternative (qfg-1xow)', () => {
+      const report = new ConversionReport()
+      collapseEnvironment(
+        {fallthrough: {variation: 0}, on: true, targets: [{values: ['user-a', 'user-b'], variation: 1}]},
+        ctx({report}),
+      )
+      const notes = report.byCategory('individual-target-as-rule')
+      expect(notes).to.have.length(1)
+      const detail = notes[0].detail
+      // Count + new "inlined" verb (replaces the bland "converted").
+      expect(detail).to.match(/2 user key\(s\) inlined into a leading PROP_IS_ONE_OF rule on user\.key/)
+      // The trade-off copy — the specific mechanism this bead adds.
+      expect(detail).to.match(/Trade-off/)
+      expect(detail).to.match(/LD 'targets' UI pane/)
+      expect(detail).to.match(/qfg set/)
+      // Suggested alternative — beta_user context attribute for beta-list-style toggling.
+      expect(detail).to.match(/beta_user/)
+    })
+
     it('drops prerequisites silently and still converts the rest of the environment (reporting is owned by translateFlag — qfg-nb4n)', () => {
       const report = new ConversionReport()
       const rules = collapseEnvironment(
