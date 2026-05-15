@@ -164,5 +164,55 @@ describe('migrate', () => {
         expect(payload.fetched).to.equal(1)
         expect(payload.dir).to.equal(path.resolve(tmpdir, 'out'))
       })
+
+    // D8 (plan §9.1): the launch-specific --api-key / LAUNCH_API_KEY is
+    // generalized to provider-agnostic --source-api-key / QUONFIG_MIGRATE_API_KEY.
+    describe('--source-api-key generalization (D8)', () => {
+      const D8_ENV = ['QUONFIG_MIGRATE_API_KEY', 'LAUNCHDARKLY_API_KEY', 'LAUNCH_API_KEY', 'FLAGSMITH_API_KEY']
+      let savedEnv: Record<string, string | undefined>
+
+      beforeEach(() => {
+        savedEnv = {}
+        for (const k of D8_ENV) {
+          savedEnv[k] = process.env[k]
+          delete process.env[k]
+        }
+      })
+
+      afterEach(() => {
+        for (const k of D8_ENV) {
+          if (savedEnv[k] === undefined) delete process.env[k]
+          else process.env[k] = savedEnv[k]
+        }
+      })
+
+      test
+        .command(['migrate', '--from', 'launchdarkly'])
+        .catch((error) => {
+          expect(error.message).to.match(/--source-api-key/)
+        })
+        .it('errors with --source-api-key guidance when no key is provided')
+
+      test
+        .do(() => mockLaunchApi(LAUNCH_PROD_URL))
+        .stdout()
+        .command(['migrate', '--from', 'launch', '--source-api-key', 'k', '--dry-run', '--json'])
+        .it('accepts --source-api-key as the generic key flag', (ctx) => {
+          const payload = JSON.parse(ctx.stdout)
+          expect(payload.fetched).to.equal(1)
+        })
+
+      test
+        .do(() => {
+          process.env.QUONFIG_MIGRATE_API_KEY = 'k'
+          mockLaunchApi(LAUNCH_PROD_URL)
+        })
+        .stdout()
+        .command(['migrate', '--from', 'launch', '--dry-run', '--json'])
+        .it('reads the generic QUONFIG_MIGRATE_API_KEY env var', (ctx) => {
+          const payload = JSON.parse(ctx.stdout)
+          expect(payload.fetched).to.equal(1)
+        })
+    })
   })
 })

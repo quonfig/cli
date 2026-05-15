@@ -20,6 +20,7 @@ import {
   NotYetImplementedError,
   type SkippedConfigSummary,
 } from '../migrate/source.js'
+import {missingSourceApiKeyMessage, resolveSourceApiKey} from '../migrate/source-api-key.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
 import {displayUrl} from '../util/git-ops.js'
@@ -37,16 +38,17 @@ export default class Migrate extends BaseCommand {
     'and https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.'
 
   static examples = [
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --workspace acme-prod --push',
+    '<%= config.bin %> <%= command.id %> --from launchdarkly --source-api-key $LAUNCHDARKLY_API_KEY --dir ./quonfig-repo',
+    '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --workspace acme-prod --push',
     '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --dry-run',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --staging',
+    '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --dry-run',
+    '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --staging',
   ]
 
   static flags = {
     'api-key': Flags.string({
-      description: 'API key for the legacy source (or set LAUNCH_API_KEY)',
+      description:
+        'Deprecated alias for --source-api-key, kept for the `launch` source (or set LAUNCH_API_KEY). Prefer --source-api-key.',
       env: 'LAUNCH_API_KEY',
     }),
     dir: Flags.string({
@@ -83,6 +85,12 @@ export default class Migrate extends BaseCommand {
     since: Flags.string({
       description: 'Override the delta cursor (epoch milliseconds or ISO-8601 timestamp)',
     }),
+    'source-api-key': Flags.string({
+      description:
+        'API key for the legacy source. Set this, QUONFIG_MIGRATE_API_KEY, or the ' +
+        'per-provider env var (LAUNCHDARKLY_API_KEY, LAUNCH_API_KEY, FLAGSMITH_API_KEY).',
+      env: 'QUONFIG_MIGRATE_API_KEY',
+    }),
     staging: Flags.boolean({
       default: false,
       description: 'Hit the staging API for the source (dev-only)',
@@ -103,8 +111,22 @@ export default class Migrate extends BaseCommand {
       )
     }
 
-    if (!flags['api-key']) {
-      return this.err('--api-key is required. For --from launch you can also set LAUNCH_API_KEY in your environment.')
+    const sourceApiKey = resolveSourceApiKey({
+      apiKeyFlag: flags['api-key'],
+      from: flags.from,
+      sourceApiKeyFlag: flags['source-api-key'],
+    })
+    if (!sourceApiKey) {
+      return this.err(missingSourceApiKeyMessage(flags.from))
+    }
+
+    // --api-key is the deprecated launch-only alias (D8). Nudge non-launch users
+    // toward the generalized flag, but don't fail — the key still resolved.
+    if (flags['api-key'] && !flags['source-api-key'] && flags.from !== 'launch') {
+      this.warn(
+        `--api-key is a deprecated alias scoped to the \`launch\` source. For --from ${flags.from}, ` +
+          'use --source-api-key (or the QUONFIG_MIGRATE_API_KEY env var) instead.',
+      )
     }
 
     if (flags['full-summary'] && flags.recent !== undefined) {
@@ -159,7 +181,7 @@ export default class Migrate extends BaseCommand {
 
     let duplicateResolutionsForWarn: DuplicateResolutionSummary | null = null
     try {
-      await source.validateAuth(flags['api-key'])
+      await source.validateAuth(sourceApiKey)
       const environments = await source.listEnvironments()
 
       const existing = readImportState(dir)
