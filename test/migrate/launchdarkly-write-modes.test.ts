@@ -228,10 +228,10 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       })
 
       expect(result.committed).to.equal(true)
-      // The target dir is its OWN git repo, not the ancestor's. Compare realpaths
-      // because macOS tmpdir (/var/folders/...) symlinks to /private/var/...,
-      // which git canonicalizes in --show-toplevel.
-      expect(fs.realpathSync(run(localDir, 'rev-parse', '--show-toplevel'))).to.equal(fs.realpathSync(localDir))
+      // The target dir is its OWN git repo, not the ancestor's. --show-prefix
+      // returns the empty string only when we're standing at the toplevel,
+      // sidestepping macOS /var-vs-/private/var symlinks + Windows 8.3 paths.
+      expect(run(localDir, 'rev-parse', '--show-prefix')).to.equal('')
       // The migration commit message lives on the target's HEAD.
       expect(run(localDir, 'log', '-1', '--pretty=%s')).to.match(/launchdarkly/i)
       // The ancestor's HEAD is unchanged — nothing was committed there.

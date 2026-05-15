@@ -60,16 +60,17 @@ export interface ApplyLocalMigrationResult {
  * True only when `dir` is itself the root of a git repo. `rev-parse --git-dir`
  * walks UP the filesystem, so a plain `rev-parse` check returns true for any
  * subdir of any ancestor repo — and the migrator then commits into that
- * ancestor instead of `git init`-ing a fresh repo at `dir`. Match
- * `--show-toplevel` against `dir` to scope the check, comparing canonical
- * (realpath-resolved) paths so a symlinked `dir` (e.g. macOS `/var/folders` →
- * `/private/var/folders`) still matches git's canonicalized toplevel
- * (qfg-wu85).
+ * ancestor instead of `git init`-ing a fresh repo at `dir`. We use
+ * `--show-prefix`, which is the relative path from the enclosing toplevel
+ * down to `dir`: empty string when `dir` IS the toplevel, non-empty when it's
+ * a subdir of an ancestor repo. Avoids all the cross-platform path-string
+ * pitfalls of comparing toplevel against `dir` (macOS /var/folders symlinks,
+ * Windows 8.3 short names, case folding) (qfg-wu85).
  */
 const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    const {stdout} = await runGit(['-C', dir, 'rev-parse', '--show-toplevel'])
-    return fs.realpathSync(stdout.trim()) === fs.realpathSync(dir)
+    const {stdout} = await runGit(['-C', dir, 'rev-parse', '--show-prefix'])
+    return stdout.trim() === ''
   } catch {
     return false
   }

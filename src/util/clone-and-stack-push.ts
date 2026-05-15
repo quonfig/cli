@@ -97,17 +97,15 @@ const runGit = async (cwd: string, args: string[]): Promise<{stdout: string; std
 }
 
 /**
- * True only when `dir` is itself the root of a git repo. `rev-parse --git-dir`
- * walks UP the filesystem; match `--show-toplevel` against `dir` to scope the
- * check so we don't treat a subdir of an ancestor repo as the workspace.
- * Compare canonical paths so a symlinked `dir` (e.g. macOS tmpdir under
- * /var/folders → /private/var/folders) still matches (qfg-wu85, same shape as
- * the local-write fix).
+ * True only when `dir` is itself the root of a git repo. Uses `--show-prefix`
+ * (relative path from enclosing toplevel down to `dir`, empty when `dir` IS
+ * the toplevel) to avoid cross-platform path-string pitfalls — see the
+ * matching comment in cli/src/migrate/local-write.ts (qfg-wu85).
  */
 const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    const {stdout} = await runGitSafe(['-C', dir, 'rev-parse', '--show-toplevel'])
-    return fs.realpathSync(stdout.trim()) === fs.realpathSync(dir)
+    const {stdout} = await runGitSafe(['-C', dir, 'rev-parse', '--show-prefix'])
+    return stdout.trim() === ''
   } catch {
     return false
   }

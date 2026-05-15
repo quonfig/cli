@@ -1,5 +1,4 @@
 import {execFile as execFileCb, spawn} from 'node:child_process'
-import * as fs from 'node:fs'
 import * as util from 'node:util'
 
 const execFile = util.promisify(execFileCb)
@@ -83,16 +82,15 @@ export const gitClone = async (repoUrl: string, dir: string): Promise<void> => {
 }
 
 /**
- * True only when `dir` is itself the root of a git repo. `rev-parse --git-dir`
- * walks UP the filesystem; matching `--show-toplevel` against `dir` scopes the
- * check so a subdir of an unrelated ancestor repo doesn't masquerade as the
- * workspace. Compare canonical paths so a symlinked `dir` (e.g. macOS tmpdir
- * under /var/folders → /private/var/folders) still matches (qfg-wu85).
+ * True only when `dir` is itself the root of a git repo. Uses `--show-prefix`
+ * (relative path from enclosing toplevel down to `dir`, empty when `dir` IS
+ * the toplevel) to avoid cross-platform path-string pitfalls — see the
+ * matching comment in cli/src/migrate/local-write.ts (qfg-wu85).
  */
 export const isGitRepo = async (dir: string): Promise<boolean> => {
   try {
-    const {stdout} = await runGit(['-C', dir, 'rev-parse', '--show-toplevel'])
-    return fs.realpathSync(stdout.trim()) === fs.realpathSync(dir)
+    const {stdout} = await runGit(['-C', dir, 'rev-parse', '--show-prefix'])
+    return stdout.trim() === ''
   } catch {
     return false
   }
