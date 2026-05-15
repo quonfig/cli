@@ -1,0 +1,108 @@
+{
+  "key": "fx-targets-and-contexttargets",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.key",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "carol"
+                ]
+              }
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "organization.key",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "org-initech"
+                ]
+              }
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "bool",
+        "value": true
+      },
+      "name": "true"
+    },
+    {
+      "value": {
+        "type": "bool",
+        "value": false
+      },
+      "name": "false"
+    }
+  ],
+  "name": "fx targets and contexttargets",
+  "description": ""
+}

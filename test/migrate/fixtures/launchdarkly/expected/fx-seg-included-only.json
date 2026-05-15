@@ -1,0 +1,23 @@
+{
+  "key": "fx-seg-included-only",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": [],
+  "name": "fx seg included only"
+}

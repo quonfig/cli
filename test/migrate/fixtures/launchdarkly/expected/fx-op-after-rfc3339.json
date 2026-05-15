@@ -1,0 +1,88 @@
+{
+  "key": "fx-op-after-rfc3339",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_AFTER",
+              "propertyName": "user.signupAt",
+              "valueToMatch": {
+                "type": "string",
+                "value": "2025-01-01T00:00:00Z"
+              }
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "bool",
+        "value": true
+      },
+      "name": "true"
+    },
+    {
+      "value": {
+        "type": "bool",
+        "value": false
+      },
+      "name": "false"
+    }
+  ],
+  "name": "fx op-after-rfc3339",
+  "description": ""
+}

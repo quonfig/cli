@@ -1,0 +1,59 @@
+{
+  "key": "fx-seg-rule-with-weight",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "user.country",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": [
+                "US"
+              ]
+            }
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "bool",
+                  "value": true
+                },
+                "weight": 50000
+              },
+              {
+                "value": {
+                  "type": "bool",
+                  "value": false
+                },
+                "weight": 50000
+              }
+            ]
+          }
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": [],
+  "name": "fx seg rule with weight"
+}

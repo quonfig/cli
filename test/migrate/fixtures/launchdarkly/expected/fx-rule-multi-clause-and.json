@@ -1,0 +1,98 @@
+{
+  "key": "fx-rule-multi-clause-and",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_ENDS_WITH_ONE_OF",
+              "propertyName": "user.email",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "@acme.com"
+                ]
+              }
+            },
+            {
+              "operator": "PROP_GREATER_THAN",
+              "propertyName": "user.age",
+              "valueToMatch": {
+                "type": "int",
+                "value": 21
+              }
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "bool",
+        "value": true
+      },
+      "name": "true"
+    },
+    {
+      "value": {
+        "type": "bool",
+        "value": false
+      },
+      "name": "false"
+    }
+  ],
+  "name": "fx rule multi clause and",
+  "description": ""
+}

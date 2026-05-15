@@ -1,0 +1,79 @@
+{
+  "key": "fx-var-number-int",
+  "type": "feature_flag",
+  "valueType": "int",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "int",
+          "value": 0
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "int",
+            "value": 0
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "int",
+        "value": 0
+      },
+      "name": "0"
+    },
+    {
+      "value": {
+        "type": "int",
+        "value": 1
+      },
+      "name": "1"
+    },
+    {
+      "value": {
+        "type": "int",
+        "value": 2
+      },
+      "name": "2"
+    }
+  ],
+  "name": "fx var number int",
+  "description": ""
+}

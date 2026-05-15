@@ -1,0 +1,60 @@
+{
+  "key": "fx-seg-multi-context",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "organization.key",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": [
+                "org-c"
+              ]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "organization.key",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": [
+                "org-b",
+                "org-a"
+              ]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": [],
+  "name": "fx seg multi context"
+}

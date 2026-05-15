@@ -1,0 +1,72 @@
+{
+  "key": "fx-var-string-2way",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "on"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "off"
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "on"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "on"
+      },
+      "name": "on"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "off"
+      },
+      "name": "off"
+    }
+  ],
+  "name": "fx var string 2way",
+  "description": ""
+}

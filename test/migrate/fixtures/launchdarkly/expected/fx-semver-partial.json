@@ -1,0 +1,96 @@
+{
+  "key": "fx-semver-partial",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_SEMVER_EQUAL",
+              "propertyName": "user.appVersion",
+              "valueToMatch": {
+                "type": "string",
+                "value": "2"
+              }
+            },
+            {
+              "operator": "PROP_SEMVER_GREATER_THAN",
+              "propertyName": "user.appVersion",
+              "valueToMatch": {
+                "type": "string",
+                "value": "2.3"
+              }
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "bool",
+            "value": true
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "bool",
+        "value": true
+      },
+      "name": "true"
+    },
+    {
+      "value": {
+        "type": "bool",
+        "value": false
+      },
+      "name": "false"
+    }
+  ],
+  "name": "fx semver partial",
+  "description": ""
+}

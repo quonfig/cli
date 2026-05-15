@@ -1,0 +1,86 @@
+{
+  "key": "fx-var-string-3way",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "control"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "treatment-a"
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "control"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "control"
+      },
+      "name": "control"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "treatment-a"
+      },
+      "name": "treatment-a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "treatment-b"
+      },
+      "name": "treatment-b"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "treatment-c"
+      },
+      "name": "treatment-c"
+    }
+  ],
+  "name": "fx var string 3way",
+  "description": ""
+}

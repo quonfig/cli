@@ -1,0 +1,79 @@
+{
+  "key": "fx-prereq-target-string",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "alpha"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "alpha"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "alpha"
+      },
+      "name": "alpha"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "beta"
+      },
+      "name": "beta"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "gamma"
+      },
+      "name": "gamma"
+    }
+  ],
+  "name": "fx prereq target string",
+  "description": ""
+}

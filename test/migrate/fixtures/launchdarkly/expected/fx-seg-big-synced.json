@@ -1,0 +1,23 @@
+{
+  "key": "fx-seg-big-synced",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": [],
+  "name": "fx seg big synced"
+}

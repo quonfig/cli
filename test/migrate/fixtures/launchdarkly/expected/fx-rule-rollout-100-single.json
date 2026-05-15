@@ -1,0 +1,108 @@
+{
+  "key": "fx-rule-rollout-100-single",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "a"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.country",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "US"
+                ]
+              }
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 100000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "a"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "a"
+      },
+      "name": "a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "b"
+      },
+      "name": "b"
+    }
+  ],
+  "name": "fx rule rollout 100 single",
+  "description": ""
+}

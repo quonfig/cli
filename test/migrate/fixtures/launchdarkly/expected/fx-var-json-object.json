@@ -1,0 +1,92 @@
+{
+  "key": "fx-var-json-object",
+  "type": "feature_flag",
+  "valueType": "json",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "json",
+          "value": {
+            "fontSize": 14,
+            "primary": "#fff",
+            "theme": "light"
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "json",
+            "value": {
+              "fontSize": 16,
+              "primary": "#000",
+              "theme": "dark"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "json",
+            "value": {
+              "fontSize": 14,
+              "primary": "#fff",
+              "theme": "light"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "json",
+        "value": {
+          "fontSize": 14,
+          "primary": "#fff",
+          "theme": "light"
+        }
+      },
+      "name": "{'theme': 'light', 'primary': '#fff', 'fontSize': "
+    },
+    {
+      "value": {
+        "type": "json",
+        "value": {
+          "fontSize": 16,
+          "primary": "#000",
+          "theme": "dark"
+        }
+      },
+      "name": "{'theme': 'dark', 'primary': '#000', 'fontSize': 1"
+    }
+  ],
+  "name": "fx var json object",
+  "description": ""
+}

@@ -1,0 +1,133 @@
+{
+  "key": "fx-rule-multiple-rules",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "a"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.country",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "US"
+                ]
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "a"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.country",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "CA"
+                ]
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "b"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.country",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": [
+                  "GB"
+                ]
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "c"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "a"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "a"
+      },
+      "name": "a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "b"
+      },
+      "name": "b"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "c"
+      },
+      "name": "c"
+    }
+  ],
+  "name": "fx rule multiple rules",
+  "description": ""
+}

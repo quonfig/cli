@@ -1,0 +1,99 @@
+{
+  "key": "fx-var-json-array",
+  "type": "feature_flag",
+  "valueType": "json",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "json",
+          "value": [
+            1,
+            2,
+            3
+          ]
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "json",
+            "value": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "json",
+            "value": [
+              1,
+              2,
+              3
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "json",
+        "value": [
+          1,
+          2,
+          3
+        ]
+      },
+      "name": "[1, 2, 3]"
+    },
+    {
+      "value": {
+        "type": "json",
+        "value": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      "name": "['a', 'b', 'c']"
+    },
+    {
+      "value": {
+        "type": "json",
+        "value": []
+      },
+      "name": "[]"
+    }
+  ],
+  "name": "fx var json array",
+  "description": ""
+}

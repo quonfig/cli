@@ -1,0 +1,86 @@
+{
+  "key": "fx-var-number-float",
+  "type": "feature_flag",
+  "valueType": "double",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "double",
+          "value": 0
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "double",
+            "value": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "double",
+            "value": 0
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "double",
+        "value": 0
+      },
+      "name": "0.0"
+    },
+    {
+      "value": {
+        "type": "double",
+        "value": 0.5
+      },
+      "name": "0.5"
+    },
+    {
+      "value": {
+        "type": "double",
+        "value": 1
+      },
+      "name": "1.0"
+    },
+    {
+      "value": {
+        "type": "double",
+        "value": 3.14159
+      },
+      "name": "3.14159"
+    }
+  ],
+  "name": "fx var number float",
+  "description": ""
+}

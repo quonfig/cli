@@ -1,0 +1,104 @@
+{
+  "key": "fx-fallthrough-experiment",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "a"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 50000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 30000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "c"
+                  },
+                  "weight": 20000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "a"
+      },
+      "name": "a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "b"
+      },
+      "name": "b"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "c"
+      },
+      "name": "c"
+    }
+  ],
+  "name": "fx fallthrough experiment",
+  "description": ""
+}
