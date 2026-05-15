@@ -150,6 +150,14 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       const notesSection = report.slice(report.indexOf('## Conversion notes'))
       expect(notesSection).to.include('gradual-rollout')
       expect(notesSection).to.match(/prerequisite/i)
+      // qfg-bth9: the Follow-up checklist is derived from the conversion notes —
+      // dropped prerequisites land in must-fix-before-cutover, rebucketed
+      // rollouts land in review-post-cutover. Each item names the affected
+      // flag/segment.
+      const checklist = report.slice(report.indexOf('## Follow-up checklist'))
+      const [mustFix, postCutover] = checklist.split('### Review post-cutover')
+      expect(mustFix).to.match(/^- \[ ].*gradual-rollout.*prerequisite/im)
+      expect(postCutover).to.match(/^- \[ ].*gradual-rollout.*re-bucket/im)
     })
 
     it('omits both sections when the source produced no conversion notes', async () => {
@@ -191,6 +199,11 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       const report = fs.readFileSync(path.join(localDir, 'MIGRATION_REPORT.md'), 'utf8')
       expect(report).to.not.match(/Users will be re-bucketed/)
       expect(report).to.not.match(/^##\s*Conversion notes/m)
+      // qfg-bth9: with no lossy events, both follow-up sub-sections still render `_(none)_`.
+      const checklist = report.slice(report.indexOf('## Follow-up checklist'))
+      const [mustFix, postCutover] = checklist.split('### Review post-cutover')
+      expect(mustFix).to.include('_(none)_')
+      expect(postCutover).to.include('_(none)_')
     })
 
     it('initializes a fresh git repo at the target when --dir is inside an ancestor repo (qfg-wu85)', async () => {

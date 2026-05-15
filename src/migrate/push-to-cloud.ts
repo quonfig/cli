@@ -10,7 +10,7 @@ import {
   buildMigrationCounts,
   writeQuonfigFiles,
 } from './local-write.js'
-import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
+import {deriveFollowUpFromConversionNotes, type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {
   type CloneAndStackPushOptions,
   type CloneAndStackPushResult,
@@ -175,6 +175,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
             const reportData: MigrationReportData = {
               ...opts.reportData,
               counts,
+              followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
               ...(acc.coercedSentinels ? {coercedSentinels: acc.coercedSentinels} : {}),
               ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
               ...(acc.droppedOverrides ? {droppedOverrides: acc.droppedOverrides} : {}),

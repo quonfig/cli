@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
-import {type MigrationReportData, writeMigrationReport} from './migration-report.js'
+import {deriveFollowUpFromConversionNotes, type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {type CommitSpec, MIGRATOR_IDENTITY, type PushIdentity, stackCommits} from '../util/clone-and-stack-push.js'
 import {runGit, spawnGit} from '../util/git-ops.js'
@@ -289,6 +289,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const reportData: MigrationReportData = {
     ...opts.reportData,
     counts,
+    followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
     ...(coercedSentinels ? {coercedSentinels} : {}),
     ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
     ...(droppedOverrides ? {droppedOverrides} : {}),
@@ -476,6 +477,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
     const reportData: MigrationReportData = {
       ...opts.reportData,
       counts,
+      followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
       ...(coercedSentinels ? {coercedSentinels} : {}),
       ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
       ...(droppedOverrides ? {droppedOverrides} : {}),

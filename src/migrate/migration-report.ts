@@ -291,6 +291,63 @@ const renderConversionNotes = (notes: ConversionNote[] | undefined): null | stri
   return lines.join('\n')
 }
 
+/**
+ * Maps each lossy conversion-note category to a Follow-up checklist bucket plus
+ * a 1-line remediation hint. Categories not listed here (or `skipped-config` /
+ * housekeeping categories like `dropped-maintainer`) are intentionally not
+ * surfaced as checklist items — they get their own dedicated report sections
+ * or are pure-metadata losses that don't require human follow-up.
+ */
+const FOLLOW_UP_BUCKETS: Partial<
+  Record<ConversionNoteCategory, {bucket: 'mustFixBeforeCutover' | 'reviewPostCutover'; hint: (key: string) => string}>
+> = {
+  'dropped-prerequisite': {
+    bucket: 'mustFixBeforeCutover',
+    hint: (key) =>
+      `\`${key}\` — restore the dropped prerequisite gate manually; Quonfig v1 has no cross-flag dependency operator.`,
+  },
+  'individual-target-as-rule': {
+    bucket: 'reviewPostCutover',
+    hint: (key) =>
+      `\`${key}\` — individual user targets are now a leading rule; the LaunchDarkly targets pane affordance is gone.`,
+  },
+  'rebucketed-rollout': {
+    bucket: 'reviewPostCutover',
+    hint: (key) => `\`${key}\` — percentage rollout will re-bucket users post-migration; communicate before cutover.`,
+  },
+  'skipped-rule': {
+    bucket: 'mustFixBeforeCutover',
+    hint: (key) => `\`${key}\` — a rule clause used an unsupported operator and was skipped; rebuild the rule by hand.`,
+  },
+  'unexportable-segment-membership': {
+    bucket: 'mustFixBeforeCutover',
+    hint: (key) =>
+      `\`${key}\` — segment shell migrated but membership is empty (LD big/synced segment); repopulate members before cutover.`,
+  },
+}
+
+/**
+ * Folds conversion notes into a followUp checklist. De-duplicates by hint
+ * string so a flag with two dropped prerequisites doesn't produce two
+ * identical checkbox lines.
+ */
+export const deriveFollowUpFromConversionNotes = (
+  base: FollowUpChecklist,
+  notes: ConversionNote[] | undefined,
+): FollowUpChecklist => {
+  const mustFix = new Set(base.mustFixBeforeCutover)
+  const review = new Set(base.reviewPostCutover)
+  for (const note of notes ?? []) {
+    const mapping = FOLLOW_UP_BUCKETS[note.category]
+    if (!mapping) continue
+    const line = mapping.hint(note.key)
+    if (mapping.bucket === 'mustFixBeforeCutover') mustFix.add(line)
+    else review.add(line)
+  }
+
+  return {mustFixBeforeCutover: [...mustFix], reviewPostCutover: [...review]}
+}
+
 const renderFollowUp = (followUp: FollowUpChecklist): string => {
   const must =
     followUp.mustFixBeforeCutover.length === 0
