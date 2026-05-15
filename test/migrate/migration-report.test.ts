@@ -555,6 +555,59 @@ describe('migrate/migration-report', () => {
         expect(section).to.not.match(/you can ignore/i)
       })
     })
+
+    describe('Behavioral differences appendix (qfg-ox7m)', () => {
+      it('appends a "Behavioral differences post-cutover" appendix when source is launchdarkly', () => {
+        const md = buildMigrationReport(baseData({source: 'launchdarkly'}))
+        expect(md).to.match(/^##\s*Behavioral differences post-cutover/m)
+      })
+
+      it('omits the appendix when source is not launchdarkly', () => {
+        for (const source of ['launch', 'flagsmith', 'unknown']) {
+          const md = buildMigrationReport(baseData({source}))
+          expect(md, `source=${source}`).to.not.match(/Behavioral differences post-cutover/)
+        }
+      })
+
+      it('renders identical appendix content across runs (data-independent)', () => {
+        const md1 = buildMigrationReport(baseData({source: 'launchdarkly'}))
+        const md2 = buildMigrationReport(
+          baseData({
+            cleanMappings: [{legacyKey: 'a', quonfigKey: 'a'}],
+            counts: {
+              configsMigrated: 9,
+              environmentsMapped: 9,
+              flagsMigrated: 99,
+              itemsSkipped: 9,
+              logLevelsMigrated: 9,
+              schemasMigrated: 9,
+              segmentsMigrated: 9,
+            },
+            source: 'launchdarkly',
+          }),
+        )
+        const sliceAppendix = (md: string): string => md.slice(md.indexOf('## Behavioral differences post-cutover'))
+        expect(sliceAppendix(md1)).to.equal(sliceAppendix(md2))
+      })
+
+      it('covers the v1 LD gap roster (targets, off toggle, offVariation, mobile keys, maintainer)', () => {
+        const md = buildMigrationReport(baseData({source: 'launchdarkly'}))
+        const appendix = md.slice(md.indexOf('## Behavioral differences post-cutover'))
+        expect(appendix, 'targets/contextTargets').to.match(/contextTargets/)
+        expect(appendix, "'off' toggle").to.match(/['"`]off['"`] toggle/)
+        expect(appendix, 'offVariation').to.match(/offVariation/)
+        expect(appendix, 'mobile SDK keys').to.match(/[Mm]obile SDK keys/)
+        expect(appendix, 'maintainer').to.match(/[Mm]aintainer/)
+      })
+
+      it('renders the appendix as the final section (after Follow-up checklist)', () => {
+        const md = buildMigrationReport(baseData({source: 'launchdarkly'}))
+        const followUpIdx = md.indexOf('## Follow-up checklist')
+        const appendixIdx = md.indexOf('## Behavioral differences post-cutover')
+        expect(followUpIdx).to.be.greaterThan(-1)
+        expect(appendixIdx).to.be.greaterThan(followUpIdx)
+      })
+    })
   })
 
   describe('writeMigrationReport', () => {

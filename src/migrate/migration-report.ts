@@ -556,6 +556,30 @@ export const deriveFollowUpFromConversionNotes = (
   return {mustFixBeforeCutover: [...mustFix], reviewPostCutover: [...review]}
 }
 
+/**
+ * Static, content-stable appendix describing v1 behavioral gaps between
+ * LaunchDarkly and Quonfig (plan §5.4 / qfg-ox7m). Documentation, not data —
+ * does not vary across runs. Rendered only when source === 'launchdarkly'.
+ */
+const LAUNCHDARKLY_BEHAVIORAL_DIFFERENCES_APPENDIX = [
+  '## Behavioral differences post-cutover (independent of this import)',
+  '',
+  '- LaunchDarkly evaluates targets/contextTargets *before* rules. Quonfig has no',
+  '  individual-target primitive; user/context targets are now a leading PROP_IS_ONE_OF',
+  '  rule. Adding/removing individuals is now a config edit (qfg set / web UI), not a',
+  '  separate targeting UI pane.',
+  "- LaunchDarkly's 'off' toggle disappears. A flag is on iff at least one rule",
+  '  matches; there is no global kill-switch unless you author one as a top rule.',
+  '- offVariation does not exist in Quonfig. The off-state behavior of any flag',
+  '  that was on=false in LD has been baked into a single ALWAYS_TRUE rule serving',
+  '  that variation.',
+  '- Mobile SDK keys: LaunchDarkly distinguished mobile-key vs environment-id',
+  '  availability. Quonfig has one sendToClientSdk bool — your iOS/Android and',
+  '  browser-JS SDKs now share the same client-visibility setting.',
+  '- Maintainer is no longer a field on flags. `git log path/to/flag.json` is the',
+  '  new source of truth.',
+].join('\n')
+
 const renderFollowUp = (followUp: FollowUpChecklist): string => {
   const must =
     followUp.mustFixBeforeCutover.length === 0
@@ -621,6 +645,10 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   if (conversionNotes !== null) sections.push(conversionNotes)
 
   sections.push(renderFollowUp(data.followUp))
+
+  if (data.source === 'launchdarkly') {
+    sections.push(LAUNCHDARKLY_BEHAVIORAL_DIFFERENCES_APPENDIX)
+  }
 
   return sections.join('\n\n') + '\n'
 }
