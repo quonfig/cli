@@ -166,6 +166,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
             acc.coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
             acc.duplicateResolutions =
               resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
+            const conversionNotes = opts.source.getConversionNotes?.() ?? null
             const skippedTotal =
               (acc.skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
             const environmentsCount = opts.environments?.length ?? 0
@@ -175,6 +176,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
               ...opts.reportData,
               counts,
               ...(acc.coercedSentinels ? {coercedSentinels: acc.coercedSentinels} : {}),
+              ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
               ...(acc.droppedOverrides ? {droppedOverrides: acc.droppedOverrides} : {}),
               ...(acc.duplicateResolutions ? {duplicateResolutions: acc.duplicateResolutions} : {}),
               ...(acc.skippedConfigs ? {skippedConfigs: acc.skippedConfigs} : {}),

@@ -9,7 +9,7 @@
  * Design is frozen in `launchdarkly.README.md` / `project/plans/migrator-launch-darkly.md`.
  */
 
-import {ConversionReport} from '../quonfig-target/report.js'
+import {type ConversionNote, ConversionReport} from '../quonfig-target/report.js'
 import {type LegacyChange, type MigrationSource, type QuonfigFile, type SkippedConfigSummary} from '../source.js'
 import {fetchProjectEnvironments, fetchSnapshot} from './launchdarkly/api.js'
 import {flagOutputPath, segmentOutputPath, translateFlag, translateSegment} from './launchdarkly/translate.js'
@@ -141,10 +141,25 @@ export function getConversionReport(): ConversionReport {
   return state.report
 }
 
+/**
+ * Every structured conversion note from this run — re-bucketed rollouts,
+ * dropped prerequisites, lossy individual-target conversions, etc. The write
+ * paths (`local-write.ts` / `push-to-cloud.ts`) thread this into
+ * `MIGRATION_REPORT.md`'s "Users will be re-bucketed" + "Conversion notes"
+ * sections (plan §5.4 — nothing is silently dropped). `skipped-config` notes
+ * are included here too; the report renderer routes them to their own
+ * dedicated section.
+ */
+function getConversionNotesImpl(): ConversionNote[] | null {
+  const notes = state.report.all()
+  return notes.length === 0 ? null : notes
+}
+
 export const launchdarklySource: MigrationSource = {
   fetchChanges(): AsyncIterable<LegacyChange> {
     return fetchChangesImpl()
   },
+  getConversionNotes: getConversionNotesImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
   name: SOURCE_NAME,

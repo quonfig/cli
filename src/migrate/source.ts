@@ -1,3 +1,5 @@
+import type {ConversionNote} from './quonfig-target/report.js'
+
 export interface LegacyChange {
   changedAt?: number
   key?: string
@@ -88,6 +90,15 @@ export interface MigrationSource {
    * typed default. Null when nothing was coerced.
    */
   getCoercedSentinels?(): CoercedSentinelSummary | null
+  /**
+   * Optional post-translate accumulator. Returns the structured conversion notes
+   * collected during translate() — re-bucketed rollouts, dropped prerequisites,
+   * lossy individual-target conversions, etc. (the LaunchDarkly converter set).
+   * The write paths thread these into MIGRATION_REPORT.md's "Users will be
+   * re-bucketed" + "Conversion notes" sections. Null or empty when nothing
+   * notable happened during conversion.
+   */
+  getConversionNotes?(): ConversionNote[] | null
   /**
    * Optional. qfg-wbkj: per-change commit metadata used by --full-summary. Returns
    * null if the change carries no usable author/date/summary (e.g. legacy or

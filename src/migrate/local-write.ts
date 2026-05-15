@@ -270,6 +270,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
   const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
   const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
+  const conversionNotes = opts.source.getConversionNotes?.() ?? null
   const duplicateResolutions: DuplicateResolutionSummary | null =
     resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
   const skippedTotal = (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
@@ -278,6 +279,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
     ...opts.reportData,
     counts,
     ...(coercedSentinels ? {coercedSentinels} : {}),
+    ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
     ...(droppedOverrides ? {droppedOverrides} : {}),
     ...(duplicateResolutions ? {duplicateResolutions} : {}),
     ...(skippedConfigs ? {skippedConfigs} : {}),
@@ -451,6 +453,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
     const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
     const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
     const coercedSentinels = opts.source.getCoercedSentinels?.() ?? null
+    const conversionNotes = opts.source.getConversionNotes?.() ?? null
     const duplicateResolutions: DuplicateResolutionSummary | null =
       resolutionEntries.length > 0 ? {entries: resolutionEntries, total: resolutionEntries.length} : null
 
@@ -463,6 +466,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
       ...opts.reportData,
       counts,
       ...(coercedSentinels ? {coercedSentinels} : {}),
+      ...(conversionNotes && conversionNotes.length > 0 ? {conversionNotes} : {}),
       ...(droppedOverrides ? {droppedOverrides} : {}),
       ...(duplicateResolutions ? {duplicateResolutions} : {}),
       ...(skippedConfigs ? {skippedConfigs} : {}),

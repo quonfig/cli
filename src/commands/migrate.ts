@@ -9,6 +9,7 @@ import {CrossSourceError, type ImportState, assertSourceMatches, readImportState
 import {applyLocalMigration, MigratorKeyCollisionError} from '../migrate/local-write.js'
 import {buildPushConflictSuggestion} from '../migrate/migrate-suggestion.js'
 import {type MigrationReportData} from '../migrate/migration-report.js'
+import {type ConversionNote} from '../migrate/quonfig-target/report.js'
 import {PushConflictError, PushHookRejectedError} from '../util/clone-and-stack-push.js'
 import {MigratorVerifyError, pushMigrationToCloud} from '../migrate/push-to-cloud.js'
 import {UnknownSourceError, getSource} from '../migrate/registry.js'
@@ -331,6 +332,7 @@ export default class Migrate extends BaseCommand {
       warnAboutSkippedConfigs(this, source.getSkippedConfigs?.() ?? null)
       warnAboutCoercedSentinels(this, source.getCoercedSentinels?.() ?? null)
       warnAboutDuplicateResolutions(this, duplicateResolutionsForWarn)
+      warnAboutConversionNotes(this, source.getConversionNotes?.() ?? null)
     }
   }
 
@@ -439,6 +441,26 @@ function warnAboutCoercedSentinels(cmd: BaseCommand, coerced: CoercedSentinelSum
   cmd.warn(
     `If you want a real default for these rules, set one in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
   )
+}
+
+function warnAboutConversionNotes(cmd: BaseCommand, notes: ConversionNote[] | null): void {
+  if (!notes || notes.length === 0) return
+  const rebucketed = notes.filter((n) => n.category === 'rebucketed-rollout')
+  if (rebucketed.length > 0) {
+    cmd.warn(
+      `${rebucketed.length} flag(s)/segment(s) use a percentage rollout — LaunchDarkly and Quonfig bucket users ` +
+        `differently, so individual user assignments WILL change after migration (the rollout percentage is preserved). ` +
+        `See the "Users will be re-bucketed" section of MIGRATION_REPORT.md.`,
+    )
+  }
+
+  const other = notes.filter((n) => n.category !== 'rebucketed-rollout' && n.category !== 'skipped-config')
+  if (other.length > 0) {
+    cmd.warn(
+      `${other.length} source concept(s) could not be converted exactly (dropped prerequisites, lossy individual ` +
+        `targets, etc.). Nothing was silently dropped — see the "Conversion notes" section of MIGRATION_REPORT.md.`,
+    )
+  }
 }
 
 function warnAboutSkippedConfigs(cmd: BaseCommand, skipped: null | SkippedConfigSummary): void {

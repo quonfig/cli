@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {IdentifierMap} from './identifier-map.js'
+import type {ConversionNote, ConversionNoteCategory} from './quonfig-target/report.js'
 import type {
   CoercedSentinelSummary,
   DroppedOverrideSummary,
@@ -53,6 +54,14 @@ export interface MigrationReportData {
    * was coerced.
    */
   coercedSentinels?: CoercedSentinelSummary | null
+  /**
+   * Structured conversion notes from a provider's `translate()` — re-bucketed
+   * rollouts, dropped prerequisites, lossy individual-target conversions, etc.
+   * (the LaunchDarkly `quonfig-target/report.ts` set). Rendered into the
+   * "Users will be re-bucketed" + "Conversion notes" sections. Undefined or
+   * empty when the source emitted none.
+   */
+  conversionNotes?: ConversionNote[]
   counts: MigrationReportCounts
   /**
    * Override sections that were dropped during translate() because the env.id was not
@@ -215,6 +224,73 @@ const renderSkippedConfigs = (skipped: null | SkippedConfigSummary | undefined):
   return lines.join('\n')
 }
 
+/**
+ * Human-readable headings for the non-rollout conversion-note categories.
+ * `skipped-config` is intentionally absent — it has its own dedicated section
+ * (`renderSkippedConfigs`). `rebucketed-rollout` is absent because it gets its
+ * own top-level section (`renderRebucketedRollouts`) — plan §5.4 requires it
+ * be impossible to miss.
+ */
+const CONVERSION_NOTE_HEADINGS: Record<
+  Exclude<ConversionNoteCategory, 'rebucketed-rollout' | 'skipped-config'>,
+  string
+> = {
+  'ai-config-skipped': 'AI Configs skipped (out of v1 scope)',
+  'dropped-custom-properties': 'Dropped custom properties',
+  'dropped-experiment-metadata': 'Dropped experiment metadata',
+  'dropped-maintainer': 'Dropped maintainer metadata',
+  'dropped-mobile-key-availability': 'Dropped mobile-key availability',
+  'dropped-prerequisite': 'Dropped prerequisites',
+  'dropped-private-attribute': 'Dropped private attributes',
+  'individual-target-as-rule': 'Individual targets converted to rules',
+  'skipped-rule': 'Skipped rules (unsupported operators)',
+  'unexportable-segment-membership': 'Unexportable segment membership',
+}
+
+const renderRebucketedRollouts = (notes: ConversionNote[] | undefined): null | string => {
+  const rollouts = (notes ?? []).filter((n) => n.category === 'rebucketed-rollout')
+  if (rollouts.length === 0) return null
+  const lines: string[] = [
+    '## Users will be re-bucketed',
+    '',
+    `**${rollouts.length}** flag(s)/segment(s) use a percentage rollout. LaunchDarkly and Quonfig hash buckets ` +
+      `differently, so which users land in which bucket *will change* after migration — the rollout percentage is ` +
+      `preserved, but individual user assignments are not. Review these before cutover so the re-bucketing is not a surprise:`,
+    '',
+  ]
+  const sorted = [...rollouts].sort((a, b) => a.key.localeCompare(b.key))
+  for (const note of sorted) {
+    lines.push(`- \`${note.key}\` — ${note.detail}`)
+  }
+
+  return lines.join('\n')
+}
+
+const renderConversionNotes = (notes: ConversionNote[] | undefined): null | string => {
+  // `skipped-config` (own section) and `rebucketed-rollout` (own section) are
+  // rendered elsewhere — everything else is grouped by category here.
+  const grouped = (notes ?? []).filter((n) => n.category !== 'rebucketed-rollout' && n.category !== 'skipped-config')
+  if (grouped.length === 0) return null
+  const lines: string[] = [
+    '## Conversion notes',
+    '',
+    `**${grouped.length}** note(s) where the converter could not represent a source concept exactly. Nothing was ` +
+      `silently dropped — each entry below names the exact flag/segment and what was lost so you can rebuild it by hand if needed.`,
+  ]
+  const categoriesInOrder = Object.keys(CONVERSION_NOTE_HEADINGS) as Array<keyof typeof CONVERSION_NOTE_HEADINGS>
+  for (const category of categoriesInOrder) {
+    const forCategory = grouped.filter((n) => n.category === category)
+    if (forCategory.length === 0) continue
+    lines.push('', `### ${CONVERSION_NOTE_HEADINGS[category]}`, '')
+    const sorted = [...forCategory].sort((a, b) => a.key.localeCompare(b.key))
+    for (const note of sorted) {
+      lines.push(`- \`${note.key}\` — ${note.detail}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 const renderFollowUp = (followUp: FollowUpChecklist): string => {
   const must =
     followUp.mustFixBeforeCutover.length === 0
@@ -266,6 +342,12 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
 
   const coerced = renderCoercedSentinels(data.coercedSentinels)
   if (coerced !== null) sections.push(coerced)
+
+  const rebucketed = renderRebucketedRollouts(data.conversionNotes)
+  if (rebucketed !== null) sections.push(rebucketed)
+
+  const conversionNotes = renderConversionNotes(data.conversionNotes)
+  if (conversionNotes !== null) sections.push(conversionNotes)
 
   sections.push(renderFollowUp(data.followUp))
 

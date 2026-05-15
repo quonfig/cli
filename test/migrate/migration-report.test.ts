@@ -200,6 +200,73 @@ describe('migrate/migration-report', () => {
       const clean = md.slice(md.indexOf('## Clean mapping'), md.indexOf('## Lossy mapping'))
       expect(clean.toLowerCase()).to.include('(none)')
     })
+
+    describe('conversion notes (LaunchDarkly converter — plan §5.4)', () => {
+      it('renders a "Users will be re-bucketed" section listing every flag with a percentage rollout', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [
+              {
+                category: 'rebucketed-rollout',
+                key: 'checkout-rollout',
+                detail: 'percentage rollout hashed on "user.key" — users will be re-bucketed',
+              },
+              {
+                category: 'rebucketed-rollout',
+                key: 'beta-banner',
+                detail: 'percentage rollout hashed on "user.id" — users will be re-bucketed',
+              },
+            ],
+          }),
+        )
+        expect(md).to.match(/^##\s*Users will be re-bucketed/m)
+        const section = md.slice(md.indexOf('## Users will be re-bucketed'))
+        expect(section).to.include('checkout-rollout')
+        expect(section).to.include('beta-banner')
+        expect(section).to.include('user.key')
+      })
+
+      it('omits the re-bucketed section entirely when no rollout was re-bucketed', () => {
+        const md = buildMigrationReport(baseData({source: 'launchdarkly', conversionNotes: []}))
+        expect(md).to.not.match(/Users will be re-bucketed/)
+      })
+
+      it('renders non-rollout conversion notes grouped by category under a Conversion notes section', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [
+              {
+                category: 'dropped-prerequisite',
+                key: 'gated-flag',
+                detail: '2 prerequisite(s) dropped — Quonfig has no cross-flag dependency operator',
+              },
+              {
+                category: 'individual-target-as-rule',
+                key: 'vip-flag',
+                detail: '3 user target(s) converted to a leading PROP_IS_ONE_OF rule on user.key',
+              },
+            ],
+          }),
+        )
+        expect(md).to.match(/^##\s*Conversion notes/m)
+        const section = md.slice(md.indexOf('## Conversion notes'))
+        expect(section).to.include('gated-flag')
+        expect(section).to.include('vip-flag')
+        expect(section).to.match(/prerequisite/i)
+      })
+
+      it('keeps skipped-config notes out of the Conversion notes section (they have their own section)', () => {
+        const md = buildMigrationReport(
+          baseData({
+            source: 'launchdarkly',
+            conversionNotes: [{category: 'skipped-config', key: 'broken-flag', detail: 'conversion failed: bad data'}],
+          }),
+        )
+        expect(md).to.not.match(/^##\s*Conversion notes/m)
+      })
+    })
   })
 
   describe('writeMigrationReport', () => {
