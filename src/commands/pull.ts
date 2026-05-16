@@ -140,8 +140,8 @@ CLI shortcuts (no JSON editing needed for simple cases):
       // Plain `git pull` is fine with untracked files, and `git merge --ff-only`
       // below will fail loudly on real conflicts (tracked modifications, or an
       // incoming commit that would overwrite an untracked file). Pre-checking
-      // just creates a self-trap when qfg itself writes files like
-      // `.qfg-friction.log` into the workspace dir (qfg-q2l).
+      // creates a self-trap whenever the customer leaves anything in the
+      // workspace dir that they haven't committed yet.
 
       // Fetch
       this.log('Fetching from remote...')

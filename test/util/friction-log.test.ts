@@ -7,6 +7,7 @@ import {
   appendFrictionEntry,
   buildFrictionEntry,
   extractLastErrorLine,
+  getDefaultFrictionLogPath,
   getFrictionLogPath,
 } from '../../src/util/friction-log.js'
 
@@ -28,14 +29,17 @@ describe('friction-log utils', () => {
       expect(getFrictionLogPath('0')).to.equal(null)
     })
 
-    it('returns default path for "true"', () => {
-      const cwd = '/tmp/work'
-      expect(getFrictionLogPath('true', cwd)).to.equal(path.join(cwd, '.qfg-friction.log'))
+    it('returns default ~/.qfg/friction.log path for "true"', () => {
+      expect(getFrictionLogPath('true', '/tmp/work')).to.equal(getDefaultFrictionLogPath())
     })
 
-    it('returns default path for "1"', () => {
-      const cwd = '/tmp/work'
-      expect(getFrictionLogPath('1', cwd)).to.equal(path.join(cwd, '.qfg-friction.log'))
+    it('returns default ~/.qfg/friction.log path for "1"', () => {
+      expect(getFrictionLogPath('1', '/tmp/work')).to.equal(getDefaultFrictionLogPath())
+    })
+
+    it('default path is under the home dir, not cwd', () => {
+      const defaultPath = getDefaultFrictionLogPath('/home/me')
+      expect(defaultPath).to.equal(path.join('/home/me', '.qfg', 'friction.log'))
     })
 
     it('returns absolute path unchanged', () => {
@@ -51,7 +55,7 @@ describe('friction-log utils', () => {
     })
 
     it('trims whitespace from the value', () => {
-      expect(getFrictionLogPath('  true  ', '/tmp')).to.equal(path.join('/tmp', '.qfg-friction.log'))
+      expect(getFrictionLogPath('  true  ', '/tmp')).to.equal(getDefaultFrictionLogPath())
     })
   })
 
@@ -117,14 +121,14 @@ describe('friction-log utils', () => {
 
     beforeEach(() => {
       tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'friction-log-test-'))
-      logPath = path.join(tmpdir, '.qfg-friction.log')
+      logPath = path.join(tmpdir, 'nested', 'friction.log')
     })
 
     afterEach(() => {
       fs.rmSync(tmpdir, {force: true, recursive: true})
     })
 
-    it('writes one JSON object per line and appends across calls', () => {
+    it('creates parent dirs and writes one JSON object per line, appending across calls', () => {
       appendFrictionEntry(logPath, {
         attempted: 'qfg flag show x',
         error: 'command not found',

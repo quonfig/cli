@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 export interface FrictionEntry {
@@ -8,12 +9,16 @@ export interface FrictionEntry {
   ts: string
 }
 
+export function getDefaultFrictionLogPath(home: string = os.homedir()): string {
+  return path.join(home, '.qfg', 'friction.log')
+}
+
 export function getFrictionLogPath(envValue?: string | undefined, cwd: string = process.cwd()): null | string {
   if (envValue === undefined) return null
   const trimmed = envValue.trim()
   if (trimmed === '' || trimmed === 'false' || trimmed === '0') return null
   if (trimmed === 'true' || trimmed === '1') {
-    return path.join(cwd, '.qfg-friction.log')
+    return getDefaultFrictionLogPath()
   }
 
   return path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed)
@@ -39,6 +44,7 @@ export function buildFrictionEntry(opts: {
 }
 
 export function appendFrictionEntry(logPath: string, entry: FrictionEntry): void {
+  fs.mkdirSync(path.dirname(logPath), {recursive: true})
   fs.appendFileSync(logPath, JSON.stringify(entry) + '\n', 'utf8')
 }
 

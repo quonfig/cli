@@ -41,9 +41,11 @@ rather than creating a fresh config.
 
 ## Friction Log
 
-Set `QFG_FRICTION_LOG=true` before running `qfg` to capture every nonzero-exit invocation as a JSON line in `.qfg-friction.log` (or pass a file path instead of `true`). Each entry has `ts`, `attempted`, `error`, and `exitCode`.
+Set `QFG_FRICTION_LOG=true` before running `qfg` to capture every nonzero-exit invocation as a JSON line in `~/.qfg/friction.log` (or pass a file path instead of `true` — relative paths resolve against the cwd). Each entry has `ts`, `attempted`, `error`, and `exitCode`.
 
-**When you finish a session that ran `qfg` with this enabled and hit any errors**, tell the human: "There are CLI gaps in `.qfg-friction.log` worth reviewing" and point them at the file. Do NOT silently paper over failed commands — surface them so the CLI can grow.
+The log lives outside the workspace clone on purpose so it doesn't show up as an untracked file in customer config repos.
+
+**When you finish a session that ran `qfg` with this enabled and hit any errors**, tell the human: "There are CLI gaps in `~/.qfg/friction.log` worth reviewing" and point them at the file. Do NOT silently paper over failed commands — surface them so the CLI can grow.
 
 ## Landing the Plane (Session Completion)
 
