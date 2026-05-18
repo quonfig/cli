@@ -623,11 +623,23 @@ describe('migrate/migration-report', () => {
         expect(md).to.match(/^##\s*Behavioral differences post-cutover/m)
       })
 
-      it('omits the appendix when source is not launchdarkly', () => {
-        for (const source of ['launch', 'flagsmith', 'unknown']) {
+      it('omits the appendix for sources that do not define one (launch, unknown)', () => {
+        for (const source of ['launch', 'unknown']) {
           const md = buildMigrationReport(baseData({source}))
           expect(md, `source=${source}`).to.not.match(/Behavioral differences post-cutover/)
         }
+      })
+
+      it('renders a Flagsmith-specific behavioral-differences appendix when source is flagsmith', () => {
+        const md = buildMigrationReport(baseData({source: 'flagsmith'}))
+        expect(md).to.match(/^##\s*Behavioral differences post-cutover/m)
+        // Mentions the Flagsmith-specific gaps: enabled=false, identity overrides,
+        // multivariate bucketing salts, and soft-deleted-features being invisible.
+        const appendix = md.slice(md.indexOf('## Behavioral differences post-cutover'))
+        expect(appendix).to.match(/enabled=false/)
+        expect(appendix).to.match(/identity overrides/i)
+        expect(appendix).to.match(/multivariate/i)
+        expect(appendix).to.match(/soft-deleted/i)
       })
 
       it('renders identical appendix content across runs (data-independent)', () => {

@@ -1,0 +1,88 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:14:34.317564Z",
+    "default_enabled": true,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207653,
+    "initial_value": null,
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": true,
+    "last_modified_in_any_environment": "2026-05-17T18:14:34.368058+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-meta-server-key-only",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "df7ee363-dd7f-44d3-9d91-a9fd617ad5fd"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:14:34.352309Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90306,
+        "environment_feature_version": "ab0a05f7-05df-4d33-a709-802590c75763",
+        "feature": 207653,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": null,
+          "type": "unicode"
+        },
+        "id": 1414399,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:42:51.705886Z",
+        "uuid": "7f50d2a5-c3b9-4ebc-a38b-a3f424e47979",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:14:34.380279Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90307,
+        "environment_feature_version": "28062cf4-d9d5-415d-a4bf-2357141cb6a7",
+        "feature": 207653,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": null,
+          "type": "unicode"
+        },
+        "id": 1414400,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:14:34.380287Z",
+        "uuid": "f2e5fe15-7669-46ab-912f-5a17471a54b8",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

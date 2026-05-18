@@ -1,0 +1,55 @@
+{
+  "key": "fx-env-value-diverges",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "dev-value"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "dev-value"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "prod-value"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

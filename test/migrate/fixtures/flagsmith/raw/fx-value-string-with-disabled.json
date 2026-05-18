@@ -1,0 +1,88 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:14:08.234156Z",
+    "default_enabled": false,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207638,
+    "initial_value": "served-when-off",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:14:08.278830+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-value-string-with-disabled",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "42446e1d-881d-4e0c-8795-f60273e2e3cf"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:14:08.267079Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90306,
+        "environment_feature_version": "c71003cb-a80e-4989-a4ca-28b0e0e66fd7",
+        "feature": 207638,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "served-when-off",
+          "type": "unicode"
+        },
+        "id": 1414369,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:42:31.701861Z",
+        "uuid": "79986179-cfea-47d4-a2c1-657b8294965a",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:14:08.288964Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90307,
+        "environment_feature_version": "236c1c0a-739c-4613-8f34-04d68377ca03",
+        "feature": 207638,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "served-when-off",
+          "type": "unicode"
+        },
+        "id": 1414370,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:14:08.288969Z",
+        "uuid": "a40cb424-448a-411e-94f0-b2c1af794190",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

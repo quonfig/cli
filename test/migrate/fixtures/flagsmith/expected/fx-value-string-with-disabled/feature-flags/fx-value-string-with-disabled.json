@@ -1,0 +1,55 @@
+{
+  "key": "fx-value-string-with-disabled",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "served-when-off"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "served-when-off"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "served-when-off"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

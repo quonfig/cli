@@ -1,0 +1,55 @@
+{
+  "key": "fx-cr-with-feature-state-value",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "default"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

@@ -1,0 +1,152 @@
+{
+  "key": "fx-mv-string-uneven",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "string",
+                  "value": "control"
+                },
+                "weight": 10000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "treatment-a"
+                },
+                "weight": 20000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "treatment-b"
+                },
+                "weight": 70000
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "control"
+                  },
+                  "weight": 10000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "treatment-a"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "treatment-b"
+                  },
+                  "weight": 70000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "control"
+                  },
+                  "weight": 10000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "treatment-a"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "treatment-b"
+                  },
+                  "weight": 70000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "control"
+      },
+      "name": "control"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "treatment-a"
+      },
+      "name": "treatment-a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "treatment-b"
+      },
+      "name": "treatment-b"
+    }
+  ]
+}

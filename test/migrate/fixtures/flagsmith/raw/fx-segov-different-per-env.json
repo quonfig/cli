@@ -1,0 +1,122 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:16:34.576890Z",
+    "default_enabled": false,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207705,
+    "initial_value": "default",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:39:33.836715+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-segov-different-per-env",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "fc36fcbc-06d6-4540-9a5c-40e1ac34c3af"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [
+      {
+        "environment": 90306,
+        "id": 248862,
+        "is_feature_specific": false,
+        "priority": 0,
+        "segment": 1127682,
+        "segment_name": "fx-seg-single-condition",
+        "uuid": "c8752931-bc99-44e4-9a6e-941601fb2a78"
+      }
+    ],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:39:33.848234Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90306,
+        "environment_feature_version": "d68cef94-8120-46a8-8a2f-5d8e94d26a59",
+        "feature": 207705,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414694,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:44:11.869540Z",
+        "uuid": "18769f2b-f65b-44f6-ae88-c0b8b1fdfaaf",
+        "version": null
+      },
+      "identity_overrides": [],
+      "segment_overrides": [
+        {
+          "change_request": null,
+          "created_at": "2026-05-17T18:39:33.886543Z",
+          "deleted_at": null,
+          "enabled": true,
+          "environment": 90306,
+          "environment_feature_version": "d68cef94-8120-46a8-8a2f-5d8e94d26a59",
+          "feature": 207705,
+          "feature_segment": 248862,
+          "feature_state_value": {
+            "boolean_value": null,
+            "integer_value": null,
+            "string_value": "dev-override",
+            "type": "unicode"
+          },
+          "id": 1414695,
+          "identity": null,
+          "live_from": null,
+          "multivariate_feature_state_values": [],
+          "updated_at": "2026-05-17T18:39:33.886552Z",
+          "uuid": "670b94dc-f60e-4608-a1ae-a47ccde19421",
+          "version": 1
+        }
+      ]
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:16:34.614893Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90307,
+        "environment_feature_version": "55351070-d81f-4c98-9775-da894ea139af",
+        "feature": 207705,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414504,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:44:13.106331Z",
+        "uuid": "a8c1ec89-445e-43cf-aae3-6bd384255409",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

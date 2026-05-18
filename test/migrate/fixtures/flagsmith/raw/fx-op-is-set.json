@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:37.273353Z",
+  "description": null,
+  "feature": null,
+  "id": 1127706,
+  "metadata": [],
+  "name": "fx-op-is-set",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593712,
+          "operator": "IS_SET",
+          "property": "beta_opt_in",
+          "value": "None"
+        }
+      ],
+      "id": 4150865,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:37.280198Z",
+  "uuid": "e98399a8-20e3-4de4-93d8-eda027b28f81",
+  "version_of": 1127706
+}

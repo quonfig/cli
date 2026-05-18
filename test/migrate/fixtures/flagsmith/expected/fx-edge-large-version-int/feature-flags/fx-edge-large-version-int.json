@@ -1,0 +1,55 @@
+{
+  "key": "fx-edge-large-version-int",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "seed"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "seed"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "seed"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

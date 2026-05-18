@@ -4,7 +4,6 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
 import {getSource, listSources, UnknownSourceError} from '../../src/migrate/registry.js'
-import {NotYetImplementedError} from '../../src/migrate/source.js'
 
 const CLI_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -20,7 +19,7 @@ describe('migrate/registry', () => {
       expect(source.name).to.equal('launchdarkly')
     })
 
-    it('returns a flagsmith stub that identifies itself', () => {
+    it('returns the flagsmith source, which identifies itself', () => {
       const source = getSource('flagsmith')
       expect(source.name).to.equal('flagsmith')
     })
@@ -63,53 +62,38 @@ describe('migrate/registry', () => {
     })
   })
 
-  describe('flagsmith stub', () => {
+  describe('flagsmith source', () => {
     const source = getSource('flagsmith')
 
-    it('throws NotYetImplementedError on validateAuth with a bead-file link', async () => {
-      try {
-        await source.validateAuth('sdk-xxx')
-        expect.fail('expected validateAuth to throw')
-      } catch (error) {
-        expect(error).to.be.instanceOf(NotYetImplementedError)
-        const message = (error as Error).message
-        expect(message.toLowerCase()).to.contain('flagsmith')
-        expect(message).to.match(/github\.com\/quonfig\/cli\/issues/i)
-      }
+    // Epic 1 (fetcher) landed — validateAuth / listEnvironments / fetchChanges
+    // are no longer stubs. Behavioural coverage lives in
+    // flagsmith-{api,source}.test.ts; here we just guard the surface.
+    it('implements the MigrationSource interface', () => {
+      expect(source.validateAuth).to.be.a('function')
+      expect(source.listEnvironments).to.be.a('function')
+      expect(source.fetchChanges).to.be.a('function')
+      expect(source.translate).to.be.a('function')
     })
 
-    it('throws NotYetImplementedError on listEnvironments', async () => {
-      try {
-        await source.listEnvironments()
-        expect.fail('expected listEnvironments to throw')
-      } catch (error) {
-        expect(error).to.be.instanceOf(NotYetImplementedError)
-      }
+    // Epic 3 landed — translate() now dispatches to flagsmith/translate.ts.
+    it('translate() emits a QuonfigFile for a minimal segment LegacyChange', () => {
+      const out = source.translate({
+        raw: {
+          data: {id: 1, name: 'seg-x', project: 38_856, rules: [], uuid: 'u'},
+          kind: 'segment',
+        },
+        source: 'flagsmith',
+      })
+      expect(out).to.have.length(1)
+      expect(out[0].path).to.equal('segments/seg-x.json')
     })
 
-    it('throws NotYetImplementedError on fetchChanges', async () => {
-      try {
-        const iter = source.fetchChanges(null)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        for await (const _ of iter) {
-          // consume to trigger generator body
-        }
-
-        expect.fail('expected fetchChanges to throw')
-      } catch (error) {
-        expect(error).to.be.instanceOf(NotYetImplementedError)
-      }
-    })
-
-    it('throws NotYetImplementedError on translate', () => {
-      expect(() => source.translate({source: 'flagsmith', raw: {}})).to.throw(NotYetImplementedError)
-    })
-
-    it('documents what must be investigated before the stub becomes real', () => {
-      const stubPath = path.join(CLI_ROOT, 'src', 'migrate', 'sources', 'flagsmith.ts')
-      const contents = fs.readFileSync(stubPath, 'utf8').toLowerCase()
-      expect(contents).to.contain('flagsmith api')
-      expect(contents).to.match(/delta|cursor/)
+    it('documents the Epic-1 fetcher design and Epic-3 converter pointer', () => {
+      const sourcePath = path.join(CLI_ROOT, 'src', 'migrate', 'sources', 'flagsmith.ts')
+      const contents = fs.readFileSync(sourcePath, 'utf8').toLowerCase()
+      // The header comment explains the read/write split and the LegacyChange shape.
+      expect(contents).to.contain('legacychange')
+      expect(contents).to.contain('epic 3')
     })
   })
 

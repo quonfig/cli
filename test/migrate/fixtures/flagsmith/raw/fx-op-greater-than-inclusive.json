@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:29.913981Z",
+  "description": null,
+  "feature": null,
+  "id": 1127696,
+  "metadata": [],
+  "name": "fx-op-greater-than-inclusive",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593702,
+          "operator": "GREATER_THAN_INCLUSIVE",
+          "property": "age",
+          "value": "21"
+        }
+      ],
+      "id": 4150855,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:29.926561Z",
+  "uuid": "15029797-d5bc-4a6b-9afe-3096dce51fca",
+  "version_of": 1127696
+}

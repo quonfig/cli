@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:38.941876Z",
+  "description": null,
+  "feature": null,
+  "id": 1127709,
+  "metadata": [],
+  "name": "fx-op-semver-greater",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593715,
+          "operator": "GREATER_THAN",
+          "property": "version",
+          "value": "4.2.52:semver"
+        }
+      ],
+      "id": 4150868,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:38.951359Z",
+  "uuid": "677f19fe-e29e-428e-ac16-944d52b1e601",
+  "version_of": 1127709
+}

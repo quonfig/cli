@@ -1,0 +1,35 @@
+{
+  "created_at": "2026-05-17T18:13:21.826534Z",
+  "description": null,
+  "feature": null,
+  "id": 1127684,
+  "metadata": [],
+  "name": "fx-seg-or-within-rule",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593687,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        },
+        {
+          "description": null,
+          "id": 83593688,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "scale"
+        }
+      ],
+      "id": 4150841,
+      "rules": [],
+      "type": "ANY"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:21.840851Z",
+  "uuid": "85a798d7-c6e2-48a5-902c-f310bb98e912",
+  "version_of": 1127684
+}

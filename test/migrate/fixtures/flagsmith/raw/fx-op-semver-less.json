@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:39.301261Z",
+  "description": null,
+  "feature": null,
+  "id": 1127710,
+  "metadata": [],
+  "name": "fx-op-semver-less",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593716,
+          "operator": "LESS_THAN",
+          "property": "version",
+          "value": "5.0.0:semver"
+        }
+      ],
+      "id": 4150869,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:39.308742Z",
+  "uuid": "ba260bc9-bcb7-4af5-89da-c25269a70579",
+  "version_of": 1127710
+}

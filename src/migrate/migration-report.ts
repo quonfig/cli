@@ -216,19 +216,35 @@ const renderDuplicateResolutions = (resolved: DuplicateResolutionSummary | null 
   return lines.join('\n')
 }
 
-const renderCoercedSentinels = (coerced: CoercedSentinelSummary | null | undefined): null | string => {
+const FLAGSMITH_ENV_BUCKET_LABEL: Record<string, string> = {
+  '_all-envs': 'Override rows (all environments)',
+  '_cross-env': 'Cross-environment value-type divergence (no single env owns this)',
+}
+
+const renderCoercedSentinels = (coerced: CoercedSentinelSummary | null | undefined, source: string): null | string => {
   if (!coerced || coerced.total === 0) return null
   const envIds = Object.keys(coerced.byEnv).sort()
-  const lines: string[] = [
-    '## Coerced sentinel rule values',
-    '',
-    `Coerced **${coerced.total}** rule value(s) from Launch's "no value set yet" sentinel ({type:"string", value:""}) to the typed default for the surrounding config. The qfg-verify hook would otherwise reject these as type-mismatches and fail-stop the entire push. Affected envs: **${envIds.length}**. Review each and set a real default in the source system if needed.`,
-  ]
+  const intro =
+    source === 'flagsmith'
+      ? `Coerced **${coerced.total}** rule value(s) from Flagsmith's runtime semantics into a concrete served value. ` +
+        `Two flavors are bucketed here:\n\n` +
+        `1. **D-F1: \`enabled=false\` on non-boolean features.** Flagsmith would have ignored the stored value and ` +
+        `served your code's hardcoded default. Quonfig always serves a value, so the migrator emits the stored ` +
+        `\`feature_state_value\` and surfaces every affected flag below.\n` +
+        `2. **D-F5: cross-environment value-type divergence.** Flagsmith allowed the same flag to be a string in one ` +
+        `env and an int in another; Quonfig requires one \`valueType\` per flag. The migrator coerced to \`string\`.\n\n` +
+        `Review each entry below and set a real default in the source system if the value is wrong.`
+      : `Coerced **${coerced.total}** rule value(s) from Launch's "no value set yet" sentinel ` +
+        `({type:"string", value:""}) to the typed default for the surrounding config. The qfg-verify hook would ` +
+        `otherwise reject these as type-mismatches and fail-stop the entire push. Affected envs: ` +
+        `**${envIds.length}**. Review each and set a real default in the source system if needed.`
+  const lines: string[] = ['## Coerced sentinel rule values', '', intro]
   for (const envId of envIds) {
     const perFlag = coerced.byEnv[envId]
     const totalForEnv = Object.values(perFlag).reduce((s, n) => s + n, 0)
     const flagCount = Object.keys(perFlag).length
-    lines.push('', `### env-${envId} — ${totalForEnv} coerced from ${flagCount} config(s)`, '')
+    const heading = FLAGSMITH_ENV_BUCKET_LABEL[envId] ?? `env-${envId}`
+    lines.push('', `### ${heading} — ${totalForEnv} coerced from ${flagCount} config(s)`, '')
     const sorted = Object.keys(perFlag).sort()
     for (const flagPath of sorted) {
       lines.push(`- \`${flagPath}\` (${perFlag[flagPath]})`)
@@ -266,6 +282,7 @@ const CONVERSION_NOTE_HEADINGS: Record<
   string
 > = {
   'ai-config-skipped': 'AI Configs skipped (out of v1 scope)',
+  'cross-env-value-type-coerced': 'Cross-environment value-type coerced to string',
   'dropped-custom-properties': 'Dropped custom properties',
   'dropped-experiment-metadata': 'Dropped experiment metadata',
   'dropped-maintainer': 'Dropped maintainer metadata',
@@ -273,6 +290,9 @@ const CONVERSION_NOTE_HEADINGS: Record<
   'dropped-mobile-key-still-visible': 'Dropped mobile-key availability (still client-visible)',
   'dropped-prerequisite': 'Dropped prerequisites',
   'dropped-private-attribute': 'Dropped private attributes',
+  'enabled-false-non-boolean': 'enabled=false on non-boolean features',
+  'identity-override-as-rule': 'Identity overrides converted to leading rules',
+  'identity-traits-referenced': 'Identity traits referenced by segment rules',
   'individual-target-as-rule': 'Individual targets converted to rules',
   'skipped-rule': 'Skipped rules (unsupported operators)',
   'unexportable-segment-membership': 'Unexportable segment membership',
@@ -397,13 +417,14 @@ const renderBeforeYouCutOver = (notes: ConversionNote[] | undefined): null | str
   return lines.join('\n')
 }
 
-const renderRebucketedRollouts = (notes: ConversionNote[] | undefined): null | string => {
+const renderRebucketedRollouts = (notes: ConversionNote[] | undefined, source: string): null | string => {
   const rollouts = (notes ?? []).filter((n) => n.category === 'rebucketed-rollout')
   if (rollouts.length === 0) return null
+  const sourceLabel = source === 'flagsmith' ? 'Flagsmith' : source === 'launchdarkly' ? 'LaunchDarkly' : source
   const lines: string[] = [
     '## Users will be re-bucketed',
     '',
-    `**${rollouts.length}** flag(s)/segment(s) use a percentage rollout. LaunchDarkly and Quonfig hash buckets ` +
+    `**${rollouts.length}** flag(s)/segment(s) use a percentage rollout. ${sourceLabel} and Quonfig hash buckets ` +
       `differently, so which users land in which bucket *will change* after migration — the rollout percentage is ` +
       `preserved, but individual user assignments are not. Review these before cutover so the re-bucketing is not a surprise:`,
     '',
@@ -632,6 +653,46 @@ const LAUNCHDARKLY_BEHAVIORAL_DIFFERENCES_APPENDIX = [
   '  new source of truth.',
 ].join('\n')
 
+/**
+ * Flagsmith-specific behavioral-differences appendix (plan §5.5). Same shape
+ * as the LD version above — static documentation about gaps a customer reading
+ * MIGRATION_REPORT.md should know about independently of their specific data.
+ */
+const FLAGSMITH_BEHAVIORAL_DIFFERENCES_APPENDIX = [
+  '## Behavioral differences post-cutover (independent of this import)',
+  '',
+  '- `enabled=false` semantics differ. Flagsmith ignores `feature_state_value` when',
+  "  `enabled=false` and the SDK serves your code's hardcoded default. Quonfig always",
+  '  serves the configured value. For boolean features the migrator emits `false`; for',
+  '  non-boolean features it emits the stored `feature_state_value` and surfaces every',
+  '  affected flag under "Coerced sentinel rule values" above. Review each before',
+  '  cutover — Flagsmith\'s "off" behavior does NOT round-trip.',
+  '- Flagsmith has no individual-target primitive in Quonfig v1. Identity overrides',
+  '  are emitted as leading `PROP_IS_ONE_OF` rules on `user.key`. Adding/removing an',
+  '  identity is now a config edit (qfg set / web UI), not a per-identity row.',
+  '- Identity traits are runtime context Flagsmith infers from the trait directory.',
+  '  Quonfig has no server-side trait store — your SDK callers must send every trait',
+  '  attribute referenced by a segment rule on the eval context. See "Identity traits',
+  '  referenced by segment rules" above for the exhaustive list.',
+  '- Multivariate bucketing salts differ between Flagsmith and Quonfig. The percentage',
+  '  allocation is preserved, but identity → variation assignments WILL change. See',
+  '  "Users will be re-bucketed" above.',
+  '- MODULO and PERCENTAGE_SPLIT segment-condition operators have no Quonfig equivalent.',
+  '  Rules using them were dropped with `skipped-rule` notes; rebuild by hand if you',
+  '  need the segmentation.',
+  '- Segment rule combinators `type=ANY` and `type=NONE` (within-rule OR / NAND) have',
+  '  no Quonfig equivalent — Quonfig criteria within a single rule are AND-only. Those',
+  '  rules were dropped with `skipped-rule` notes.',
+  "- `:semver`-suffixed values are mapped to Quonfig's `PROP_SEMVER_*` operators.",
+  '  Inclusive variants (GTE/LTE) have no semver equivalent and were dropped.',
+  '- Soft-deleted features in Flagsmith are functionally hard-deleted from the public',
+  '  API (404 on GET, absent from list responses). The migrator cannot enumerate them;',
+  '  any features deleted before this snapshot was taken are simply not present in the',
+  '  Quonfig workspace.',
+  '- Feature owners, project metadata, change requests, and scheduled changes are out',
+  '  of v1 scope. None round-trip into Quonfig.',
+].join('\n')
+
 const renderFollowUp = (followUp: FollowUpChecklist): string => {
   const must =
     followUp.mustFixBeforeCutover.length === 0
@@ -687,10 +748,10 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   const skipped = renderSkippedConfigs(data.skippedConfigs)
   if (skipped !== null) sections.push(skipped)
 
-  const coerced = renderCoercedSentinels(data.coercedSentinels)
+  const coerced = renderCoercedSentinels(data.coercedSentinels, data.source)
   if (coerced !== null) sections.push(coerced)
 
-  const rebucketed = renderRebucketedRollouts(data.conversionNotes)
+  const rebucketed = renderRebucketedRollouts(data.conversionNotes, data.source)
   if (rebucketed !== null) sections.push(rebucketed)
 
   const conversionNotes = renderConversionNotes(data.conversionNotes, data.maintainerMap)
@@ -700,6 +761,10 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
 
   if (data.source === 'launchdarkly') {
     sections.push(LAUNCHDARKLY_BEHAVIORAL_DIFFERENCES_APPENDIX)
+  }
+
+  if (data.source === 'flagsmith') {
+    sections.push(FLAGSMITH_BEHAVIORAL_DIFFERENCES_APPENDIX)
   }
 
   return sections.join('\n\n') + '\n'

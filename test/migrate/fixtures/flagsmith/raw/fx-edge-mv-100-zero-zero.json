@@ -1,0 +1,148 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:15:26.901091Z",
+    "default_enabled": true,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207673,
+    "initial_value": "a",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:15:26.952159+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [
+      {
+        "boolean_value": null,
+        "default_percentage_allocation": 100,
+        "id": 27444,
+        "integer_value": null,
+        "string_value": "a",
+        "type": "unicode",
+        "uuid": "abe31c95-211a-4df1-bcb9-d151db0ba3fa"
+      },
+      {
+        "boolean_value": null,
+        "default_percentage_allocation": 0,
+        "id": 27445,
+        "integer_value": null,
+        "string_value": "b",
+        "type": "unicode",
+        "uuid": "b53c3673-378a-4f64-a49c-7035f0f11e56"
+      },
+      {
+        "boolean_value": null,
+        "default_percentage_allocation": 0,
+        "id": 27446,
+        "integer_value": null,
+        "string_value": "c",
+        "type": "unicode",
+        "uuid": "579efa86-63e1-4a0b-b188-51b7ecc12ad5"
+      }
+    ],
+    "name": "fx-edge-mv-100-zero-zero",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "MULTIVARIATE",
+    "uuid": "9558efab-4106-4ea9-9c8f-d8ad51bcd95a"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:15:26.937285Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90306,
+        "environment_feature_version": "1fa1e9e6-274e-4582-a638-d12927627a06",
+        "feature": 207673,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "a",
+          "type": "unicode"
+        },
+        "id": 1414439,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [
+          {
+            "id": 349048,
+            "multivariate_feature_option": 27446,
+            "percentage_allocation": 0
+          },
+          {
+            "id": 349046,
+            "multivariate_feature_option": 27445,
+            "percentage_allocation": 0
+          },
+          {
+            "id": 349044,
+            "multivariate_feature_option": 27444,
+            "percentage_allocation": 100
+          }
+        ],
+        "updated_at": "2026-05-17T18:52:49.058016Z",
+        "uuid": "a4b0db4f-07ce-43b1-8a2b-4543c5bd0184",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:15:26.967352Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90307,
+        "environment_feature_version": "f2bb32a3-530d-4e08-b5f7-7ddeace248f5",
+        "feature": 207673,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "a",
+          "type": "unicode"
+        },
+        "id": 1414440,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [
+          {
+            "id": 349049,
+            "multivariate_feature_option": 27446,
+            "percentage_allocation": 0
+          },
+          {
+            "id": 349047,
+            "multivariate_feature_option": 27445,
+            "percentage_allocation": 0
+          },
+          {
+            "id": 349045,
+            "multivariate_feature_option": 27444,
+            "percentage_allocation": 100
+          }
+        ],
+        "updated_at": "2026-05-17T18:15:26.967359Z",
+        "uuid": "bf2a71a8-940c-40ab-a442-1ba49d11dbf0",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

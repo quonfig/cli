@@ -1,0 +1,100 @@
+{
+  "key": "fx-segov-multiple-priorities",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "default"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-single-condition"
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "prio-0"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-and-within-rule"
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "prio-1"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-or-within-rule"
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "prio-2"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

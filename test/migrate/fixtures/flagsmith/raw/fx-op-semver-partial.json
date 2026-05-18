@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:40.362107Z",
+  "description": null,
+  "feature": null,
+  "id": 1127712,
+  "metadata": [],
+  "name": "fx-op-semver-partial",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593718,
+          "operator": "EQUAL",
+          "property": "version",
+          "value": "4.2:semver"
+        }
+      ],
+      "id": 4150871,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:40.371202Z",
+  "uuid": "6b6b7b78-2f03-4b53-983f-cf5dff1d3e38",
+  "version_of": 1127712
+}

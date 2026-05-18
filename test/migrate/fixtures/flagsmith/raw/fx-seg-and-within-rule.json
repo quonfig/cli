@@ -1,0 +1,35 @@
+{
+  "created_at": "2026-05-17T18:13:21.379953Z",
+  "description": null,
+  "feature": null,
+  "id": 1127683,
+  "metadata": [],
+  "name": "fx-seg-and-within-rule",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593685,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        },
+        {
+          "description": null,
+          "id": 83593686,
+          "operator": "GREATER_THAN",
+          "property": "seats",
+          "value": "10"
+        }
+      ],
+      "id": 4150840,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:21.393546Z",
+  "uuid": "71474fb1-1ef7-48ef-aca8-9018ff64c5a3",
+  "version_of": 1127683
+}

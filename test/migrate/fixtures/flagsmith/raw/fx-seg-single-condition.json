@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:19.997313Z",
+  "description": null,
+  "feature": null,
+  "id": 1127682,
+  "metadata": [],
+  "name": "fx-seg-single-condition",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593684,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150839,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:20.009569Z",
+  "uuid": "9f6a83ab-c597-4135-9d0a-bca0d697abe7",
+  "version_of": 1127682
+}

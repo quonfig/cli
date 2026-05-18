@@ -1,0 +1,208 @@
+{
+  "key": "fx-mv-string-nway",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "string",
+                  "value": "v1"
+                },
+                "weight": 20000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "v2"
+                },
+                "weight": 20000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "v3"
+                },
+                "weight": 20000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "v4"
+                },
+                "weight": 20000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "v5"
+                },
+                "weight": 20000
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v1"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v2"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v3"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v4"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v5"
+                  },
+                  "weight": 20000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v1"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v2"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v3"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v4"
+                  },
+                  "weight": 20000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "v5"
+                  },
+                  "weight": 20000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "v1"
+      },
+      "name": "v1"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "v2"
+      },
+      "name": "v2"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "v3"
+      },
+      "name": "v3"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "v4"
+      },
+      "name": "v4"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "v5"
+      },
+      "name": "v5"
+    }
+  ]
+}

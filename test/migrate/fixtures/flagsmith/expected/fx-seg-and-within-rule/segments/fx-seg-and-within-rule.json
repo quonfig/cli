@@ -1,0 +1,46 @@
+{
+  "key": "fx-seg-and-within-rule",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["enterprise"]
+            }
+          },
+          {
+            "operator": "PROP_GREATER_THAN",
+            "propertyName": "seats",
+            "valueToMatch": {
+              "type": "int",
+              "value": 10
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": []
+}

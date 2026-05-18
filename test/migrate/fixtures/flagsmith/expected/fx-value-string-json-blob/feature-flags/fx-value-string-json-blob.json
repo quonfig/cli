@@ -1,0 +1,55 @@
+{
+  "key": "fx-value-string-json-blob",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "{\"theme\":\"dark\",\"items\":[1,2,3]}"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "{\"theme\":\"dark\",\"items\":[1,2,3]}"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "{\"theme\":\"dark\",\"items\":[1,2,3]}"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

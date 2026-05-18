@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:38.063336Z",
+  "description": null,
+  "feature": null,
+  "id": 1127708,
+  "metadata": [],
+  "name": "fx-op-semver-equal",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593714,
+          "operator": "EQUAL",
+          "property": "version",
+          "value": "4.2.52:semver"
+        }
+      ],
+      "id": 4150867,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:38.071912Z",
+  "uuid": "305b61c3-b308-4a04-9627-10de5ea4d4db",
+  "version_of": 1127708
+}

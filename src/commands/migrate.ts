@@ -22,6 +22,8 @@ import {
   type SkippedConfigSummary,
 } from '../migrate/source.js'
 import {missingSourceApiKeyMessage, resolveSourceApiKey} from '../migrate/source-api-key.js'
+import {applyFlagsmithBaseUrl} from '../migrate/sources/flagsmith/api.js'
+import {setFlagsmithProjectId} from '../migrate/sources/flagsmith.js'
 import {applyLaunchBaseUrl} from '../migrate/sources/launch/api.js'
 import {applyLaunchDarklyBaseUrl} from '../migrate/sources/launchdarkly/api.js'
 import {
@@ -79,11 +81,10 @@ export default class Migrate extends BaseCommand {
         'Only valid on first-run imports — pass --reset to re-import everything from scratch with this flag.',
     }),
     project: Flags.string({
-      default: 'default',
       description:
-        'LaunchDarkly project key to migrate from (or set LAUNCHDARKLY_PROJECT_KEY). ' +
-        'Scoped to `--from launchdarkly`; ignored by other sources.',
-      env: 'LAUNCHDARKLY_PROJECT_KEY',
+        'Source-system project identifier. For --from launchdarkly this is the project KEY (default: "default"; ' +
+        'env: LAUNCHDARKLY_PROJECT_KEY). For --from flagsmith this is the numeric project ID (env: FLAGSMITH_PROJECT_ID). ' +
+        'Ignored by --from launch.',
     }),
     push: Flags.boolean({
       default: false,
@@ -192,8 +193,18 @@ export default class Migrate extends BaseCommand {
       // --full-summary swaps the snapshot for the Phase-2 audit-log walk (the
       // walk's own resume cursor lives in os.tmpdir, not in `dir`).
       applyLaunchDarklyBaseUrl()
-      setLaunchDarklyProjectKey(flags.project)
+      setLaunchDarklyProjectKey(flags.project ?? process.env.LAUNCHDARKLY_PROJECT_KEY ?? 'default')
       setLaunchDarklyFullSummary(flags['full-summary'])
+    }
+
+    if (flags.from === 'flagsmith') {
+      // Flagsmith projects are numeric IDs. --project is a string flag because
+      // it's source-shared; we just pass it through. The Flagsmith source's
+      // own resolveProjectId() honours FLAGSMITH_PROJECT_ID at module-load if
+      // --project isn't passed.
+      applyFlagsmithBaseUrl()
+      const projectId = flags.project ?? process.env.FLAGSMITH_PROJECT_ID
+      if (projectId) setFlagsmithProjectId(projectId)
     }
 
     let source

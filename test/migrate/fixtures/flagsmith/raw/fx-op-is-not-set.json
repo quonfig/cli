@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:37.604108Z",
+  "description": null,
+  "feature": null,
+  "id": 1127707,
+  "metadata": [],
+  "name": "fx-op-is-not-set",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593713,
+          "operator": "IS_NOT_SET",
+          "property": "beta_opt_in",
+          "value": "None"
+        }
+      ],
+      "id": 4150866,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:37.609296Z",
+  "uuid": "a5a0a340-03f1-40c3-83a2-eef4a0c074ae",
+  "version_of": 1127707
+}

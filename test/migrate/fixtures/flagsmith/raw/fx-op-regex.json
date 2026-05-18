@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:33.634293Z",
+  "description": null,
+  "feature": null,
+  "id": 1127701,
+  "metadata": [],
+  "name": "fx-op-regex",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593707,
+          "operator": "REGEX",
+          "property": "email",
+          "value": "^admin@.*\\.com$"
+        }
+      ],
+      "id": 4150860,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:33.644340Z",
+  "uuid": "d0884d72-a3ea-490f-8bdb-f4e59803e877",
+  "version_of": 1127701
+}

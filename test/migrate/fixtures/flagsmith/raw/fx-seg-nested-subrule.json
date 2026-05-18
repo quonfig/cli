@@ -1,0 +1,49 @@
+{
+  "created_at": "2026-05-17T18:13:24.312797Z",
+  "description": null,
+  "feature": null,
+  "id": 1127687,
+  "metadata": [],
+  "name": "fx-seg-nested-subrule",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593695,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150845,
+      "rules": [
+        {
+          "conditions": [
+            {
+              "description": null,
+              "id": 83593693,
+              "operator": "EQUAL",
+              "property": "region",
+              "value": "us-east"
+            },
+            {
+              "description": null,
+              "id": 83593694,
+              "operator": "EQUAL",
+              "property": "region",
+              "value": "us-west"
+            }
+          ],
+          "id": 4150846,
+          "type": "ANY"
+        }
+      ],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:24.319408Z",
+  "uuid": "2070d6c2-f58f-4b97-aa2e-fef5945c09fb",
+  "version_of": 1127687
+}

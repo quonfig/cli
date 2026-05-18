@@ -1,0 +1,38 @@
+{
+  "key": "fx-op-regex-complex",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_MATCHES",
+            "propertyName": "issue_key",
+            "valueToMatch": {
+              "type": "string",
+              "value": "^[A-Z]{2,4}-\\d{1,6}$"
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": []
+}

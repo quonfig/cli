@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:35.877063Z",
+  "description": null,
+  "feature": null,
+  "id": 1127704,
+  "metadata": [],
+  "name": "fx-op-modulo",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593710,
+          "operator": "MODULO",
+          "property": "user_id",
+          "value": "3|0"
+        }
+      ],
+      "id": 4150863,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:35.888876Z",
+  "uuid": "58e65bdb-17fa-4a5b-acdd-aa7c9cad11e1",
+  "version_of": 1127704
+}

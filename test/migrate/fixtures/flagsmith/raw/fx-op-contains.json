@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:31.190843Z",
+  "description": null,
+  "feature": null,
+  "id": 1127699,
+  "metadata": [],
+  "name": "fx-op-contains",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593705,
+          "operator": "CONTAINS",
+          "property": "email",
+          "value": "+beta"
+        }
+      ],
+      "id": 4150858,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:31.200877Z",
+  "uuid": "9ba9e36a-4055-4f4d-9861-01081010e7db",
+  "version_of": 1127699
+}

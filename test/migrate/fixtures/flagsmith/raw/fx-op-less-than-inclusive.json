@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:30.700231Z",
+  "description": null,
+  "feature": null,
+  "id": 1127698,
+  "metadata": [],
+  "name": "fx-op-less-than-inclusive",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593704,
+          "operator": "LESS_THAN_INCLUSIVE",
+          "property": "age",
+          "value": "99"
+        }
+      ],
+      "id": 4150857,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:30.713891Z",
+  "uuid": "320af8be-1c41-4b6b-8ea4-0f5f5030707a",
+  "version_of": 1127698
+}

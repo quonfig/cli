@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:33.997180Z",
+  "description": null,
+  "feature": null,
+  "id": 1127702,
+  "metadata": [],
+  "name": "fx-op-regex-complex",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593708,
+          "operator": "REGEX",
+          "property": "issue_key",
+          "value": "^[A-Z]{2,4}-\\d{1,6}$"
+        }
+      ],
+      "id": 4150861,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:34.006980Z",
+  "uuid": "20b19eb4-edae-46f3-9e0e-bde0a764892b",
+  "version_of": 1127702
+}

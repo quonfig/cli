@@ -1,0 +1,38 @@
+{
+  "key": "fx-op-greater-than-inclusive",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_GREATER_THAN_OR_EQUAL",
+            "propertyName": "age",
+            "valueToMatch": {
+              "type": "int",
+              "value": 21
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": []
+}

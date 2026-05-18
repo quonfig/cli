@@ -1,0 +1,38 @@
+{
+  "key": "fx-op-semver-less",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_SEMVER_LESS_THAN",
+            "propertyName": "version",
+            "valueToMatch": {
+              "type": "string",
+              "value": "5.0.0"
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": []
+}

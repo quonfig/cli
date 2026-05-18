@@ -1,0 +1,38 @@
+{
+  "key": "fx-op-semver-greater",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_SEMVER_GREATER_THAN",
+            "propertyName": "version",
+            "valueToMatch": {
+              "type": "string",
+              "value": "4.2.52"
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": []
+}

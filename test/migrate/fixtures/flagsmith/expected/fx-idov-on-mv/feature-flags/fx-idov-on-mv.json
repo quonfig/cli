@@ -1,0 +1,158 @@
+{
+  "key": "fx-idov-on-mv",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "string",
+                  "value": "a"
+                },
+                "weight": 50000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "b"
+                },
+                "weight": 50000
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.key",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": ["fx-id-mixed"]
+              }
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 0
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 100000
+                }
+              ]
+            }
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 50000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 50000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 50000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 50000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "a"
+      },
+      "name": "a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "b"
+      },
+      "name": "b"
+    }
+  ]
+}

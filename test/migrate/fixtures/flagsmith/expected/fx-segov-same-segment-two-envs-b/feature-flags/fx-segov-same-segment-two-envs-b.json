@@ -1,0 +1,70 @@
+{
+  "key": "fx-segov-same-segment-two-envs-b",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-and-of-rules"
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "shared"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": ""
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": ""
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

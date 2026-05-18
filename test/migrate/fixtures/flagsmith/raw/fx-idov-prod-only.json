@@ -1,0 +1,100 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:17:03.104045Z",
+    "default_enabled": false,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207718,
+    "initial_value": "default",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:17:03.202494+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-idov-prod-only",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "0d55aeed-2d64-4361-b458-358ef159ff32"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:17:03.186614Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90306,
+        "environment_feature_version": "3fc820e5-d9d5-4867-b1fb-b899b328b1a6",
+        "feature": 207718,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414529,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:44:30.010879Z",
+        "uuid": "001fb91a-e38e-42b2-9bf0-ab9f86c7e67e",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:17:03.217491Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90307,
+        "environment_feature_version": "8d8ccbc5-2c7e-4e43-ae26-e79f23d8cab0",
+        "feature": 207718,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414530,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:44:30.695385Z",
+        "uuid": "2b21784d-7f49-4398-913b-e63f8268e42b",
+        "version": 1
+      },
+      "identity_overrides": [
+        {
+          "feature_state": {
+            "enabled": true,
+            "feature": 207718,
+            "feature_state_value": "prod-only-override",
+            "featurestate_uuid": "398861ec-9114-4e40-97ce-c508d0b3bf64",
+            "multivariate_feature_state_values": []
+          },
+          "identifier": "fx-id-string",
+          "identity_uuid": "6c4ba606-4bf9-4553-b2f3-3d3f569dd2a6"
+        }
+      ],
+      "segment_overrides": []
+    }
+  }
+}

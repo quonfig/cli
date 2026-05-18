@@ -1,0 +1,70 @@
+{
+  "key": "fx-cr-with-segment-override",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "default"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-single-condition"
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "initial"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

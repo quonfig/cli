@@ -1,0 +1,134 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:17:00.017942Z",
+    "default_enabled": false,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207717,
+    "initial_value": "default",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:40:20.958825+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-idov-and-segov-conflict",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "48840418-8238-40e7-8641-55a2909c5439"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [
+      {
+        "environment": 90306,
+        "id": 248869,
+        "is_feature_specific": false,
+        "priority": 0,
+        "segment": 1127683,
+        "segment_name": "fx-seg-and-within-rule",
+        "uuid": "9747d02a-f600-44d9-825b-85850aa716d9"
+      }
+    ],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:40:20.967346Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90306,
+        "environment_feature_version": "78460502-eb11-4d47-a1d3-6c212e8ab6ef",
+        "feature": 207717,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414708,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:44:28.750817Z",
+        "uuid": "c30bace8-161f-4bd5-b263-f346f7a49aba",
+        "version": null
+      },
+      "identity_overrides": [
+        {
+          "feature_state": {
+            "enabled": true,
+            "feature": 207717,
+            "feature_state_value": "identity-wins",
+            "featurestate_uuid": "a42802b2-8b52-445e-925d-47f8d566a376",
+            "multivariate_feature_state_values": []
+          },
+          "identifier": "fx-id-string",
+          "identity_uuid": "39978094-dd51-4938-bd26-e85f10062d5c"
+        }
+      ],
+      "segment_overrides": [
+        {
+          "change_request": null,
+          "created_at": "2026-05-17T18:40:20.997770Z",
+          "deleted_at": null,
+          "enabled": true,
+          "environment": 90306,
+          "environment_feature_version": "78460502-eb11-4d47-a1d3-6c212e8ab6ef",
+          "feature": 207717,
+          "feature_segment": 248869,
+          "feature_state_value": {
+            "boolean_value": null,
+            "integer_value": null,
+            "string_value": "segment-loses",
+            "type": "unicode"
+          },
+          "id": 1414709,
+          "identity": null,
+          "live_from": null,
+          "multivariate_feature_state_values": [],
+          "updated_at": "2026-05-17T18:40:20.997776Z",
+          "uuid": "cc769735-ac6b-453b-a773-7d6d04b02cd6",
+          "version": 1
+        }
+      ]
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:17:00.052961Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90307,
+        "environment_feature_version": "9dedb5b4-59df-48e9-8f5a-9ec85265bb8f",
+        "feature": 207717,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414528,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:17:00.052966Z",
+        "uuid": "43b13819-581d-44da-abb8-1e9993e566a7",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "key": "fx-segov-on-mv",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "string",
+                  "value": "a"
+                },
+                "weight": 50000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "b"
+                },
+                "weight": 50000
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-single-condition"
+              }
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 100000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 50000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 50000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "a"
+                  },
+                  "weight": 50000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "b"
+                  },
+                  "weight": 50000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "a"
+      },
+      "name": "a"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "b"
+      },
+      "name": "b"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:35.024916Z",
+  "description": null,
+  "feature": null,
+  "id": 1127703,
+  "metadata": [],
+  "name": "fx-op-percentage-split",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593709,
+          "operator": "PERCENTAGE_SPLIT",
+          "property": null,
+          "value": "25"
+        }
+      ],
+      "id": 4150862,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:35.034086Z",
+  "uuid": "9ba9e7e8-1a08-46bf-b617-767f45e9a6c4",
+  "version_of": 1127703
+}

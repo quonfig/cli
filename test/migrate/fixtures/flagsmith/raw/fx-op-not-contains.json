@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:33.190587Z",
+  "description": null,
+  "feature": null,
+  "id": 1127700,
+  "metadata": [],
+  "name": "fx-op-not-contains",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593706,
+          "operator": "NOT_CONTAINS",
+          "property": "email",
+          "value": "@blocked.com"
+        }
+      ],
+      "id": 4150859,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:33.200860Z",
+  "uuid": "ac1b1af0-258e-4bc4-9706-d157b55114da",
+  "version_of": 1127700
+}

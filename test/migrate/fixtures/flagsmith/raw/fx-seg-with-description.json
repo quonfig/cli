@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:26.545383Z",
+  "description": "Segment fixture exercising the description field",
+  "feature": null,
+  "id": 1127689,
+  "metadata": [],
+  "name": "fx-seg-with-description",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593696,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150848,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:26.553158Z",
+  "uuid": "05d35c0d-8d68-4b19-8163-60cb2d8caa93",
+  "version_of": 1127689
+}

@@ -1,0 +1,20 @@
+{
+  "created_at": "2026-05-17T18:13:24.769634Z",
+  "description": null,
+  "feature": null,
+  "id": 1127688,
+  "metadata": [],
+  "name": "fx-seg-empty-conditions",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [],
+      "id": 4150847,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:24.779906Z",
+  "uuid": "d041f73e-2bfd-43b8-a469-10c525dc3099",
+  "version_of": 1127688
+}

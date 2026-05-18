@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:28.824055Z",
+  "description": null,
+  "feature": null,
+  "id": 1127694,
+  "metadata": [],
+  "name": "fx-op-not-equal",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593700,
+          "operator": "NOT_EQUAL",
+          "property": "plan",
+          "value": "free"
+        }
+      ],
+      "id": 4150853,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:28.836044Z",
+  "uuid": "ba7b13cd-4e03-4629-8dd4-d1cc28d30f26",
+  "version_of": 1127694
+}

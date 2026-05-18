@@ -1,0 +1,20 @@
+{
+  "created_at": "2026-05-17T18:13:27.729399Z",
+  "description": null,
+  "feature": null,
+  "id": 1127692,
+  "metadata": [],
+  "name": "fx-edge-segment-zero-conditions",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [],
+      "id": 4150851,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:27.736731Z",
+  "uuid": "a1c2e81a-d13a-4f3c-a4a1-dda44e4fb7f8",
+  "version_of": 1127692
+}

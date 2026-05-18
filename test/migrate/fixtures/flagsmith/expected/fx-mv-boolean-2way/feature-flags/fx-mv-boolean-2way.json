@@ -1,0 +1,124 @@
+{
+  "key": "fx-mv-boolean-2way",
+  "type": "feature_flag",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "bool",
+                  "value": true
+                },
+                "weight": 60000
+              },
+              {
+                "value": {
+                  "type": "bool",
+                  "value": false
+                },
+                "weight": 40000
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "bool",
+                    "value": true
+                  },
+                  "weight": 60000
+                },
+                {
+                  "value": {
+                    "type": "bool",
+                    "value": false
+                  },
+                  "weight": 40000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "bool",
+                    "value": true
+                  },
+                  "weight": 60000
+                },
+                {
+                  "value": {
+                    "type": "bool",
+                    "value": false
+                  },
+                  "weight": 40000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "bool",
+        "value": true
+      },
+      "name": "true"
+    },
+    {
+      "value": {
+        "type": "bool",
+        "value": false
+      },
+      "name": "false"
+    }
+  ]
+}

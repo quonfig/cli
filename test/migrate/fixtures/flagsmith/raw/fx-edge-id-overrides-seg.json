@@ -1,0 +1,134 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:17:07.676434Z",
+    "default_enabled": false,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207719,
+    "initial_value": "default",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:40:26.495851+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-edge-id-overrides-seg",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "8036b637-e94e-4987-96fd-448acf2841f9"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [
+      {
+        "environment": 90306,
+        "id": 248870,
+        "is_feature_specific": false,
+        "priority": 0,
+        "segment": 1127682,
+        "segment_name": "fx-seg-single-condition",
+        "uuid": "88e26a7c-f227-4c9a-862f-5832f7530ad5"
+      }
+    ],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:40:26.536243Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90306,
+        "environment_feature_version": "3c9a5799-77c0-4439-9ac9-01d6c50d50a0",
+        "feature": 207719,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414710,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:44:31.950097Z",
+        "uuid": "ddfd8b35-f23a-4b48-8823-9e394c110d9b",
+        "version": null
+      },
+      "identity_overrides": [
+        {
+          "feature_state": {
+            "enabled": true,
+            "feature": 207719,
+            "feature_state_value": "identity-wins",
+            "featurestate_uuid": "fff5d9c8-9f56-4891-8241-63dbb26acc6c",
+            "multivariate_feature_state_values": []
+          },
+          "identifier": "fx-id-string",
+          "identity_uuid": "39978094-dd51-4938-bd26-e85f10062d5c"
+        }
+      ],
+      "segment_overrides": [
+        {
+          "change_request": null,
+          "created_at": "2026-05-17T18:40:26.575548Z",
+          "deleted_at": null,
+          "enabled": true,
+          "environment": 90306,
+          "environment_feature_version": "3c9a5799-77c0-4439-9ac9-01d6c50d50a0",
+          "feature": 207719,
+          "feature_segment": 248870,
+          "feature_state_value": {
+            "boolean_value": null,
+            "integer_value": null,
+            "string_value": "segment-loses",
+            "type": "unicode"
+          },
+          "id": 1414711,
+          "identity": null,
+          "live_from": null,
+          "multivariate_feature_state_values": [],
+          "updated_at": "2026-05-17T18:40:26.575554Z",
+          "uuid": "2f87fc44-c136-4e04-b6c0-fdd286a8ce19",
+          "version": 1
+        }
+      ]
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:17:07.739571Z",
+        "deleted_at": null,
+        "enabled": false,
+        "environment": 90307,
+        "environment_feature_version": "0dfc0ee0-656a-4c08-aef0-5d6d7617d546",
+        "feature": 207719,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "default",
+          "type": "unicode"
+        },
+        "id": 1414532,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:17:07.739578Z",
+        "uuid": "5febb3af-c82a-4c16-9950-420eb206e81a",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

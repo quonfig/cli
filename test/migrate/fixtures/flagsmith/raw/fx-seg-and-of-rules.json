@@ -1,0 +1,42 @@
+{
+  "created_at": "2026-05-17T18:13:23.621727Z",
+  "description": null,
+  "feature": null,
+  "id": 1127686,
+  "metadata": [],
+  "name": "fx-seg-and-of-rules",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593691,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150843,
+      "rules": [],
+      "type": "ALL"
+    },
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593692,
+          "operator": "EQUAL",
+          "property": "region",
+          "value": "us-east"
+        }
+      ],
+      "id": 4150844,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:23.631283Z",
+  "uuid": "54eff0be-4f7a-4296-bd05-28d23c7dbedf",
+  "version_of": 1127686
+}

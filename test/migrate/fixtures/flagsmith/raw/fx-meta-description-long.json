@@ -1,0 +1,88 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:14:16.306820Z",
+    "default_enabled": true,
+    "description": "This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation. This is a long description used to verify that Flagsmith preserves the full text without truncation.",
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207643,
+    "initial_value": null,
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T18:14:16.346979+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [],
+    "name": "fx-meta-description-long",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "STANDARD",
+    "uuid": "a4b45efe-32f8-42de-b762-30a42edf7859"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:14:16.334354Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90306,
+        "environment_feature_version": "61d67b81-0ee2-42cd-8785-c3a0051e5151",
+        "feature": 207643,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": null,
+          "type": "unicode"
+        },
+        "id": 1414379,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:42:37.634059Z",
+        "uuid": "d3106c68-9960-49f2-8f63-976739102951",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:14:16.356768Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90307,
+        "environment_feature_version": "3239bcef-f782-41e6-8a34-0fa78e306f0f",
+        "feature": 207643,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": null,
+          "type": "unicode"
+        },
+        "id": 1414380,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [],
+        "updated_at": "2026-05-17T18:14:16.356774Z",
+        "uuid": "8f1b31e0-4f31-48da-a4d9-24f885f1cdc2",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}

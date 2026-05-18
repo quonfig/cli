@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:36.617827Z",
+  "description": null,
+  "feature": null,
+  "id": 1127705,
+  "metadata": [],
+  "name": "fx-op-in",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593711,
+          "operator": "IN",
+          "property": "tenant_id",
+          "value": "tenant_1,tenant_2,tenant_3"
+        }
+      ],
+      "id": 4150864,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:36.628981Z",
+  "uuid": "15890dec-6fb1-47a8-b1a0-682368bc7df5",
+  "version_of": 1127705
+}

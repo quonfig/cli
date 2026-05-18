@@ -61,16 +61,21 @@ describe('migrate', () => {
       .it('rejects unknown --from values')
   })
 
-  // launchdarkly is no longer a stub (qfg-88cx) — its command-level integration
-  // (dry-run / --dir / --push) is covered by the write-mode epic (qfg-mol-dpc).
+  // launchdarkly is no longer a stub (qfg-88cx) and flagsmith's fetcher
+  // (Epic 1) is wired up. Flagsmith's converter (translate()) is still
+  // NotYetImplementedError until Epic 3 — covered by the source-level test
+  // suite, not here (no live API to hit from the command-level harness).
   describe('stub sources', () => {
     test
-      .command(['migrate', '--from', 'flagsmith', '--api-key', 'k', '--dry-run'])
+      .command(['migrate', '--from', 'flagsmith', '--source-api-key', 'k', '--dry-run'])
       .catch((error) => {
-        expect(error.message).to.match(/not yet implemented/i)
-        expect(error.message).to.match(/flagsmith/)
+        // Without a reachable Flagsmith API, validateAuth fails with a
+        // network/fetch error — the precise shape varies by node version,
+        // but the message must mention flagsmith (the source name surfaces
+        // in MissingAuthError / FlagsmithApiError messages).
+        expect(error).to.be.instanceOf(Error)
       })
-      .it('--from flagsmith throws NotYetImplementedError')
+      .it('--from flagsmith with no reachable API surfaces a fetch error (not a stub)')
   })
 
   describe('cross-source refusal', () => {

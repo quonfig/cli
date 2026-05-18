@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:28.457351Z",
+  "description": null,
+  "feature": null,
+  "id": 1127693,
+  "metadata": [],
+  "name": "fx-op-equal",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593699,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150852,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:28.466070Z",
+  "uuid": "022d1619-656c-4baa-9222-3c0a9fde75f5",
+  "version_of": 1127693
+}

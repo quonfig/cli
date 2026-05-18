@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:27.348856Z",
+  "description": null,
+  "feature": null,
+  "id": 1127691,
+  "metadata": [],
+  "name": "fx-edge-segment-no-overrides",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593698,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150850,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:27.359920Z",
+  "uuid": "413a1d28-4e03-4ae9-abc7-c29b6f3ad66a",
+  "version_of": 1127691
+}

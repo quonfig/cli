@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:26.956398Z",
+  "description": null,
+  "feature": null,
+  "id": 1127690,
+  "metadata": [],
+  "name": "fx-seg-with-metadata",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593697,
+          "operator": "EQUAL",
+          "property": "plan",
+          "value": "enterprise"
+        }
+      ],
+      "id": 4150849,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:26.962761Z",
+  "uuid": "a5a243f9-2900-43ef-aa5e-7c5456e73f3d",
+  "version_of": 1127690
+}

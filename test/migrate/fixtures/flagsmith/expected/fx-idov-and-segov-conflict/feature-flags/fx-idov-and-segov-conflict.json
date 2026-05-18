@@ -1,0 +1,86 @@
+{
+  "key": "fx-idov-and-segov-conflict",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "string",
+          "value": "default"
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "PROP_IS_ONE_OF",
+              "propertyName": "user.key",
+              "valueToMatch": {
+                "type": "string_list",
+                "value": ["fx-id-string"]
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "identity-wins"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "IN_SEG",
+              "valueToMatch": {
+                "type": "string",
+                "value": "fx-seg-and-within-rule"
+              }
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "segment-loses"
+          }
+        },
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "string",
+            "value": "default"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": []
+}

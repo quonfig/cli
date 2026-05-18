@@ -1,0 +1,80 @@
+{
+  "envNameByApiKey": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": "Development",
+    "iwz7qTc9nzRJg3cmPLAVXa": "Production"
+  },
+  "featureCount": 108,
+  "fetcherSha": "1277c04",
+  "projectId": 38856,
+  "projectName": "Test1",
+  "segmentCount": 32,
+  "segmentNameById": {
+    "1127682": "fx-seg-single-condition",
+    "1127683": "fx-seg-and-within-rule",
+    "1127684": "fx-seg-or-within-rule",
+    "1127685": "fx-seg-none-within-rule",
+    "1127686": "fx-seg-and-of-rules",
+    "1127687": "fx-seg-nested-subrule",
+    "1127688": "fx-seg-empty-conditions",
+    "1127689": "fx-seg-with-description",
+    "1127690": "fx-seg-with-metadata",
+    "1127691": "fx-edge-segment-no-overrides",
+    "1127692": "fx-edge-segment-zero-conditions",
+    "1127693": "fx-op-equal",
+    "1127694": "fx-op-not-equal",
+    "1127695": "fx-op-greater-than",
+    "1127696": "fx-op-greater-than-inclusive",
+    "1127697": "fx-op-less-than",
+    "1127698": "fx-op-less-than-inclusive",
+    "1127699": "fx-op-contains",
+    "1127700": "fx-op-not-contains",
+    "1127701": "fx-op-regex",
+    "1127702": "fx-op-regex-complex",
+    "1127703": "fx-op-percentage-split",
+    "1127704": "fx-op-modulo",
+    "1127705": "fx-op-in",
+    "1127706": "fx-op-is-set",
+    "1127707": "fx-op-is-not-set",
+    "1127708": "fx-op-semver-equal",
+    "1127709": "fx-op-semver-greater",
+    "1127710": "fx-op-semver-less",
+    "1127711": "fx-op-semver-inclusive",
+    "1127712": "fx-op-semver-partial",
+    "1127713": "fx-seg-feature-specific"
+  },
+  "snapshotTaken": "2026-05-18T14:03:10.560Z",
+  "tags": [
+    {
+      "id": 29679,
+      "label": "fx-tag-a"
+    },
+    {
+      "id": 29680,
+      "label": "fx-tag-b"
+    },
+    {
+      "id": 29681,
+      "label": "fx-tag-c"
+    },
+    {
+      "id": 29682,
+      "label": "fx-tag-permanent"
+    },
+    {
+      "id": 29683,
+      "label": "fx-tag-stale"
+    },
+    {
+      "id": 29684,
+      "label": "fx-tag-coloured"
+    },
+    {
+      "id": 29685,
+      "label": "fx-tag-desc"
+    },
+    {
+      "id": 29686,
+      "label": "fx-tag-no-features"
+    }
+  ]
+}

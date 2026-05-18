@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:39.639516Z",
+  "description": null,
+  "feature": null,
+  "id": 1127711,
+  "metadata": [],
+  "name": "fx-op-semver-inclusive",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593717,
+          "operator": "GREATER_THAN_INCLUSIVE",
+          "property": "version",
+          "value": "4.0.0:semver"
+        }
+      ],
+      "id": 4150870,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:39.646769Z",
+  "uuid": "4bc283d0-950c-4506-9d12-cb0adbc4a1bd",
+  "version_of": 1127711
+}

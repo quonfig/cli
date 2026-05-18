@@ -45,6 +45,23 @@ export type ConversionNoteCategory =
   | 'unexportable-segment-membership'
   /** An AI Config enumerated but not emitted (out of v1 scope, D9). */
   | 'ai-config-skipped'
+  /**
+   * Flagsmith D-F1: a non-boolean feature was `enabled=false`. Flagsmith would have
+   * served the SDK-side default (not visible to the migrator); Quonfig will now
+   * serve the stored `feature_state_value`. The "coerced sentinel" framing in
+   * `getCoercedSentinels()` is reused so the per-env counts surface in the report.
+   */
+  | 'enabled-false-non-boolean'
+  /** Flagsmith D-F5: same feature has different value types across envs. Coerced to string. */
+  | 'cross-env-value-type-coerced'
+  /** Flagsmith identity override emitted as a leading PROP_IS_ONE_OF rule on the identifier attribute. */
+  | 'identity-override-as-rule'
+  /**
+   * Flagsmith identity-trait extraction: a context attribute referenced by a segment rule
+   * (plan §5.5 / D-F6). Pure FYI — your SDK callers will need to send this attribute at
+   * eval time. The `key` is the trait name; `detail` lists the segments referencing it.
+   */
+  | 'identity-traits-referenced'
 
 export interface ConversionNote {
   category: ConversionNoteCategory

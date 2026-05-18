@@ -1,0 +1,124 @@
+{
+  "key": "fx-mv-per-env-divergence",
+  "type": "feature_flag",
+  "valueType": "string",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "weighted_values",
+          "value": {
+            "hashByPropertyName": "user.key",
+            "weightedValues": [
+              {
+                "value": {
+                  "type": "string",
+                  "value": "control"
+                },
+                "weight": 50000
+              },
+              {
+                "value": {
+                  "type": "string",
+                  "value": "treatment"
+                },
+                "weight": 50000
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "environments": [
+    {
+      "id": "development",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "control"
+                  },
+                  "weight": 50000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "treatment"
+                  },
+                  "weight": 50000
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "rules": [
+        {
+          "criteria": [
+            {
+              "operator": "ALWAYS_TRUE"
+            }
+          ],
+          "value": {
+            "type": "weighted_values",
+            "value": {
+              "hashByPropertyName": "user.key",
+              "weightedValues": [
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "control"
+                  },
+                  "weight": 100000
+                },
+                {
+                  "value": {
+                    "type": "string",
+                    "value": "treatment"
+                  },
+                  "weight": 0
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "value": {
+        "type": "string",
+        "value": "control"
+      },
+      "name": "control"
+    },
+    {
+      "value": {
+        "type": "string",
+        "value": "treatment"
+      },
+      "name": "treatment"
+    }
+  ]
+}

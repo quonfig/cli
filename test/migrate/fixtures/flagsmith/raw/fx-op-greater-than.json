@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-05-17T18:13:29.550744Z",
+  "description": null,
+  "feature": null,
+  "id": 1127695,
+  "metadata": [],
+  "name": "fx-op-greater-than",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [
+        {
+          "description": null,
+          "id": 83593701,
+          "operator": "GREATER_THAN",
+          "property": "age",
+          "value": "18"
+        }
+      ],
+      "id": 4150854,
+      "rules": [],
+      "type": "ALL"
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:29.561561Z",
+  "uuid": "3a4eba95-e697-42e8-9330-e38b9709a197",
+  "version_of": 1127695
+}

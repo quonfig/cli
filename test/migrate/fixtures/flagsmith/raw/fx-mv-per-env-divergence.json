@@ -1,0 +1,129 @@
+{
+  "feature": {
+    "code_references_counts": [],
+    "created_date": "2026-05-17T18:15:07.563726Z",
+    "default_enabled": true,
+    "description": null,
+    "environment_feature_state": null,
+    "group_owners": [],
+    "id": 207665,
+    "initial_value": "control",
+    "is_archived": false,
+    "is_num_identity_overrides_complete": true,
+    "is_server_key_only": false,
+    "last_modified_in_any_environment": "2026-05-17T19:00:31.717952+00:00",
+    "last_modified_in_current_environment": null,
+    "metadata": [],
+    "multivariate_options": [
+      {
+        "boolean_value": null,
+        "default_percentage_allocation": 50,
+        "id": 27442,
+        "integer_value": null,
+        "string_value": "control",
+        "type": "unicode",
+        "uuid": "21feaada-2128-47ea-995d-3f27c63d3b65"
+      },
+      {
+        "boolean_value": null,
+        "default_percentage_allocation": 50,
+        "id": 27443,
+        "integer_value": null,
+        "string_value": "treatment",
+        "type": "unicode",
+        "uuid": "791c50b2-758e-4852-a8e7-888831e4f862"
+      }
+    ],
+    "name": "fx-mv-per-env-divergence",
+    "num_identity_overrides": null,
+    "num_segment_overrides": 0,
+    "owners": [],
+    "project": 38856,
+    "segment_feature_state": null,
+    "tags": [],
+    "type": "MULTIVARIATE",
+    "uuid": "6a6047fa-1089-46ef-a360-b3aef67a8b46"
+  },
+  "feature_segments_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": [],
+    "iwz7qTc9nzRJg3cmPLAVXa": []
+  },
+  "featurestates_by_env": {
+    "Qr6QPcgqQmt3fBVxE6g6Jy": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T18:15:07.600340Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90306,
+        "environment_feature_version": "6a8264c2-bf85-479e-9ae8-829307be177c",
+        "feature": 207665,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "control",
+          "type": "unicode"
+        },
+        "id": 1414423,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [
+          {
+            "id": 349042,
+            "multivariate_feature_option": 27443,
+            "percentage_allocation": 50
+          },
+          {
+            "id": 349040,
+            "multivariate_feature_option": 27442,
+            "percentage_allocation": 50
+          }
+        ],
+        "updated_at": "2026-05-17T18:49:10.910514Z",
+        "uuid": "7927aecf-e307-40fd-9522-545ca7362d59",
+        "version": 1
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    },
+    "iwz7qTc9nzRJg3cmPLAVXa": {
+      "default": {
+        "change_request": null,
+        "created_at": "2026-05-17T19:00:31.747780Z",
+        "deleted_at": null,
+        "enabled": true,
+        "environment": 90307,
+        "environment_feature_version": "11257cfb-486f-490c-954d-139072f678d2",
+        "feature": 207665,
+        "feature_segment": null,
+        "feature_state_value": {
+          "boolean_value": null,
+          "integer_value": null,
+          "string_value": "control",
+          "type": "unicode"
+        },
+        "id": 1414769,
+        "identity": null,
+        "live_from": null,
+        "multivariate_feature_state_values": [
+          {
+            "id": 349076,
+            "multivariate_feature_option": 27442,
+            "percentage_allocation": 100
+          },
+          {
+            "id": 349075,
+            "multivariate_feature_option": 27443,
+            "percentage_allocation": 0
+          }
+        ],
+        "updated_at": "2026-05-17T19:00:31.817780Z",
+        "uuid": "e4c8b555-31a7-4139-b83f-3b563b2001cb",
+        "version": null
+      },
+      "identity_overrides": [],
+      "segment_overrides": []
+    }
+  }
+}
