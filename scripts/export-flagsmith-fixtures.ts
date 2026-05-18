@@ -48,6 +48,21 @@ const PROJECT_ID = process.env.FLAGSMITH_PROJECT_ID ?? '38856'
 /** Only `fx-*` keys are corpus fixtures — anything else in the account is noise. */
 const FIXTURE_PREFIX = 'fx-'
 
+/**
+ * Windows MAX_PATH (260 chars) bites in CI when the fixture name doubles as
+ * both `expected/<fixture>/` and the inner `feature-flags/<name>.json`. Cap
+ * the on-disk filename; the in-content `feature.name` keeps the full string.
+ * Trim to the last `-` so a name like `fx-edge-name-max-length-aaaa...` lands
+ * on the semantic boundary (`fx-edge-name-max-length`) instead of mid-payload.
+ */
+function fixtureFilename(name: string): string {
+  const MAX = 60
+  if (name.length <= MAX) return name
+  const head = name.slice(0, MAX)
+  const lastDash = head.lastIndexOf('-')
+  return lastDash > 0 ? head.slice(0, lastDash) : head
+}
+
 function resolveToken(): string {
   const fromEnv = process.env.FLAGSMITH_API_KEY ?? process.env.FLAGSMITH_API_TOKEN
   if (fromEnv && fromEnv.trim()) return fromEnv.trim()
@@ -112,12 +127,12 @@ async function main(): Promise<void> {
 
   let written = 0
   for (const featureBundle of features) {
-    writeFileSync(join(RAW_DIR, `${featureBundle.feature.name}.json`), stableJson(featureBundle))
+    writeFileSync(join(RAW_DIR, `${fixtureFilename(featureBundle.feature.name)}.json`), stableJson(featureBundle))
     written++
   }
 
   for (const segment of segments) {
-    writeFileSync(join(RAW_DIR, `${segment.name}.json`), stableJson(segment))
+    writeFileSync(join(RAW_DIR, `${fixtureFilename(segment.name)}.json`), stableJson(segment))
     written++
   }
 
