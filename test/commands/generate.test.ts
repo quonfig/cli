@@ -54,6 +54,48 @@ describe('generate', () => {
       // Error assertion done in catch block
     })
 
+  describe('auto-detects local quonfig.json in cwd', () => {
+    let tmpDir: string
+    let originalCwd: string
+    let originalApiKey: string | undefined
+    let originalDir: string | undefined
+
+    beforeEach(() => {
+      originalCwd = process.cwd()
+      originalApiKey = process.env.QUONFIG_API_KEY
+      originalDir = process.env.QUONFIG_DIR
+      delete process.env.QUONFIG_API_KEY
+      delete process.env.QUONFIG_DIR
+      // fs.realpathSync to drop /private prefix on macOS so path.resolve()
+      // in the command matches what fs.existsSync sees inside the walk-up.
+      tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-generate-cwd-')))
+      // Mirror the fixture workspace (has quonfig.json + a config) into tmp
+      // so we can chdir there and prove auto-detect kicks in.
+      fs.cpSync(FIXTURE_DIR, tmpDir, {recursive: true})
+      process.chdir(tmpDir)
+    })
+
+    afterEach(() => {
+      process.chdir(originalCwd)
+      fs.rmSync(tmpDir, {force: true, recursive: true})
+      if (originalApiKey === undefined) delete process.env.QUONFIG_API_KEY
+      else process.env.QUONFIG_API_KEY = originalApiKey
+      if (originalDir === undefined) delete process.env.QUONFIG_DIR
+      else process.env.QUONFIG_DIR = originalDir
+    })
+
+    test
+      .stdout()
+      .command(['generate'])
+      .it('uses cwd when quonfig.json is present and no --dir/--workspace given', (ctx) => {
+        // Specific mechanism: the auto-detect branch logs the resolved dir.
+        // Without auto-detect, generate would call fetchWorkspaceSnapshot
+        // (or error on missing auth) instead of generating against cwd.
+        expect(ctx.stdout).to.include('auto-detected quonfig.json')
+        expect(ctx.stdout).to.include('Generating react-ts code for configs')
+      })
+  })
+
   describe('without --dir flag (qfg-0mj)', () => {
     let originalApiKey: string | undefined
     let originalWorkspace: string | undefined

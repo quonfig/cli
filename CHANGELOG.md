@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.51 - 2026-05-18
+
+- feat(local-codegen): `qfg generate` now auto-detects a local Quonfig workspace when run inside one. Previously, with no `--dir` or `QUONFIG_DIR` set, the command minted a Gitea token and cloned the workspace from the server — which silently pulled fully-local / no-account users into `qfg login`. Now: if neither `--dir`/`QUONFIG_DIR` nor `--workspace` is set, `generate` walks up from cwd (via the same `resolveWorkspaceDir` helper `qfg push` / `qfg pull` use) looking for `quonfig.json`. If found, codegen reads the files directly with no network. The server-snapshot path is preserved as a fallback for codegen-only CI callers without a checkout; passing `--workspace` explicitly still skips the cwd walk. Surfaced while writing the open-source / fully-local docs (`docs.quonfig.com/docs/how-tos/open-source-local`).
+- docs(init): `qfg init` templates no longer recommend hosted-only commands. The generated `README.md`, `CLAUDE.md`, and `AGENTS.md` now lead with the local workflow (edit JSON, `qfg verify`, `qfg generate`, commit) and explicitly tell AI agents not to call `qfg create`, `qfg set-default`, `qfg push`, `qfg pull`, `qfg get`, or `qfg list` against a local workspace — those commands require a Quonfig account. The previous README example (`qfg create my.new.flag --type=boolean-flag` + `qfg list`) was actively misleading for the no-account use case.
+
 ## 0.0.50 - 2026-05-16
 
 - fix(qfg-0ugv): the `QFG_FRICTION_LOG=true` default now writes to `~/.qfg/friction.log` instead of `<cwd>/.qfg-friction.log`. The previous default created an untracked file inside whatever workspace clone you ran `qfg` from, which on 2026-05-15 caused a stacked `.gitignore` commit to block a config push (`.gitignore` isn't on the Gitea push allow-list, and shouldn't be — it's a customer-facing storage-format rule). Custom file paths via `QFG_FRICTION_LOG=<path>` still work (absolute paths used as-is, relative paths resolve against cwd). Parent dir is auto-created.

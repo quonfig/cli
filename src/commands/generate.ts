@@ -14,6 +14,7 @@ import {LocalConfigReader} from '../codegen/local-config-reader.js'
 import {type ConfigFile, SupportedLanguage} from '../codegen/types.js'
 import {BaseCommand} from '../index.js'
 import {createFileManager} from '../util/file-manager.js'
+import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 
 // base types
 const nodeOrReactLanguageSpecificSchema = z.object({
@@ -127,7 +128,7 @@ Example quonfig.config.json:
   static flags = {
     dir: Flags.string({
       description:
-        'Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var). When omitted, fetches the workspace from the server using your active credentials.',
+        'Path to local QUONFIG_DIR (defaults to QUONFIG_DIR env var). When omitted, auto-detects a quonfig.json in the current directory; if none, fetches the workspace from the server.',
       env: 'QUONFIG_DIR',
     }),
     'output-directory': Flags.string({
@@ -155,12 +156,27 @@ Example quonfig.config.json:
     let snapshot: WorkspaceSnapshot | undefined
 
     try {
-      // When --dir/QUONFIG_DIR is set, read the local checkout (so users
-      // who edit flag JSON in place keep that workflow). Otherwise clone
-      // the workspace into a tmp dir for codegen-only callers.
+      // Resolution order (qfg-local-codegen):
+      //   1. --dir / QUONFIG_DIR (explicit local checkout)
+      //   2. Walk up from cwd looking for quonfig.json (no-account/local-only
+      //      path — same resolver `qfg push` / `qfg pull` use)
+      //   3. Server snapshot clone (codegen-only callers without a checkout)
+      // --workspace is only meaningful for the server-snapshot path; if the
+      // user passed it explicitly, skip the cwd walk and go straight to fetch.
       let dir = flags.dir
+      if (!dir && !flags.workspace) {
+        const resolved = resolveWorkspaceDir({
+          cwd: process.cwd(),
+          envDir: undefined, // QUONFIG_DIR is already merged into flags.dir by oclif
+          flagDir: undefined,
+        })
+        if (resolved.kind === 'ok') {
+          dir = resolved.dir
+          console.log(`Using local workspace at ${dir} (auto-detected quonfig.json).`)
+        }
+      }
       if (!dir) {
-        this.verboseLog('No --dir/QUONFIG_DIR set; fetching workspace snapshot from server...')
+        this.verboseLog('No local workspace found; fetching workspace snapshot from server...')
         snapshot = await fetchWorkspaceSnapshot(this, {workspace: flags.workspace})
         dir = snapshot.dir
       }

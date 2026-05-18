@@ -28,22 +28,50 @@ This is a [Quonfig](https://quonfig.com) workspace repository. All configuration
 | \`schemas/\` | JSON Schemas that configs can reference for validation |
 | \`schemas-protected/\` | Admin-only schemas |
 
-## Quick start
+## Quick start (works fully offline — no account required)
+
+This workspace is just a git repo full of JSON files. You can edit those files
+directly, validate them locally, and point any Quonfig SDK at this directory.
+No login, no API call, no internet connection needed.
 
 \`\`\`bash
-# Validate the workspace
+# 1. Edit a flag — see the sample files in feature-flags/ for the shape.
+$EDITOR feature-flags/my.new.flag.json
+
+# 2. Validate the workspace.
 qfg verify
 
-# Create a new feature flag
-qfg create my.new.flag --type=boolean-flag
+# 3. (Optional) Generate TypeScript types for your app.
+qfg generate
 
-# List all configs
-qfg list
+# 4. Commit. The pre-commit hook re-runs qfg verify automatically.
+git add . && git commit -m "Add my.new.flag"
 \`\`\`
+
+## Two ways to use this repo
+
+**Open-source / fully local.** Edit JSON, run \`qfg verify\`, point your SDK
+at this directory (\`datadir: "./quonfig"\`). Push the repo wherever you want
+(GitHub, self-hosted Gitea, your own server). This is the no-account path.
+
+**Hosted Quonfig.** If you also have a Quonfig account, server-side commands
+like \`qfg push\`, \`qfg create\`, \`qfg list\`, \`qfg set-default\`, and
+\`qfg get\` give you a UI, real-time SSE delivery to SDKs, evaluation
+telemetry, and audit history. These all require \`qfg login\`.
+
+## Local-only commands (no login required)
+
+| Command | What it does |
+|---------|--------------|
+| \`qfg init\` | Re-initialize this workspace (idempotent, refreshes templates) |
+| \`qfg verify\` | Validate every JSON file against the schema and cross-file rules |
+| \`qfg generate\` | Generate typed SDK client code from the configs in this dir |
+| \`qfg config-schema\` | Print the canonical config schema (great for AI agents) |
+| \`qfg migrate\` | Import flags from LaunchDarkly, Flagsmith, etc. |
 
 ## Schema
 
-Config files reference the hosted JSON Schema at <https://api.quonfig.com/schemas/v1/stored-config.json> via their \`$schema\` field. Editors that support JSON Schema will provide autocomplete and validation automatically.
+Config files reference the hosted JSON Schema at <https://api.quonfig.com/schemas/v1/stored-config.json> via their \`$schema\` field. Editors that support JSON Schema will provide autocomplete and validation automatically. The schema URL is fetched once by your editor's LSP — the CLI and SDK don't need it.
 
 ## Validation
 
@@ -60,7 +88,24 @@ export function claudeMdTemplate(): string {
 
 This is a Quonfig workspace repository. Configuration is stored as JSON files in git.
 
-**After every change to this repo, run \`qfg verify\` to validate.**
+## How to work in this repo
+
+**You edit JSON files directly.** Do not run \`qfg create\`, \`qfg set-default\`,
+\`qfg set-rollout\`, \`qfg override\`, \`qfg push\`, \`qfg pull\`, \`qfg get\`,
+or \`qfg list\` — those commands talk to a hosted Quonfig server. In a local
+workspace, the source of truth is this git repo, so edit JSON in place.
+
+The complete local-only toolkit:
+
+| Command | When to use |
+|---------|-------------|
+| \`qfg verify\` | After every change. Validates schema + cross-file rules. |
+| \`qfg config-schema\` | Print the canonical schema. Use this to look up field names, operator enums, value-type shapes before you write a new config. |
+| \`qfg generate\` | Regenerate typed SDK client code (consumers ask for this; you usually won't need to run it unless asked). |
+| Read existing files | Look at sibling JSON files in the same directory for the canonical shape before writing a new one. |
+
+**After every change to this repo, run \`qfg verify\` to validate.** If it
+fails, fix the JSON until it passes — do not ship a broken workspace.
 
 ## JSON Schema
 
@@ -151,10 +196,12 @@ This is a Quonfig workspace repository. See \`CLAUDE.md\` for the complete schem
 
 ## Key rules
 
-1. **Always validate**: run \`qfg verify\` after any change to this repo.
-2. Filename must match the \`key\` field (e.g. \`my.flag.json\` has \`"key": "my.flag"\`).
-3. Files must be in the correct directory for their \`type\`.
-4. See \`CLAUDE.md\` for the full list of value types, operators, and constraints.
+1. **Edit JSON files directly.** Do NOT use \`qfg create\`, \`qfg set-default\`, \`qfg push\`, \`qfg get\`, or \`qfg list\` — those require a hosted Quonfig account. The source of truth here is the git repo.
+2. **Always validate**: run \`qfg verify\` after any change to this repo.
+3. **Look before you leap**: read sibling JSON files for the canonical shape, and run \`qfg config-schema\` to confirm field names, operator enums, and value types before writing a new config.
+4. Filename must match the \`key\` field (e.g. \`my.flag.json\` has \`"key": "my.flag"\`).
+5. Files must be in the correct directory for their \`type\`.
+6. See \`CLAUDE.md\` for the full list of value types, operators, and constraints.
 `
 }
 
