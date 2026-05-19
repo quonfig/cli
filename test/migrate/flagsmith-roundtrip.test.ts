@@ -329,14 +329,16 @@ describe('migrate/sources/flagsmith — converter sdk-node round-trip', () => {
       expect(q.getBool('fx-op-in', ctx({identifier: 'u3', traits: {tenant_id: 'tenant_unknown'}}))).to.equal(false)
     })
 
-    // IS_PRESENT / IS_NOT_PRESENT shipped in @quonfig/node 0.0.26; cli is now on
-    // 0.0.28. Earlier this test only asserted the "missing trait" path because
-    // the SDK didn't implement IS_PRESENT yet. Expanding to exercise the true
-    // path is a follow-up bead — depends on knowing the exact identifier the
-    // live fx-op-is-set segment-override pins to.
-    it('fx-op-is-set — missing trait falls through to default', async () => {
+    // The fx-op-is-set segment has a single condition: IS_SET on `beta_opt_in`.
+    // IS_PRESENT / IS_NOT_PRESENT shipped in @quonfig/node 0.0.26; cli is on
+    // 0.0.28. Exercise both branches so a regression in IS_PRESENT mapping
+    // surfaces here, not only via the structural golden.
+    it('fx-op-is-set — IS_SET on beta_opt_in flips the segment match', async () => {
       const q = await makeClient(datadir, 'development')
+      // Missing trait → IS_PRESENT false → segment doesn't match.
       expect(q.getBool('fx-op-is-set', ctx({identifier: 'u2'}))).to.equal(false)
+      // Trait present (any value) → IS_PRESENT true → segment matches.
+      expect(q.getBool('fx-op-is-set', ctx({identifier: 'u1', traits: {beta_opt_in: 'yes'}}))).to.equal(true)
     })
 
     it('fx-op-semver-greater — :semver-stripped value compared as semver (version > 4.2.52)', async () => {
