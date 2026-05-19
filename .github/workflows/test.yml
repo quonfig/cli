@@ -83,14 +83,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      # Clone api-delivery as a sibling (../api-delivery) — same pattern the
-      # SDK CIs use to grab integration-test-data (see memory:
-      # project_sdk_ci_pattern). api-delivery has been public since 2026-04-19.
+      # Clone api-delivery as a sibling (../api-delivery). Note: integration-test-data
+      # is public, but api-delivery is PRIVATE — the default GITHUB_TOKEN can't read
+      # it, so we use the QUONFIG_REPO_TOKEN PAT (same convention as
+      # sdk-node/.github/workflows/chaos.yaml).
       - name: Clone api-delivery (sibling checkout)
         uses: actions/checkout@v4
         with:
           repository: quonfig/api-delivery
           path: api-delivery
+          token: ${{ secrets.QUONFIG_REPO_TOKEN }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: api-delivery/go.mod
