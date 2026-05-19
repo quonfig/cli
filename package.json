@@ -21,7 +21,7 @@
     "@oclif/core": "^3.18.2",
     "@oclif/plugin-help": "^6",
     "@oclif/plugin-plugins": "^4",
-    "@quonfig/node": "^0.0.28",
+    "@quonfig/node": "^0.0.30",
     "acorn": "^8.10.0",
     "acorn-walk": "^8.3.5",
     "chalk": "^5.4.1",
