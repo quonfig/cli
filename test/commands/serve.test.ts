@@ -596,6 +596,78 @@ describe('qfg serve', () => {
       }
     })
 
+    // qfg-38sf.5 — multi-origin allow-list. When --cors-origin is given more
+    // than once, treat the list as an allow-list. Echo the matching Origin
+    // header back (with Vary: Origin); omit Access-Control-Allow-Origin
+    // entirely on a non-matching Origin. The CORS spec does NOT allow a
+    // comma-joined value, so the prior `join(', ')` silently broke browsers.
+    describe('CORS multi-origin allow-list (qfg-38sf.5)', () => {
+      it('echoes the matching Origin when --cors-origin is a list and the request Origin matches', async () => {
+        handle = await startServer({
+          datadir: dir,
+          environment: 'development',
+          port: 0,
+          host: '127.0.0.1',
+          corsOrigins: ['https://a.example', 'https://b.example'],
+          watch: false,
+          allowNonLoopback: false,
+          verbose: false,
+          logger: noopLogger(),
+        })
+        const ctx = base64url(JSON.stringify({}))
+
+        const resA = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`, {
+          Origin: 'https://a.example',
+        })
+        expect(resA.headers['access-control-allow-origin']).to.equal('https://a.example')
+        expect(resA.headers.vary).to.match(/origin/i)
+
+        const resB = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`, {
+          Origin: 'https://b.example',
+        })
+        expect(resB.headers['access-control-allow-origin']).to.equal('https://b.example')
+        expect(resB.headers.vary).to.match(/origin/i)
+      })
+
+      it('omits Access-Control-Allow-Origin when the request Origin does not match the allow-list', async () => {
+        handle = await startServer({
+          datadir: dir,
+          environment: 'development',
+          port: 0,
+          host: '127.0.0.1',
+          corsOrigins: ['https://a.example', 'https://b.example'],
+          watch: false,
+          allowNonLoopback: false,
+          verbose: false,
+          logger: noopLogger(),
+        })
+        const ctx = base64url(JSON.stringify({}))
+        const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`, {
+          Origin: 'https://evil.example',
+        })
+        // Never send the comma-joined value (the bug being fixed). Never send
+        // the unmatched Origin. Header should be absent entirely.
+        expect(res.headers['access-control-allow-origin']).to.equal(undefined)
+      })
+
+      it('omits Access-Control-Allow-Origin when no Origin header is sent against a multi-origin allow-list', async () => {
+        handle = await startServer({
+          datadir: dir,
+          environment: 'development',
+          port: 0,
+          host: '127.0.0.1',
+          corsOrigins: ['https://a.example', 'https://b.example'],
+          watch: false,
+          allowNonLoopback: false,
+          verbose: false,
+          logger: noopLogger(),
+        })
+        const ctx = base64url(JSON.stringify({}))
+        const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`)
+        expect(res.headers['access-control-allow-origin']).to.equal(undefined)
+      })
+    })
+
     it('refuses --host 0.0.0.0 without --allow-non-loopback', async () => {
       try {
         await startServer({

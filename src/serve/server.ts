@@ -160,7 +160,20 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
     refreshSnapshot(client)
   }
 
-  const corsOrigin = opts.corsOrigins.includes('*') ? '*' : opts.corsOrigins.join(', ')
+  // CORS resolution per request. Three shapes:
+  //  - `*` anywhere in the list → wildcard (no Vary)
+  //  - exactly one origin → fixed value (no Vary; caller pinned it)
+  //  - 2+ origins → allow-list: echo the request Origin if it matches and emit
+  //    `Vary: Origin`; omit the header entirely on a miss (qfg-38sf.5). The
+  //    CORS spec does not permit a comma-joined Access-Control-Allow-Origin,
+  //    so the previous `.join(', ')` was silently breaking browser clients.
+  const corsAllowList = new Set(opts.corsOrigins)
+  const corsMode: 'wildcard' | 'fixed' | 'allowlist' = corsAllowList.has('*')
+    ? 'wildcard'
+    : opts.corsOrigins.length <= 1
+      ? 'fixed'
+      : 'allowlist'
+  const fixedCorsOrigin = corsMode === 'fixed' ? (opts.corsOrigins[0] ?? '*') : null
   // qfg-38sf.1 security audit F3: the sendToClientSdk filter is UNCONDITIONAL.
   // Every qfg serve consumer is by definition a frontend client (browser /
   // react-native — server SDKs use datadir mode directly). There is no flag
@@ -175,7 +188,19 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
     const startedAt = Date.now()
     // CORS — emit on every response, including 401 and 404, so browser
     // clients surface the real status code instead of an opaque CORS error.
-    res.setHeader('Access-Control-Allow-Origin', corsOrigin)
+    if (corsMode === 'wildcard') {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+    } else if (corsMode === 'fixed' && fixedCorsOrigin !== null) {
+      res.setHeader('Access-Control-Allow-Origin', fixedCorsOrigin)
+    } else if (corsMode === 'allowlist') {
+      const reqOrigin = req.headers.origin
+      // Vary: Origin regardless of match — caches must not reuse a
+      // matched-Origin response for a request from a different Origin.
+      res.setHeader('Vary', 'Origin')
+      if (typeof reqOrigin === 'string' && corsAllowList.has(reqOrigin)) {
+        res.setHeader('Access-Control-Allow-Origin', reqOrigin)
+      }
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
     res.setHeader('Access-Control-Expose-Headers', 'ETag')
