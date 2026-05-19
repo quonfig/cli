@@ -119,6 +119,27 @@ function mvOptionValue(opt: FlagsmithMultivariateOption): boolean | null | numbe
 }
 
 /**
+ * True when a STANDARD feature has no value payload in any env — every
+ * env-default's `feature_state_value` envelope is shaped `{type: 'unicode',
+ * boolean_value: null, integer_value: null, string_value: null}` (the default
+ * Flagsmith emits for bool-only flags). In that shape the per-env `enabled`
+ * bit IS the value; treating the flag as `string` and coercing the empty
+ * envelope to `''` would silently lose the bool. The detection is bundle-pure
+ * so both `decideValueType` and the value-emission paths can re-check it.
+ */
+function isValuelessStandardBool(bundle: FlagsmithFeatureWithStates): boolean {
+  const {feature, featurestates_by_env} = bundle
+  if (feature.type !== 'STANDARD') return false
+  const envs = Object.values(featurestates_by_env)
+  if (envs.length === 0) return false
+  return envs.every((env) => {
+    const fsv = env.default?.feature_state_value
+    if (!fsv || typeof fsv !== 'object') return false
+    return fsv.boolean_value === null && fsv.integer_value === null && fsv.string_value === null
+  })
+}
+
+/**
  * Decide the feature's Quonfig valueType. Multivariate features take their
  * type from the variation values (all variants share a type in valid Flagsmith
  * data); STANDARD features look at the env-default `feature_state_value` shape
@@ -128,6 +149,9 @@ function mvOptionValue(opt: FlagsmithMultivariateOption): boolean | null | numbe
 function decideValueType(bundle: FlagsmithFeatureWithStates, report: ConversionReport): QuonfigValueType {
   const {feature, featurestates_by_env} = bundle
   const mvOptions = feature.multivariate_options ?? []
+
+  // Value-less STANDARD feature: enabled IS the bool value (qfg-ybt9).
+  if (isValuelessStandardBool(bundle)) return 'bool'
 
   if (feature.type === 'MULTIVARIATE' && mvOptions.length > 0) {
     const variantValues = mvOptions.map((o) => mvOptionValue(o))
@@ -440,6 +464,11 @@ function envDefaultRuleValue(
   const {feature} = bundle
   const mvOptions = feature.multivariate_options ?? []
 
+  // Value-less STANDARD bool (qfg-ybt9): enabled IS the value; envelope is empty.
+  if (isValuelessStandardBool(bundle)) {
+    return {type: 'bool', value: fsState?.enabled ?? false}
+  }
+
   // enabled=false (D-F1)
   if (fsState && !fsState.enabled) {
     if (ctx.valueType === 'bool') {
@@ -483,6 +512,11 @@ function identityOverrideRuleValue(
   const mvOptions = feature.multivariate_options ?? []
   const mvWeights = override.feature_state.multivariate_feature_state_values ?? []
 
+  // Value-less STANDARD bool (qfg-ybt9): override's enabled IS the value.
+  if (isValuelessStandardBool(bundle)) {
+    return {type: 'bool', value: override.feature_state.enabled}
+  }
+
   // enabled=false on the override: prefer the served value of the override's
   // own feature_state_value, with the same D-F1 reporting if non-boolean.
   if (!override.feature_state.enabled) {
@@ -523,6 +557,11 @@ function servedValueSilent(
 ): QuonfigRuleValue {
   const {feature} = bundle
   const mvOptions = feature.multivariate_options ?? []
+
+  // Value-less STANDARD bool (qfg-ybt9): enabled IS the value.
+  if (isValuelessStandardBool(bundle)) {
+    return {type: 'bool', value: fsState?.enabled ?? false}
+  }
 
   if (fsState && !fsState.enabled && ctx.valueType === 'bool') {
     return {type: 'bool', value: false}

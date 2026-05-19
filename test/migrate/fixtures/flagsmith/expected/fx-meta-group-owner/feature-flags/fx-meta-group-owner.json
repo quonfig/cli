@@ -1,7 +1,7 @@
 {
   "key": "fx-meta-group-owner",
   "type": "feature_flag",
-  "valueType": "string",
+  "valueType": "bool",
   "default": {
     "rules": [
       {
@@ -11,8 +11,8 @@
           }
         ],
         "value": {
-          "type": "string",
-          "value": ""
+          "type": "bool",
+          "value": true
         }
       }
     ]
@@ -28,8 +28,8 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": true
           }
         }
       ]
@@ -44,12 +44,27 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": true
           }
         }
       ]
     }
   ],
-  "variants": []
+  "variants": [
+    {
+      "name": "true",
+      "value": {
+        "type": "bool",
+        "value": true
+      }
+    },
+    {
+      "name": "false",
+      "value": {
+        "type": "bool",
+        "value": false
+      }
+    }
+  ]
 }

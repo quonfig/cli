@@ -1,7 +1,7 @@
 {
   "key": "fx-meta-description-unicode",
   "type": "feature_flag",
-  "valueType": "string",
+  "valueType": "bool",
   "default": {
     "rules": [
       {
@@ -11,8 +11,8 @@
           }
         ],
         "value": {
-          "type": "string",
-          "value": ""
+          "type": "bool",
+          "value": true
         }
       }
     ]
@@ -28,8 +28,8 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": true
           }
         }
       ]
@@ -44,13 +44,28 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": true
           }
         }
       ]
     }
   ],
-  "variants": [],
+  "variants": [
+    {
+      "name": "true",
+      "value": {
+        "type": "bool",
+        "value": true
+      }
+    },
+    {
+      "name": "false",
+      "value": {
+        "type": "bool",
+        "value": false
+      }
+    }
+  ],
   "description": "café — em dash, 東京, 🚀"
 }

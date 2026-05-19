@@ -1,7 +1,7 @@
 {
   "key": "fx-segov-flips-enabled",
   "type": "feature_flag",
-  "valueType": "string",
+  "valueType": "bool",
   "default": {
     "rules": [
       {
@@ -11,8 +11,8 @@
           }
         ],
         "value": {
-          "type": "string",
-          "value": ""
+          "type": "bool",
+          "value": false
         }
       }
     ]
@@ -32,8 +32,8 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": false
           }
         },
         {
@@ -43,8 +43,8 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": false
           }
         }
       ]
@@ -59,12 +59,27 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": false
           }
         }
       ]
     }
   ],
-  "variants": []
+  "variants": [
+    {
+      "name": "true",
+      "value": {
+        "type": "bool",
+        "value": true
+      }
+    },
+    {
+      "name": "false",
+      "value": {
+        "type": "bool",
+        "value": false
+      }
+    }
+  ]
 }

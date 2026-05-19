@@ -1,7 +1,7 @@
 {
   "key": "fx-idov-on-boolean",
   "type": "feature_flag",
-  "valueType": "string",
+  "valueType": "bool",
   "default": {
     "rules": [
       {
@@ -11,8 +11,8 @@
           }
         ],
         "value": {
-          "type": "string",
-          "value": ""
+          "type": "bool",
+          "value": false
         }
       }
     ]
@@ -33,8 +33,8 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": "null"
+            "type": "bool",
+            "value": true
           }
         },
         {
@@ -44,8 +44,8 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": false
           }
         }
       ]
@@ -60,12 +60,27 @@
             }
           ],
           "value": {
-            "type": "string",
-            "value": ""
+            "type": "bool",
+            "value": false
           }
         }
       ]
     }
   ],
-  "variants": []
+  "variants": [
+    {
+      "name": "true",
+      "value": {
+        "type": "bool",
+        "value": true
+      }
+    },
+    {
+      "name": "false",
+      "value": {
+        "type": "bool",
+        "value": false
+      }
+    }
+  ]
 }

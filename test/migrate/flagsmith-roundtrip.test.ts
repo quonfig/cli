@@ -165,20 +165,19 @@ describe('migrate/sources/flagsmith — converter sdk-node round-trip', () => {
     for (const dir of cleanupDirs) rmSync(dir, {force: true, recursive: true})
   })
 
-  describe('fx-value-boolean-on — value-less Flagsmith feature → empty string in both envs', () => {
-    // The live Flagsmith fixture has `default_enabled=true` with no value payload
-    // (all `*_value` fields null). The converter has no signal to infer bool type
-    // and falls back to valueType: string with value "". The bool semantics of
-    // `enabled=true` are lost — a converter follow-up could detect this shape
-    // and emit a bool flag instead.
-    it('development serves empty string', async () => {
+  describe('fx-value-boolean-on — value-less STANDARD feature with enabled=true → bool true (qfg-ybt9)', () => {
+    // The live Flagsmith fixture has `default_enabled=true` with no value
+    // payload (all `*_value` fields null). The converter's
+    // `isValuelessStandardBool` detection treats the per-env `enabled` bit as
+    // the bool value, so this serves true in every env that has enabled=true.
+    it('development serves true', async () => {
       const q = await makeClient(datadir, 'development')
-      expect(q.getString('fx-value-boolean-on', ctx({identifier: 'u1'}))).to.equal('')
+      expect(q.getBool('fx-value-boolean-on', ctx({identifier: 'u1'}))).to.equal(true)
     })
 
-    it('production serves empty string', async () => {
+    it('production serves true', async () => {
       const q = await makeClient(datadir, 'production')
-      expect(q.getString('fx-value-boolean-on', ctx({identifier: 'u1'}))).to.equal('')
+      expect(q.getBool('fx-value-boolean-on', ctx({identifier: 'u1'}))).to.equal(true)
     })
   })
 
