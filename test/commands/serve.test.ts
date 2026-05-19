@@ -96,6 +96,12 @@ function writeFixtureDatadir(dir: string, value: string = 'hello'): void {
   )
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 function base64url(s: string): string {
   return Buffer.from(s, 'utf8').toString('base64url')
 }
@@ -501,7 +507,13 @@ describe('qfg serve', () => {
       expect(res.status).to.equal(404)
     })
 
-    it('reflects datadir file edits on the next request when --watch is on', async () => {
+    it('reflects datadir file edits on the next request when --watch is on', async function () {
+      // Linux inotify-recursive registration is lazy — fs.watch on Node 20/22
+      // sometimes drops events that fire within the first few hundred ms of
+      // the watcher being installed. The mocha timeout default of 2s isn't
+      // enough headroom on GH Actions runners; give the test a real budget.
+      this.timeout(15_000)
+
       handle = await startServer({
         datadir: dir,
         environment: 'development',
@@ -509,9 +521,14 @@ describe('qfg serve', () => {
         host: '127.0.0.1',
         corsOrigins: ['*'],
         watch: true,
-        // Tighten the SDK debounce so the test doesn't sleep half a second
-        // waiting for the default 200ms window to expire.
-        watchDebounceMs: 25,
+        // 75ms is short enough to keep the test snappy on a fast box, but
+        // long enough to coalesce the ~3 file writes done by
+        // writeFixtureDatadir without firing on a partial-write moment.
+        // Earlier the test used 25ms, which on Linux GH runners was tight
+        // enough that the watcher fired between writes and read mid-rewrite
+        // garbage — the SDK then swallowed the JSON parse error and no
+        // further event followed.
+        watchDebounceMs: 75,
         allowNonLoopback: false,
         verbose: false,
         logger: noopLogger(),
@@ -522,13 +539,25 @@ describe('qfg serve', () => {
       const beforeValue = JSON.parse(before.body).evaluations['sample.greeting'].value.value
       expect(beforeValue).to.equal('hello')
 
-      // Mutate the datadir, then poll until the watcher catches up.
+      // Give Linux inotify a moment to finish registering the recursive
+      // watch before we start mutating. Without this, the first write often
+      // lands before any watch descriptors are in place on Linux.
+      await sleep(150)
+
       writeFixtureDatadir(dir, 'goodbye')
+
+      // Touch the leaf file again *after* the debounce window to guarantee
+      // at least one IN_MODIFY event lands in the watcher. Some Linux
+      // configurations dedupe IN_MODIFY events that fire while a previous
+      // one is still in the queue; the explicit touch is cheap insurance.
+      await sleep(120)
+      const greeting = path.join(dir, 'configs', 'sample.greeting.json')
+      const now = new Date()
+      fs.utimesSync(greeting, now, now)
+
       let afterValue = beforeValue
-      for (let i = 0; i < 50 && afterValue !== 'goodbye'; i++) {
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 50)
-        })
+      for (let i = 0; i < 200 && afterValue !== 'goodbye'; i++) {
+        await sleep(50)
         const after = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`)
         afterValue = JSON.parse(after.body).evaluations['sample.greeting'].value.value
       }

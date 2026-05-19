@@ -9,6 +9,7 @@
  */
 
 import * as crypto from 'node:crypto'
+import * as fs from 'node:fs'
 import * as http from 'node:http'
 
 import {ConfigStore, Evaluator, Quonfig} from '@quonfig/node'
@@ -72,6 +73,22 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
     )
   }
 
+  // Canonicalize the datadir to its long-name absolute path before handing
+  // it to the SDK. On Windows, os.tmpdir() and short-name paths like
+  // `C:\Users\RUNNER~1\...` trip a libuv assertion in fs-event.c when
+  // fs.watch compares the registered dir against incoming event filenames
+  // (the input is the short name, the events come back as long names).
+  // realpathSync.native delegates to uv_fs_realpath, which returns the same
+  // canonical form libuv uses internally — so the assertion never fires.
+  // No-op on POSIX where short names don't exist.
+  const datadir = (() => {
+    try {
+      return fs.realpathSync.native(opts.datadir)
+    } catch {
+      return opts.datadir
+    }
+  })()
+
   // The Quonfig client owns datadir loading + file watching via the
   // `dataDirAutoReload` option that landed in sdk-node 0.0.30 (qfg-zx3y).
   // We hold a parallel ConfigStore + Evaluator that mirror the client's
@@ -117,7 +134,7 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
   // the new envelope. We re-sync our snapshot from the client at that point.
   const client = new Quonfig({
     sdkKey: 'qfg-serve-local',
-    datadir: opts.datadir,
+    datadir,
     environment: opts.environment,
     dataDirAutoReload: opts.watch,
     dataDirAutoReloadDebounceMs: opts.watchDebounceMs,
@@ -128,7 +145,7 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
     enableSSE: false,
     fallbackPollEnabled: false,
     onConfigUpdate() {
-      version = `datadir:${opts.datadir}#${Date.now()}`
+      version = `datadir:${datadir}#${Date.now()}`
       refreshSnapshot(client)
       if (opts.verbose) opts.logger.log(`qfg-serve: reloaded datadir (version=${version})`)
     },
@@ -139,7 +156,7 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
   // Initial snapshot — the SDK fires onConfigUpdate during init() so this is
   // mostly insurance against an init path that doesn't, but it's cheap.
   if (store.keys().length === 0) {
-    version = `datadir:${opts.datadir}#${Date.now()}`
+    version = `datadir:${datadir}#${Date.now()}`
     refreshSnapshot(client)
   }
 
