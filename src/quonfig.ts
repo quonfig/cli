@@ -34,7 +34,6 @@ export const initQuonfig = async (_ctx: CommandLike, flagsOrDatafile: FlagsOrDat
   quonfig = new Quonfig({
     sdkKey,
     collectEvaluationSummaries: false,
-    collectLoggerCounts: false,
     contextUploadMode: 'none',
     datafile,
     enableSSE: false,

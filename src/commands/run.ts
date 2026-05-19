@@ -297,7 +297,6 @@ The flag separator '--' is REQUIRED between qfg flags and the child command.`
     const quonfig = new Quonfig({
       sdkKey,
       collectEvaluationSummaries: false,
-      collectLoggerCounts: false,
       contextUploadMode: 'none',
       enableSSE: false,
       apiUrls: [getDeliveryUrl()],
