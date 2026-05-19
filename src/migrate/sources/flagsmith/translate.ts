@@ -656,6 +656,19 @@ export function translateFeature(
 
   const ctx: FeatureContext = {feature, report, segmentNameById, tagLabelById, valueType}
 
+  // Plan §5.4: every MULTIVARIATE feature triggers a re-bucketing note —
+  // Flagsmith and Quonfig hash identities with different salts, so individual
+  // identity → variation assignments change post-migration regardless of any
+  // per-env override structure. The overall percentage allocation is preserved.
+  if (feature.type === 'MULTIVARIATE' && (feature.multivariate_options?.length ?? 0) > 0) {
+    report.add(
+      'rebucketed-rollout',
+      feature.name,
+      'multivariate feature; Flagsmith and Quonfig hash identities into buckets with different salts, so ' +
+        'individual identity → variation assignments will change after migration (the overall percentage allocation is preserved)',
+    )
+  }
+
   // Per-env rule list synthesis (plan §5.1, D-F2 ordering): identity overrides
   // first, then segment overrides (already sorted ASC by priority by the
   // fetcher), then the trailing ALWAYS_TRUE serving the env default.

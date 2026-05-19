@@ -70,14 +70,6 @@ interface FlagsmithState {
   apiKey: null | string
   /** Environments in API order, captured during validateAuth / listEnvironments. */
   environments: FlagsmithEnvironment[]
-  /**
-   * Names of every MULTIVARIATE feature seen this run. Recorded during
-   * fetchChanges so the report renderer can emit a "users will be re-bucketed"
-   * note per MV feature (plan §5.4) without translate.ts needing to know about
-   * it. Bucketing salts differ between Flagsmith and Quonfig — every MV
-   * feature's identity assignments will change post-migration.
-   */
-  multivariateFeatures: string[]
   /** The project record from `/projects/{id}/`; carries `use_edge_identities`, etc. */
   project: FlagsmithProject | null
   projectId: string
@@ -95,7 +87,6 @@ function resolveProjectId(): string {
 const state: FlagsmithState = {
   apiKey: null,
   environments: [],
-  multivariateFeatures: [],
   project: null,
   projectId: resolveProjectId(),
   report: new ConversionReport(),
@@ -152,7 +143,6 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   state.project = project
   state.report = new ConversionReport()
   state.environments = []
-  state.multivariateFeatures = []
   state.segments = []
   state.tags = []
 }
@@ -188,11 +178,6 @@ async function* fetchChangesImpl(): AsyncIterable<LegacyChange> {
   state.environments = snapshot.environments
   state.segments = snapshot.segments
   state.tags = snapshot.tags
-  state.multivariateFeatures = snapshot.features
-    .filter(
-      (bundle) => bundle.feature.type === 'MULTIVARIATE' && (bundle.feature.multivariate_options?.length ?? 0) > 0,
-    )
-    .map((bundle) => bundle.feature.name)
 
   for (const featureBundle of snapshot.features) {
     yield {
@@ -394,22 +379,6 @@ function getConversionNotesImpl(): ConversionNote[] | null {
 
   const notes: ConversionNote[] = state.report.all().map((n) => ({...n, detail: decorate(n.detail)}))
 
-  // Synthesize rebucketed-rollout notes for every MULTIVARIATE feature so the
-  // dedicated "Users will be re-bucketed" section in MIGRATION_REPORT.md
-  // names each one (plan §5.4). Flagsmith and Quonfig hash buckets with
-  // different salts; identity-level assignments WILL change post-migration
-  // for every MV flag, regardless of whether the allocation has any per-env
-  // overrides.
-  for (const featureName of state.multivariateFeatures) {
-    notes.push({
-      category: 'rebucketed-rollout',
-      detail:
-        'multivariate feature; Flagsmith and Quonfig hash identities into buckets with different salts, so ' +
-        'individual identity → variation assignments will change after migration (the overall percentage allocation is preserved)',
-      key: featureName,
-    })
-  }
-
   // Identity-trait references — pure FYI, no action required server-side, but
   // every trait must be sent by the SDK caller at eval time or matching rules
   // will silently miss. Plan §5.5 / D-F6.
@@ -462,7 +431,6 @@ export const flagsmithSource: MigrationSource = {
 export function __resetFlagsmithSourceForTests(): void {
   state.apiKey = null
   state.environments = []
-  state.multivariateFeatures = []
   state.project = null
   state.projectId = resolveProjectId()
   state.report = new ConversionReport()
