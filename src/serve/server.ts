@@ -8,6 +8,7 @@
  * Bound by default to 127.0.0.1. Auth and CORS are configured per plan §4.
  */
 
+import * as crypto from 'node:crypto'
 import * as http from 'node:http'
 
 import {ConfigStore, Evaluator, Quonfig} from '@quonfig/node'
@@ -143,13 +144,18 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
   }
 
   const corsOrigin = opts.corsOrigins.includes('*') ? '*' : opts.corsOrigins.join(', ')
-  const frontendFilter = Boolean(opts.frontendSdkKey)
+  // qfg-38sf.1 security audit F3: the sendToClientSdk filter is UNCONDITIONAL.
+  // Every qfg serve consumer is by definition a frontend client (browser /
+  // react-native — server SDKs use datadir mode directly). There is no flag
+  // that turns this off. See evalContext.ts for the filter itself.
 
-  const server = http.createServer(async (req, res) => {
-    if (opts.verbose) {
-      opts.logger.log(`qfg-serve: ${req.method} ${req.url}`)
-    }
-
+  // Bump maxHeaderSize so that oversized base64 context tokens reach our
+  // application-level 414 handler rather than getting bounced by Node's
+  // default 16KB header parser. Our app cap is 64KB (see evalContext.ts G6
+  // check); 256KB leaves room for the path plus normal Authorization /
+  // Cookie / Accept headers.
+  const server = http.createServer({maxHeaderSize: 256 * 1024}, async (req, res) => {
+    const startedAt = Date.now()
     // CORS — emit on every response, including 401 and 404, so browser
     // clients surface the real status code instead of an opaque CORS error.
     res.setHeader('Access-Control-Allow-Origin', corsOrigin)
@@ -160,6 +166,7 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
     if (req.method === 'OPTIONS') {
       res.writeHead(204)
       res.end()
+      logRequest(req, res, startedAt, opts)
       return
     }
 
@@ -174,6 +181,7 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
           'WWW-Authenticate': 'Basic realm="qfg-serve"',
         })
         res.end('unauthorized')
+        logRequest(req, res, startedAt, opts)
         return
       }
     }
@@ -188,11 +196,12 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
       if (!ctxToken) {
         res.writeHead(400, {'Content-Type': 'text/plain'})
         res.end('missing context token')
+        logRequest(req, res, startedAt, opts)
         return
       }
       try {
         await handleEvalContext(req, res, ctxToken, {
-          getSnapshot: () => ({store, evaluator, environment, version, frontendFilter}),
+          getSnapshot: () => ({store, evaluator, environment, version}),
         })
       } catch (error) {
         opts.logger.warn(`qfg-serve: eval-with-context handler threw: ${(error as Error).message}`)
@@ -201,6 +210,7 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
           res.end('internal error')
         }
       }
+      logRequest(req, res, startedAt, opts)
       return
     }
 
@@ -218,11 +228,13 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
             'telemetryUrl at a real Quonfig telemetry endpoint.',
         }),
       )
+      logRequest(req, res, startedAt, opts)
       return
     }
 
     res.writeHead(404, {'Content-Type': 'text/plain'})
     res.end('not found')
+    logRequest(req, res, startedAt, opts)
   })
 
   // Bind. EADDRINUSE is the only common failure here; surface it with a
@@ -267,6 +279,14 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
  * Validate `Authorization: Basic base64("1:<key>")` against the configured
  * SDK key. The browser SDKs build this header in
  * `sdk-javascript/src/apiHelpers.ts:7`.
+ *
+ * G4: use `crypto.timingSafeEqual` instead of `===`. The frontend SDK key is
+ * publicly-available by design (plan §4) so this isn't a hard security
+ * boundary, but `timingSafeEqual` is the right default — cheap, correct, and
+ * removes a class of timing-leak nits from any future audit.
+ *
+ * Length check first because `timingSafeEqual` throws on mismatched buffer
+ * lengths; that throw is itself a timing side-channel (and an exception path).
  */
 function checkBasicAuth(header: string | undefined, expectedKey: string): boolean {
   if (!header || !header.toLowerCase().startsWith('basic ')) return false
@@ -278,8 +298,36 @@ function checkBasicAuth(header: string | undefined, expectedKey: string): boolea
     return false
   }
   const expected = `1:${expectedKey}`
-  // Plain equality — the frontend SDK key is a publicly-available secret by
-  // design (plan §4) so this isn't a security boundary; the check exists to
-  // catch a "forgot the key on the frontend" misconfig.
-  return decoded === expected
+  const decodedBuf = Buffer.from(decoded, 'utf8')
+  const expectedBuf = Buffer.from(expected, 'utf8')
+  if (decodedBuf.length !== expectedBuf.length) return false
+  return crypto.timingSafeEqual(decodedBuf, expectedBuf)
+}
+
+/**
+ * Verbose-mode request log. G1 (qfg-38sf.1 audit): redact the base64-encoded
+ * context token from the URL — it contains caller PII (email, user id,
+ * arbitrary attributes). Format matches api-delivery's LoggingMiddleware
+ * shape: `METHOD PATH STATUS DURATION_MS`. We elide the ctx segment so the
+ * path collapses to e.g.
+ *   `GET /api/v2/configs/eval-with-context/<ctx-redacted> 200 3ms`
+ * which still tells the developer which route fired without leaking the
+ * payload.
+ */
+function logRequest(req: http.IncomingMessage, res: http.ServerResponse, startedAt: number, opts: ServeOptions): void {
+  if (!opts.verbose) return
+  const method = req.method ?? '-'
+  const rawUrl = req.url ?? '/'
+  const [pathOnly, query] = rawUrl.split('?', 2)
+  const evalPrefix = '/api/v2/configs/eval-with-context/'
+  let safePath = pathOnly
+  if (pathOnly.startsWith(evalPrefix)) {
+    safePath = `${evalPrefix}<ctx-redacted>`
+  }
+  // Drop query string entirely — collectContextMode and friends are fine to
+  // surface but we have no allowlist parser today, so be conservative.
+  if (query && query.length > 0) safePath += '?<redacted>'
+  const status = res.statusCode
+  const duration = Date.now() - startedAt
+  opts.logger.log(`qfg-serve: ${method} ${safePath} ${status} ${duration}ms`)
 }

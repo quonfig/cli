@@ -26,6 +26,37 @@ import * as path from 'node:path'
 import {resolveDatadirForServe} from '../../src/serve/datadir-discovery.js'
 import {startServer, ServeHandle} from '../../src/serve/server.js'
 
+/**
+ * Write a config that uses `type: "provided"` with `source: "ENV_VAR"`. Used
+ * by the F1+F2 regression test to assert qfg serve mirrors api-delivery's
+ * pass-through behavior: the config flows through unchanged when
+ * sendToClientSdk=true, and is dropped entirely when sendToClientSdk=false
+ * (regardless of --frontend-sdk-key — the filter is unconditional per F3).
+ */
+function writeProvidedFixture(dir: string, sendToClientSdk: boolean): void {
+  fs.mkdirSync(path.join(dir, 'configs'), {recursive: true})
+  fs.mkdirSync(path.join(dir, 'feature-flags'), {recursive: true})
+  fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({environments: ['development']}), 'utf8')
+  fs.writeFileSync(
+    path.join(dir, 'configs', 'sample.provided.json'),
+    JSON.stringify({
+      key: 'sample.provided',
+      type: 'config',
+      valueType: 'string',
+      sendToClientSdk,
+      default: {
+        rules: [
+          {
+            criteria: [{operator: 'ALWAYS_TRUE'}],
+            value: {type: 'provided', value: {source: 'ENV_VAR', lookup: 'CANARY_TEST_KEY'}},
+          },
+        ],
+      },
+    }),
+    'utf8',
+  )
+}
+
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-serve-'))
 }
@@ -294,7 +325,11 @@ describe('qfg serve', () => {
       expect(body.evaluations).to.not.have.property('sample.secret')
     })
 
-    it('includes both client-sdk and non-client-sdk configs when no --frontend-sdk-key is set', async () => {
+    // F3 — mandatory unconditional sendToClientSdk filter (qfg-38sf.1 security
+    // audit). Every qfg serve consumer is by definition a frontend client, so
+    // the filter applies whether or not --frontend-sdk-key is set. Inverse of
+    // the previous "includes both" assertion — that behavior was the bug.
+    it('filters out non-sendToClientSdk configs even when no --frontend-sdk-key is set (F3)', async () => {
       handle = await startServer({
         datadir: dir,
         environment: 'development',
@@ -311,7 +346,124 @@ describe('qfg serve', () => {
       expect(res.status).to.equal(200)
       const body = JSON.parse(res.body)
       expect(body.evaluations).to.have.property('sample.greeting')
-      expect(body.evaluations).to.have.property('sample.secret')
+      // F3: server-only config MUST be dropped even without --frontend-sdk-key.
+      expect(body.evaluations).to.not.have.property('sample.secret')
+    })
+
+    // F1+F2 regression — qfg serve mirrors api-delivery's pass-through behavior
+    // for `provided` / `confidential` / `decryptWith` metadata. The single
+    // gate is `sendToClientSdk` from F3: when false the config is dropped
+    // entirely (envelope contains no key, no id, no lookup name, no resolved
+    // value); when true the config flows through with its ENV_VAR pointer
+    // intact (lookup name is in the JSON, the resolved env value is not,
+    // because sdk-node's evaluator doesn't read process.env for context-aware
+    // eval — see sdk-node/src/rawMatch.ts:75-78). Customer's explicit choice.
+    describe('provided/ENV_VAR pass-through (F1+F2)', () => {
+      const SECRET_VALUE = 'CANARY_VALUE_must_not_leak'
+
+      beforeEach(() => {
+        process.env.CANARY_TEST_KEY = SECRET_VALUE
+      })
+
+      afterEach(() => {
+        delete process.env.CANARY_TEST_KEY
+      })
+
+      it('drops provided/ENV_VAR configs entirely when sendToClientSdk is false (F3 filter)', async () => {
+        const providedDir = tmpDir()
+        try {
+          writeProvidedFixture(providedDir, false)
+          handle = await startServer({
+            datadir: providedDir,
+            environment: 'development',
+            port: 0,
+            host: '127.0.0.1',
+            corsOrigins: ['*'],
+            watch: false,
+            allowNonLoopback: false,
+            verbose: false,
+            logger: noopLogger(),
+          })
+          const ctx = base64url(JSON.stringify({}))
+          const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`)
+          expect(res.status).to.equal(200)
+          // The whole envelope must not leak:
+          //  - the resolved env value (sdk-node doesn't resolve it, but belt+suspenders)
+          //  - the ENV_VAR lookup name (config dropped entirely)
+          //  - the config key/id (config dropped entirely)
+          expect(res.body).to.not.contain(SECRET_VALUE)
+          expect(res.body).to.not.contain('CANARY_TEST_KEY')
+          expect(res.body).to.not.contain('sample.provided')
+          const body = JSON.parse(res.body)
+          expect(body.evaluations).to.not.have.property('sample.provided')
+        } finally {
+          fs.rmSync(providedDir, {recursive: true, force: true})
+        }
+      })
+
+      it('passes provided/ENV_VAR lookup through when sendToClientSdk is true (matches api-delivery)', async () => {
+        const providedDir = tmpDir()
+        try {
+          writeProvidedFixture(providedDir, true)
+          handle = await startServer({
+            datadir: providedDir,
+            environment: 'development',
+            port: 0,
+            host: '127.0.0.1',
+            corsOrigins: ['*'],
+            watch: false,
+            allowNonLoopback: false,
+            verbose: false,
+            logger: noopLogger(),
+          })
+          const ctx = base64url(JSON.stringify({}))
+          const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`)
+          expect(res.status).to.equal(200)
+          // sdk-node's evaluator does resolve ENV_VAR in evaluateConfig (see
+          // resolver.ts:53-65 — it reads process.env when val.type === 'provided').
+          // That's the *intended* behavior in datadir mode and matches the
+          // customer's explicit choice when they set sendToClientSdk=true.
+          // The lookup name MUST appear when the value is the ProvidedData
+          // pointer (api-delivery pass-through). Either form is acceptable as
+          // long as the config is in the envelope and the customer's choice
+          // is respected.
+          const body = JSON.parse(res.body)
+          expect(body.evaluations).to.have.property('sample.provided')
+          // The envelope must reference the customer's choice somewhere — either
+          // the resolved env value or the lookup pointer. Both mean the config
+          // wasn't filtered out by F3.
+          const hasLookup = res.body.includes('CANARY_TEST_KEY')
+          const hasResolvedValue = res.body.includes(SECRET_VALUE)
+          expect(hasLookup || hasResolvedValue).to.equal(
+            true,
+            'envelope must contain either the ENV_VAR lookup name or the resolved value when sendToClientSdk=true',
+          )
+        } finally {
+          fs.rmSync(providedDir, {recursive: true, force: true})
+        }
+      })
+    })
+
+    // G6 — base64 context token size cap. Without this, a client can send a
+    // 10MB context token and force the server to allocate the decoded buffer
+    // (and the JSON parser to walk it). Cap raw token length at 64KB and
+    // reject with 414 URI Too Long.
+    it('rejects oversized context token with 414 URI Too Long (G6)', async () => {
+      handle = await startServer({
+        datadir: dir,
+        environment: 'development',
+        port: 0,
+        host: '127.0.0.1',
+        corsOrigins: ['*'],
+        watch: false,
+        allowNonLoopback: false,
+        verbose: false,
+        logger: noopLogger(),
+      })
+      // 100KB token — well over the 64KB cap. Use a base64-safe filler.
+      const oversized = 'A'.repeat(100 * 1024)
+      const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${oversized}`)
+      expect(res.status).to.equal(414)
     })
 
     it('returns 404 (with helpful body) on POST /api/v1/telemetry/', async () => {

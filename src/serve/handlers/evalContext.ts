@@ -47,20 +47,29 @@ export interface EvalHandlerDeps {
    * Snapshot accessor — returns the *current* store + evaluator + meta. We
    * read this on every request so that auto-reload swaps under us
    * transparently.
+   *
+   * Note (qfg-38sf.1 audit, F3): the sendToClientSdk filter is unconditional
+   * and lives inside this handler. There is no `frontendFilter` toggle —
+   * every qfg serve consumer is a frontend client by definition, so the
+   * filter always applies.
    */
   getSnapshot(): {
     store: ConfigStore
     evaluator: Evaluator
     environment: string
     version: string
-    /**
-     * Frontend-key filter: when true, drop configs whose `sendToClientSdk` is
-     * not set. Feature flags bypass the filter (mirrors api-delivery's
-     * eval_context.go:103).
-     */
-    frontendFilter: boolean
   }
 }
+
+/**
+ * G6 (qfg-38sf.1 audit): cap on the raw base64 context token length before
+ * we allocate a Buffer for it. 64 KB is well above the realistic size of any
+ * SDK-sent context envelope (Quonfig contexts are typically a few hundred
+ * bytes; the SDK base64-encodes a small JSON object) while still bounded
+ * enough to prevent a malicious client from forcing the server to allocate
+ * a multi-megabyte buffer per request.
+ */
+const MAX_CTX_TOKEN_BYTES = 64 * 1024
 
 export async function handleEvalContext(
   req: IncomingMessage,
@@ -68,6 +77,18 @@ export async function handleEvalContext(
   ctxToken: string,
   deps: EvalHandlerDeps,
 ): Promise<void> {
+  // G6: bound the token size BEFORE we decode it. The 64KB cap is way above
+  // realistic context payloads and small enough that a malicious caller
+  // can't trick us into allocating gigabytes. 414 URI Too Long is the right
+  // status — RFC 7231 §6.5.12 covers exactly this case (the URL is the
+  // request-target, the ctx is a path segment, so it's a URI-length problem,
+  // not a body-length problem).
+  if (ctxToken.length > MAX_CTX_TOKEN_BYTES) {
+    res.writeHead(414, {'Content-Type': 'text/plain'})
+    res.end('context token too large')
+    return
+  }
+
   // base64url decode → JSON. We accept the URL-safe alphabet and the
   // standard one because the Go handler does (`base64.URLEncoding`,
   // `StdEncoding`, `RawURLEncoding` — Node's "base64url" parser already
@@ -97,8 +118,12 @@ export async function handleEvalContext(
     const cfg = snap.store.get(key) as ConfigResponse | undefined
     if (!cfg) continue
 
-    // Frontend-key filter (eval_context.go:103). Feature flags always pass.
-    if (snap.frontendFilter && cfg.type !== 'feature_flag' && !cfg.sendToClientSdk) {
+    // F3 (qfg-38sf.1 audit): UNCONDITIONAL sendToClientSdk filter. Every qfg
+    // serve consumer is a frontend client by definition, so we apply the
+    // same gate api-delivery uses for frontend SDK keys
+    // (eval_context.go:103) regardless of whether --frontend-sdk-key was
+    // passed. Feature flags bypass the filter, matching the Go behavior.
+    if (cfg.type !== 'feature_flag' && !cfg.sendToClientSdk) {
       continue
     }
 
