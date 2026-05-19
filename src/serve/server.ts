@@ -121,6 +121,11 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
       const cfg = client.rawConfig(key)
       if (cfg) configs.push(cfg)
     }
+    // G8 (qfg-38sf.6): version is a content hash of the canonicalized
+    // configs, not the absolute datadir path. The old shape leaked operator
+    // filesystem layout on every response and changed on every reload even
+    // when the data was unchanged, defeating ETag-style caching.
+    version = computeVersion(configs)
     const envelope: ConfigEnvelope = {
       configs,
       meta: {version, environment},
@@ -145,7 +150,6 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
     enableSSE: false,
     fallbackPollEnabled: false,
     onConfigUpdate() {
-      version = `datadir:${datadir}#${Date.now()}`
       refreshSnapshot(client)
       if (opts.verbose) opts.logger.log(`qfg-serve: reloaded datadir (version=${version})`)
     },
@@ -156,7 +160,6 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
   // Initial snapshot — the SDK fires onConfigUpdate during init() so this is
   // mostly insurance against an init path that doesn't, but it's cheap.
   if (store.keys().length === 0) {
-    version = `datadir:${datadir}#${Date.now()}`
     refreshSnapshot(client)
   }
 
@@ -315,6 +318,37 @@ export async function startServer(opts: ServeOptions): Promise<ServeHandle> {
   }
 
   return {port: boundPort, host: opts.host, close}
+}
+
+/**
+ * G8 (qfg-38sf.6): compute meta.version as sha256 of the canonicalized
+ * configs array. Canonical form is `JSON.stringify(configs, sortedKeys)` so
+ * two snapshots with identical config content produce the same hash regardless
+ * of object-key order. The hash replaces the prior `datadir:<abs-path>#<ts>`
+ * shape, which leaked operator filesystem layout and changed on every reload
+ * even when the data was unchanged.
+ *
+ * Exported for unit tests that want to assert determinism / stability.
+ */
+export function computeVersion(configs: ConfigResponse[]): string {
+  const canonical = JSON.stringify(configs, sortedKeyReplacer)
+  return `sha256:${crypto.createHash('sha256').update(canonical, 'utf8').digest('hex')}`
+}
+
+/**
+ * Replacer for JSON.stringify that emits object keys in sorted order. Arrays
+ * keep their original order (array order is semantically meaningful for rules
+ * and weighted-values).
+ */
+function sortedKeyReplacer(_key: string, value: unknown): unknown {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const sorted: Record<string, unknown> = {}
+    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[k] = (value as Record<string, unknown>)[k]
+    }
+    return sorted
+  }
+  return value
 }
 
 /**

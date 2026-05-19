@@ -227,6 +227,33 @@ describe('qfg serve', () => {
       expect(body.evaluations['sample.greeting'].reason).to.equal('STATIC')
     })
 
+    // G8 (qfg-38sf.6) — meta.version must not leak operator filesystem layout.
+    // Prior shape was `datadir:${absolute-datadir-path}#${ms-epoch}` which
+    // exposed the user's home dir (or /tmp/qfg-serve-XXXX in tests) on every
+    // response. New shape is `sha256:<hex>` of the canonicalized configs JSON.
+    it('meta.version is a content hash and does not contain the absolute datadir path (G8)', async () => {
+      handle = await startServer({
+        datadir: dir,
+        environment: 'development',
+        port: 0,
+        host: '127.0.0.1',
+        corsOrigins: ['*'],
+        watch: false,
+        allowNonLoopback: false,
+        verbose: false,
+        logger: noopLogger(),
+      })
+
+      const ctx = base64url(JSON.stringify({}))
+      const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`)
+      expect(res.status).to.equal(200)
+      const body = JSON.parse(res.body)
+      const version = body.meta.version as string
+      expect(version, 'meta.version must not leak the absolute datadir path').to.not.contain(dir)
+      expect(version, 'meta.version must not use the legacy datadir: prefix').to.not.match(/^datadir:/)
+      expect(version, 'meta.version must be sha256:<hex>').to.match(/^sha256:[\da-f]{64}$/)
+    })
+
     it('emits CORS headers on success', async () => {
       handle = await startServer({
         datadir: dir,
