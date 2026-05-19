@@ -68,3 +68,56 @@ jobs:
             git diff -I"linux-x64" -I"darwin-arm64"
             exit 1
           fi
+
+  # Contract test — qfg serve ↔ api-delivery (FIXTURE_DIR mode). Per bead
+  # qfg-38sf.2 and plan §9. Lives as a separate job (not in the unit-tests
+  # matrix) because (a) it needs the api-delivery Go binary, (b) it's
+  # Linux-only — Go cross-compile + child_process semantics on Windows aren't
+  # worth the complexity for a drift-defense check, (c) it must be a required
+  # gate for release: release.yaml is gated on the whole `tests` workflow
+  # succeeding, so adding the job here automatically blocks publish when the
+  # contract is broken.
+  contract-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      # Clone api-delivery as a sibling (../api-delivery) — same pattern the
+      # SDK CIs use to grab integration-test-data (see memory:
+      # project_sdk_ci_pattern). api-delivery has been public since 2026-04-19.
+      - name: Clone api-delivery (sibling checkout)
+        uses: actions/checkout@v4
+        with:
+          repository: quonfig/api-delivery
+          path: api-delivery
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api-delivery/go.mod
+      - name: Build api-delivery binary
+        # GOWORK=off because api-delivery is intentionally outside the
+        # monorepo go.work (see api-delivery/CLAUDE.md). In CI there is no
+        # go.work, but we set GOWORK=off defensively in case the developer
+        # local-runs this step.
+        env:
+          GOWORK: off
+        working-directory: api-delivery
+        run: go build -o "$GITHUB_WORKSPACE/api-delivery-bin" ./cmd/server
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+      - run: corepack enable
+      - name: cache yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.yarn/cache
+          key: ubuntu-latest-yarn-${{ hashfiles('**/yarn.lock') }}
+          restore-keys: |
+            ubuntu-latest-yarn-
+      - run: yarn install --immutable
+      - run: yarn build
+      - name: Run contract test
+        env:
+          API_DELIVERY_BIN: ${{ github.workspace }}/api-delivery-bin
+          NODE_ENV: test
+        run: yarn mocha --forbid-only "test/contract/**/*.test.ts" --exit
