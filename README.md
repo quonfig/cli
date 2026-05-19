@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.52 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.0.52 darwin-arm64 node-v24.4.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -157,6 +157,7 @@ script doesn't need to know which env it's running in.
 * [`qfg sdk-key create`](#qfg-sdk-key-create)
 * [`qfg sdk-key list`](#qfg-sdk-key-list)
 * [`qfg sdk-key revoke KEYID`](#qfg-sdk-key-revoke-keyid)
+* [`qfg serve`](#qfg-serve)
 * [`qfg set-default [NAME]`](#qfg-set-default-name)
 * [`qfg set-rollout [NAME]`](#qfg-set-rollout-name)
 * [`qfg sync`](#qfg-sync)
@@ -1622,6 +1623,63 @@ EXAMPLES
 ```
 
 _See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.0.52/src/commands/sdk-key/revoke.ts)_
+
+## `qfg serve`
+
+Serve a local datadir over HTTP to browser/RN SDKs.
+
+```
+USAGE
+  $ qfg serve [--json] [--interactive] [--no-color] [--verbose] [--datadir <value>] [--environment <value>]
+    [--port <value>] [--host <value>] [--frontend-sdk-key <value>] [--cors-origin <value>...] [--watch]
+    [--allow-non-loopback]
+
+FLAGS
+  --allow-non-loopback        Confirm a LAN-reachable bind. Required when --host is not loopback.
+  --cors-origin=<value>...    [default: *] Allowed CORS origin (repeatable). Default is *; required when binding to a
+                              non-loopback host.
+  --datadir=<value>           Datadir to serve (defaults to ./our-config, then ./.quonfig, then errors). Honors
+                              QUONFIG_DIR.
+  --environment=<value>       [default: development] Which environment slug to evaluate. Honors QUONFIG_ENVIRONMENT.
+  --frontend-sdk-key=<value>  If set, every request must present Authorization: Basic 1:<key>. If unset, the server is
+                              open (matches the "datadir is the source of truth" mental model).
+  --host=<value>              [default: 127.0.0.1] Bind address. Loopback by default; non-loopback requires
+                              --allow-non-loopback.
+  --port=<value>              [default: 6580] TCP port to listen on. Errors on collision; pass --port <n> to retry.
+  --[no-]watch                Reload the envelope when the datadir changes. --no-watch disables.
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Serve a local datadir over HTTP to browser/RN SDKs.
+
+  Reads configs from a local datadir and exposes them at
+  `GET /api/v2/configs/eval-with-context/{base64url(ctx)}`. Point your
+  browser SDK at the resulting URL (`http://localhost:6580` by default)
+  and the same client code that talks to api-delivery in production will
+  work unmodified.
+
+  Telemetry is intentionally not served — qfg serve has no Quonfig backend
+  behind it. Disable client-side telemetry with
+  `collectEvaluationSummaries: false` (and `contextUploadMode: "none"`),
+  or point the SDK's `telemetryUrl` at a real endpoint.
+
+  The server is bound to 127.0.0.1 by default; pass --allow-non-loopback
+  to confirm a LAN-reachable bind.
+
+EXAMPLES
+  $ qfg serve
+
+  $ qfg serve --datadir ./our-config --environment production
+
+  $ qfg serve --port 6581 --frontend-sdk-key PUBLIC_KEY
+```
+
+_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.0.52/src/commands/serve.ts)_
 
 ## `qfg set-default [NAME]`
 
