@@ -96,6 +96,42 @@ function writeFixtureDatadir(dir: string, value: string = 'hello'): void {
   )
 }
 
+/**
+ * Datadir fixture with an `int`-typed and a `double`-typed config. Mirrors how
+ * real config files (and integration-test-data) store numeric values: the
+ * `value.value` field is a JSON *string* (`"5"`), not a JSON number. qfg serve
+ * must coerce these to JSON numbers on output so browser SDK consumers can do
+ * arithmetic, matching api-delivery's Value.UnmarshalJSON coercion
+ * (api-delivery/internal/config/types.go:182-215). Regression for qfg-38sf.7.
+ */
+function writeNumericFixtureDatadir(dir: string): void {
+  fs.mkdirSync(path.join(dir, 'configs'), {recursive: true})
+  fs.mkdirSync(path.join(dir, 'feature-flags'), {recursive: true})
+  fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({environments: ['development']}), 'utf8')
+  fs.writeFileSync(
+    path.join(dir, 'configs', 'sample.count.json'),
+    JSON.stringify({
+      key: 'sample.count',
+      type: 'config',
+      valueType: 'int',
+      sendToClientSdk: true,
+      default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'int', value: '5'}}]},
+    }),
+    'utf8',
+  )
+  fs.writeFileSync(
+    path.join(dir, 'configs', 'sample.ratio.json'),
+    JSON.stringify({
+      key: 'sample.ratio',
+      type: 'config',
+      valueType: 'double',
+      sendToClientSdk: true,
+      default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'double', value: '30.5'}}]},
+    }),
+    'utf8',
+  )
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
@@ -225,6 +261,48 @@ describe('qfg serve', () => {
       expect(body.evaluations['sample.greeting'].configType).to.equal('config')
       expect(body.evaluations['sample.greeting'].valueType).to.equal('string')
       expect(body.evaluations['sample.greeting'].reason).to.equal('STATIC')
+    })
+
+    // qfg-38sf.7 — int/double value coercion drift vs api-delivery. Config
+    // files store numeric values as JSON strings ("5", "30.5"); api-delivery's
+    // Value.UnmarshalJSON coerces int via strconv.ParseInt and double via
+    // strconv.ParseFloat at load time (types.go:182-215), so its envelope
+    // emits JSON numbers. sdk-node's datadir loader does no such coercion, so
+    // qfg serve must coerce on output. A browser SDK consumer doing arithmetic
+    // on an integer flag would otherwise get string-concatenation behavior.
+    it('emits int/double config values as JSON numbers, not strings (qfg-38sf.7)', async () => {
+      const numericDir = tmpDir()
+      try {
+        writeNumericFixtureDatadir(numericDir)
+        handle = await startServer({
+          datadir: numericDir,
+          environment: 'development',
+          port: 0,
+          host: '127.0.0.1',
+          corsOrigins: ['*'],
+          watch: false,
+          allowNonLoopback: false,
+          verbose: false,
+          logger: noopLogger(),
+        })
+
+        const ctx = base64url(JSON.stringify({}))
+        const res = await httpRequest(handle.port, 'GET', `/api/v2/configs/eval-with-context/${ctx}`)
+        expect(res.status).to.equal(200)
+        const body = JSON.parse(res.body)
+
+        const intVal = body.evaluations['sample.count'].value.value
+        expect(typeof intVal, 'int config value must be a JSON number').to.equal('number')
+        expect(intVal).to.equal(5)
+        expect(body.evaluations['sample.count'].value.type).to.equal('int')
+
+        const doubleVal = body.evaluations['sample.ratio'].value.value
+        expect(typeof doubleVal, 'double config value must be a JSON number').to.equal('number')
+        expect(doubleVal).to.equal(30.5)
+        expect(body.evaluations['sample.ratio'].value.type).to.equal('double')
+      } finally {
+        fs.rmSync(numericDir, {recursive: true, force: true})
+      }
     })
 
     // G8 (qfg-38sf.6) — meta.version must not leak operator filesystem layout.

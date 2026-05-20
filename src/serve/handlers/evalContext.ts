@@ -134,7 +134,7 @@ export async function handleEvalContext(
     const result: EvalResult = {
       value: {
         type: match.value.type,
-        value: match.value.value,
+        value: coerceNumeric(match.value.type, match.value.value),
       },
       configId: cfg.id,
       configType: cfg.type,
@@ -159,6 +159,36 @@ export async function handleEvalContext(
 
   res.writeHead(200, {'Content-Type': 'application/json'})
   res.end(JSON.stringify(envelope))
+}
+
+/**
+ * qfg-38sf.7: coerce `int`/`double` values to JS numbers so the envelope emits
+ * JSON numbers, not JSON strings.
+ *
+ * Config files (and integration-test-data) store numeric values as JSON
+ * strings — e.g. `{"type": "int", "value": "5"}`. api-delivery's
+ * `Value.UnmarshalJSON` (api-delivery/internal/config/types.go:182-215) coerces
+ * `int` via `strconv.ParseInt` and `double` via `strconv.ParseFloat` at config
+ * *load* time, so its EvalEnvelope emits JSON numbers. sdk-node's datadir
+ * loader does no such coercion and passes the value through verbatim, so
+ * `match.value.value` arrives here as a string. We coerce on output to match
+ * api-delivery — a browser SDK consumer doing arithmetic on an integer flag
+ * would otherwise get string-concatenation behavior.
+ *
+ * Discriminate on `valueType` — the value's *own* type, the same field
+ * api-delivery switches on (`raw.Type`). This is correct even when the matched
+ * value's type differs from the config's declared `valueType` (e.g. a
+ * weighted-values config resolving to an `int` arm). ONLY `int` and `double`
+ * are coerced; `string`, `bool`, `string_list`, `json`, `provided`, etc. pass
+ * through untouched. Integration-test-data's largest numeric value is ~2.5e12,
+ * far below Number.MAX_SAFE_INTEGER, so `Number(...)` is lossless here.
+ */
+function coerceNumeric(valueType: string, value: unknown): unknown {
+  if ((valueType === 'int' || valueType === 'double') && typeof value === 'string') {
+    const n = Number(value)
+    return Number.isNaN(n) ? value : n
+  }
+  return value
 }
 
 function resolutionReason(cfg: ConfigResponse, _match: EvalMatch): string {
