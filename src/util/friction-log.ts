@@ -1,6 +1,7 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+
+import {getQuonfigConfigHome} from './quonfig-home.js'
 
 export interface FrictionEntry {
   attempted: string
@@ -9,8 +10,14 @@ export interface FrictionEntry {
   ts: string
 }
 
-export function getDefaultFrictionLogPath(home: string = os.homedir()): string {
-  return path.join(home, '.qfg', 'friction.log')
+/**
+ * Default friction-log location: a `friction.log` file inside the shared
+ * Quonfig config home (`~/.quonfig`, the same dir as tokens/profile config).
+ * Honors `QUONFIG_CONFIG_HOME` via `getQuonfigConfigHome()` so tests and
+ * isolated environments redirect it along with everything else.
+ */
+export function getDefaultFrictionLogPath(configHome: string = getQuonfigConfigHome()): string {
+  return path.join(configHome, 'friction.log')
 }
 
 export function getFrictionLogPath(envValue?: string | undefined, cwd: string = process.cwd()): null | string {

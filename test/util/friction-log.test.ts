@@ -29,17 +29,17 @@ describe('friction-log utils', () => {
       expect(getFrictionLogPath('0')).to.equal(null)
     })
 
-    it('returns default ~/.qfg/friction.log path for "true"', () => {
+    it('returns default ~/.quonfig/friction.log path for "true"', () => {
       expect(getFrictionLogPath('true', '/tmp/work')).to.equal(getDefaultFrictionLogPath())
     })
 
-    it('returns default ~/.qfg/friction.log path for "1"', () => {
+    it('returns default ~/.quonfig/friction.log path for "1"', () => {
       expect(getFrictionLogPath('1', '/tmp/work')).to.equal(getDefaultFrictionLogPath())
     })
 
-    it('default path is under the home dir, not cwd', () => {
-      const defaultPath = getDefaultFrictionLogPath('/home/me')
-      expect(defaultPath).to.equal(path.join('/home/me', '.qfg', 'friction.log'))
+    it('default path is under the Quonfig config home, not cwd', () => {
+      const defaultPath = getDefaultFrictionLogPath('/home/me/.quonfig')
+      expect(defaultPath).to.equal(path.join('/home/me/.quonfig', 'friction.log'))
     })
 
     it('returns absolute path unchanged', () => {
