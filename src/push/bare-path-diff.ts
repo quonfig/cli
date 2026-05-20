@@ -35,6 +35,13 @@ import {runGit} from '../util/git-ops.js'
 
 export interface BarePathDiffResult {
   deltas: FileDelta[]
+  /**
+   * The probe clone's HEAD sha — the workspace's current tip on the cloud
+   * repo. Threaded into `configs.push` as `expectedSha` so the server-side
+   * optimistic lock (qfg-gj3i) accepts bare-path pushes instead of rejecting
+   * them with a forced-upgrade 426.
+   */
+  remoteHeadSha: string
   /** Tmp dir holding the probe clone. Caller must rm -rf in a finally block. */
   scratchDir: string
   /** Total file count in the scratch clone (under the same prefix rules as `deltas`). */
@@ -64,6 +71,22 @@ export async function computeBarePathDiff(localDir: string, remoteUrl: string): 
     throw error
   }
 
+  // The probe clone's HEAD is the workspace tip — the optimistic-lock value
+  // `configs.push` needs as `expectedSha` (qfg-gj3i bare-path follow-up).
+  let remoteHeadSha: string
+  try {
+    const {stdout} = await runGit(['-C', scratchDir, 'rev-parse', 'HEAD'])
+    remoteHeadSha = stdout.trim()
+  } catch (error: unknown) {
+    try {
+      fs.rmSync(scratchDir, {force: true, recursive: true})
+    } catch {
+      /* ignore */
+    }
+
+    throw error
+  }
+
   const localFiles = collectFiles(localDir)
   const remoteFiles = collectFiles(scratchDir)
 
@@ -84,7 +107,7 @@ export async function computeBarePathDiff(localDir: string, remoteUrl: string): 
     }
   }
 
-  return {deltas, scratchDir, totalRemoteFiles: remoteFiles.size}
+  return {deltas, remoteHeadSha, scratchDir, totalRemoteFiles: remoteFiles.size}
 }
 
 interface FileEntry {

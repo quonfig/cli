@@ -99,13 +99,11 @@ export interface GitOps {
   /** Pack-push — local HEAD SHA. Forwarded as `newSha` on the wire. */
   getHeadSha(dir: string): Promise<string>
   /**
-   * Returns the local SHA of `origin/main` after fetch — the remote tip
-   * the diff was computed against — or undefined if no `origin/main` ref
-   * exists (bare-path push, or repo never fetched).
-   *
-   * Threaded into the `configs.push` call as `expectedSha` so the
-   * server-side optimistic lock (qfg-gj3i) can reject pushes whose
-   * origin moved between fetch and push.
+   * Returns the workspace-HEAD sha that the diff was computed against —
+   * threaded into `configs.push` as `expectedSha` for the server-side
+   * optimistic lock (qfg-gj3i). Clone path: the local `origin/main` SHA
+   * after fetch. Bare path: the probe clone's HEAD. Undefined only when
+   * neither is available; the server rejects a missing value with a 426.
    */
   getOriginMainSha(dir: string): Promise<string | undefined>
   /**
@@ -676,10 +674,10 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       ...(d.afterJson === undefined ? {} : {afterJson: d.afterJson}),
     }))
 
-    // qfg-gj3i: pass origin/main SHA as expectedSha so the server-side
-    // optimistic lock can reject the push if origin moved between fetch
-    // and now. Undefined on bare-path; the server treats absence as
-    // "non-clone client" and applies its bare-path policy.
+    // qfg-gj3i: expectedSha is the workspace HEAD the server checks its
+    // optimistic lock against. For the bare path it is the probe clone's
+    // HEAD (resolved inside getOriginMainSha, qfg-nhcb). It must be present
+    // — the server rejects a missing expectedSha with a forced-upgrade 426.
     const expectedSha = await deps.gitOps.getOriginMainSha(input.dir)
 
     log('Sending push to Quonfig cloud...')

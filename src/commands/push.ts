@@ -194,7 +194,9 @@ export function buildRealDeps(
   // runPush always calls mint before it calls any gitOps method that needs
   // the probe clone, so by the time we read it here it is populated.
   let authenticatedRepoUrl: string | undefined
-  let barePathProbe: {deltas: FileDelta[]; scratchDir: string; totalRemoteFiles: number} | undefined
+  let barePathProbe:
+    | {deltas: FileDelta[]; remoteHeadSha: string; scratchDir: string; totalRemoteFiles: number}
+    | undefined
 
   const ensureBarePathProbe = async (dir: string) => {
     if (barePathProbe) return barePathProbe
@@ -280,9 +282,14 @@ export function buildRealDeps(
       }
     },
     async getOriginMainSha(dir) {
-      // qfg-gj3i: clone-path returns the local origin/main SHA after
-      // fetch. Bare path has no `.git/` to rev-parse — return undefined
-      // and let the server apply its bare-path lock policy.
+      // Bare path: `diffHeadVsOrigin` (always called first by runPush)
+      // populated the probe clone. Its HEAD is our view of the workspace
+      // tip — and is exactly what the diff was computed against — so it is
+      // the correct `expectedSha` for the server-side optimistic lock
+      // (qfg-gj3i bare-path follow-up, qfg-nhcb). Without it the bare-path
+      // push omits expectedSha and the server rejects it with a 426.
+      if (barePathProbe) return barePathProbe.remoteHeadSha
+      // Clone path: the local origin/main SHA after fetch.
       if (!(await isGitRepo(dir))) return
       return getOriginMainSha(dir)
     },

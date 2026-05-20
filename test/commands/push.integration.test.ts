@@ -248,10 +248,9 @@ function buildTestDeps(args: {
       }
     },
     async getOriginMainSha(dir): Promise<string | undefined> {
-      // qfg-gj3i: mirror buildRealDeps — return the local origin/main SHA
-      // for clone-path dirs, undefined for bare path. Use execFileSync so
-      // the integration assertion can compare against the same SHA the
-      // bare-repo seeded.
+      // Mirror buildRealDeps (qfg-nhcb): bare path returns the probe
+      // clone's HEAD, clone path returns the local origin/main SHA.
+      if (barePathProbe) return barePathProbe.remoteHeadSha
       if (!(await isGitRepo(dir))) return
       let out: string | undefined
       try {
@@ -534,7 +533,7 @@ describe('runPush: integration against real local bare git repos (server-side co
 
   describe('2. bare-path happy', () => {
     it('sends FileDeltas for add/modify/delete from a no-.git/ local against a divergent origin', async () => {
-      const {remoteUrl} = createBareRemote(root)
+      const {remoteDir, remoteUrl} = createBareRemote(root)
       const seeded: Record<string, string> = {
         'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
       }
@@ -590,10 +589,10 @@ describe('runPush: integration against real local bare git repos (server-side co
       expect(del.beforeJson).to.equal('{"k":9}\n')
       expect(del.afterJson).to.equal(undefined)
 
-      // qfg-gj3i: bare path has no `.git/`, so expectedSha is omitted.
-      // Server treats absence as "non-clone client" and applies its
-      // bare-path lock policy.
-      expect(sent.expectedSha).to.equal(undefined)
+      // qfg-nhcb: the bare path sends the probe clone's HEAD as
+      // expectedSha so the server-side optimistic lock (qfg-gj3i) accepts
+      // the push instead of rejecting it with a forced-upgrade 426.
+      expect(sent.expectedSha).to.equal(git(remoteDir, 'rev-parse', 'main'))
     })
   })
 

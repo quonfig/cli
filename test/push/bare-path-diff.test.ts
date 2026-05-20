@@ -141,6 +141,24 @@ describe('computeBarePathDiff (bare-path real deps)', () => {
     }
   })
 
+  it('exposes the probe clone HEAD sha as remoteHeadSha (qfg-nhcb optimistic lock)', async () => {
+    const remote = createBareRemote(root)
+    seedRemoteWith(remote, root, {'configs/a.json': '{"a":1}\n'})
+
+    const local = fs.mkdtempSync(path.join(root, 'local-'))
+    writeLocal(local, {'configs/a.json': '{"a":1}\n'})
+
+    const result = await computeBarePathDiff(local, remote)
+    try {
+      // remoteHeadSha is what `qfg push` forwards as `expectedSha`; it must
+      // be the cloud repo's main tip, not an empty/undefined value.
+      expect(result.remoteHeadSha).to.match(/^[\da-f]{40}$/)
+      expect(result.remoteHeadSha).to.equal(run(remote, 'rev-parse', 'main'))
+    } finally {
+      fs.rmSync(result.scratchDir, {force: true, recursive: true})
+    }
+  })
+
   it('returns a scratchDir the caller can clean up', async () => {
     const remote = createBareRemote(root)
     seedRemoteWith(remote, root, {'configs/a.json': '{"a":1}\n'})
