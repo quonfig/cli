@@ -34,6 +34,9 @@ describe('workspace create', () => {
       expect(ctx.stdout).to.contain('production')
       expect(ctx.stdout).to.contain('staging')
       expect(ctx.stdout).to.contain('development')
+      // The switch hint must use the `<org-slug>/<workspace-slug>` pin form —
+      // `qfg workspace switch` rejects bare slugs.
+      expect(ctx.stdout).to.contain('qfg workspace switch test-organization/lt-21-smoke')
     })
 
   test

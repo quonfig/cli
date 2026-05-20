@@ -169,7 +169,14 @@ export default class WorkspaceCreate extends BaseCommand {
     this.log(`  Envs:        ${created.environments.map((e) => e.name).join(', ')}`)
     this.log('')
     this.log(`To use this workspace locally:`)
-    this.log(`  qfg workspace switch ${created.workspaceSlug}`)
+    // `qfg workspace switch` requires the `<org-slug>/<workspace-slug>` pin
+    // form — bare slugs are rejected. Fall back to the interactive picker if
+    // the server did not return an org slug.
+    if (created.organizationSlug) {
+      this.log(`  qfg workspace switch ${created.organizationSlug}/${created.workspaceSlug}`)
+    } else {
+      this.log(`  qfg workspace switch`)
+    }
 
     return {
       workspaceId: created.workspaceId,
