@@ -205,5 +205,33 @@ describe('migrate/sources/launch/api', () => {
       expect(calls).to.be.lessThan(5, 'must stop after detecting cursor cycle')
       expect(changes.length).to.be.greaterThan(0)
     })
+
+    it('reports cumulative fetched counts to onProgress after each page', async () => {
+      const mkChange = (changedAt: number, key: string) => ({
+        changedAt,
+        changedBy: {id: 'u1', email: 'a@b', type: 'user'},
+        deleted: false,
+        key,
+        newConfigId: changedAt,
+        type: 'FEATURE_FLAG',
+      })
+      const page1 = {changes: [mkChange(300, 'k3'), mkChange(200, 'k2')], cursor: '200:k2'}
+      const page2 = {changes: [mkChange(100, 'k1')]}
+
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/change-history`, ({request}) => {
+          const u = new URL(request.url)
+          return HttpResponse.json(u.searchParams.get('cursor') === '200:k2' ? page2 : page1)
+        }),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      const progress: number[] = []
+      const changes = await fetchAllChangeHistory('test-api-key', undefined, (fetched) => progress.push(fetched))
+
+      expect(changes).to.have.length(3)
+      // One callback per page, each carrying the running cumulative total.
+      expect(progress).to.deep.equal([2, 3])
+    })
   })
 })

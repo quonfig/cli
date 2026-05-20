@@ -66,7 +66,11 @@ export async function fetchChangeHistoryPage(apiKey: string, cursor?: string): P
   return (await apiFetch(`/api/v1/change-history?${params}`, apiKey)) as LaunchChangeHistoryResponse
 }
 
-export async function fetchAllChangeHistory(apiKey: string, sinceEpochMs?: number): Promise<LaunchChangeEntry[]> {
+export async function fetchAllChangeHistory(
+  apiKey: string,
+  sinceEpochMs?: number,
+  onProgress?: (fetched: number) => void,
+): Promise<LaunchChangeEntry[]> {
   const collected: LaunchChangeEntry[] = []
   const seenCursors = new Set<string>()
   let cursor: string | undefined
@@ -85,6 +89,10 @@ export async function fetchAllChangeHistory(apiKey: string, sinceEpochMs?: numbe
 
       collected.push(change)
     }
+
+    // Report cumulative progress after each page — pagination is silent and
+    // can run for many pages (50 changes/page) on a large account.
+    onProgress?.(collected.length)
 
     if (done || !page.cursor || seenCursors.has(page.cursor)) break
     seenCursors.add(page.cursor)

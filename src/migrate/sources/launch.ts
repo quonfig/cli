@@ -48,10 +48,13 @@ function requireApiKey(operation: string): string {
   return state.apiKey
 }
 
-async function* fetchChangesImpl(sinceEpochMs: null | number): AsyncIterable<LegacyChange> {
+async function* fetchChangesImpl(
+  sinceEpochMs: null | number,
+  onProgress?: (fetched: number) => void,
+): AsyncIterable<LegacyChange> {
   const apiKey = requireApiKey('fetchChanges')
   const since = sinceEpochMs === null ? undefined : sinceEpochMs
-  const changes = await fetchAllChangeHistory(apiKey, since)
+  const changes = await fetchAllChangeHistory(apiKey, since, onProgress)
 
   for (const change of changes) {
     yield {
@@ -198,8 +201,8 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
 }
 
 export const launchSource: MigrationSource = {
-  fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange> {
-    return fetchChangesImpl(sinceEpochMs)
+  fetchChanges(sinceEpochMs: null | number, onProgress?: (fetched: number) => void): AsyncIterable<LegacyChange> {
+    return fetchChangesImpl(sinceEpochMs, onProgress)
   },
   getCoercedSentinels: getCoercedSentinelsImpl,
   getCommitMeta: getCommitMetaImpl,

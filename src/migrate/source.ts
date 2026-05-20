@@ -95,7 +95,13 @@ export interface CommitMeta {
 }
 
 export interface MigrationSource {
-  fetchChanges(sinceEpochMs: null | number): AsyncIterable<LegacyChange>
+  /**
+   * Yields the source's change history oldest→newest. `onProgress`, when
+   * provided, is called with the running fetched-change count as pagination
+   * proceeds, so the CLI can show progress during an otherwise-silent fetch.
+   * Sources that fetch in a single request may ignore it.
+   */
+  fetchChanges(sinceEpochMs: null | number, onProgress?: (fetched: number) => void): AsyncIterable<LegacyChange>
   /**
    * Optional post-translate accumulator. Returns any rule values that translate()
    * coerced from a sentinel like Launch's empty-string "no value set yet" to the

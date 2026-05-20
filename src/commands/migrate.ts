@@ -38,6 +38,11 @@ import {type AuthConfig, loadAuthConfig} from '../util/token-storage.js'
 
 const DEFAULT_DIR = 'quonfig-repo'
 
+// How many fetched changes between progress lines during the (silent,
+// paginated) change-history fetch. Large accounts page through thousands of
+// changes 50 at a time; without periodic output the CLI looks frozen.
+const FETCH_PROGRESS_INTERVAL = 1000
+
 export default class Migrate extends BaseCommand {
   static description =
     'Migrate flags and configs from a legacy feature-flag system into a Quonfig workspace.\n\n' +
@@ -215,9 +220,28 @@ export default class Migrate extends BaseCommand {
       throw error
     }
 
+    // The fetch and write phases below are silent for a long time on a large
+    // account. Print a plan up front and a step line before each slow phase so
+    // the CLI never looks frozen, even without --verbose.
+    this.log(`Migrating from ${flags.from} into ${dir}.`)
+    if (flags['dry-run']) {
+      this.log('Mode: dry run — changes are summarized but nothing is written.')
+    } else if (flags.push) {
+      this.log('Mode: migrate to a local dir, then push to the Quonfig cloud workspace.')
+    } else {
+      this.log('Mode: local migration only — re-run with --push to also publish to a cloud workspace.')
+    }
+
+    this.log('')
+
     let duplicateResolutionsForWarn: DuplicateResolutionSummary | null = null
+    // Set to the target dir once a local (non-push) migration commits, so the
+    // `finally` block can print "what now?" guidance after the warnings.
+    let localNextStepsDir: null | string = null
     try {
+      this.log(`Authenticating with ${flags.from}...`)
       await source.validateAuth(sourceApiKey)
+      this.log(`Reading the environment list from ${flags.from}...`)
       const environments = await source.listEnvironments()
 
       // Plan §4.1.1: tell the user the real history horizon BEFORE the slow
@@ -232,8 +256,15 @@ export default class Migrate extends BaseCommand {
       const existing = readImportState(dir)
       const sinceEpochMs = computeSince(flags, existing)
 
+      this.log(`Fetching change history from ${flags.from} — this can take a few minutes for a large account...`)
       const changes: LegacyChange[] = []
-      for await (const change of source.fetchChanges(sinceEpochMs)) {
+      let lastReportedFetch = 0
+      for await (const change of source.fetchChanges(sinceEpochMs, (fetched) => {
+        if (fetched - lastReportedFetch >= FETCH_PROGRESS_INTERVAL) {
+          lastReportedFetch = fetched
+          this.log(`  ...fetched ${fetched} change(s) so far`)
+        }
+      })) {
         changes.push(change)
       }
 
@@ -358,6 +389,9 @@ export default class Migrate extends BaseCommand {
           ? `Committed ${toProcess.length} change(s). commit=${localResult.commitSha?.slice(0, 8) ?? ''} action=${localResult.action}`
           : `No net changes produced by this run. Nothing to commit.`,
       )
+      // Print "what now?" guidance from the `finally` block (after the
+      // warnings) so it is the last thing the user sees.
+      if (localResult.committed) localNextStepsDir = dir
 
       return {
         ...payload,
@@ -377,7 +411,30 @@ export default class Migrate extends BaseCommand {
       warnAboutCoercedSentinels(this, source.getCoercedSentinels?.() ?? null)
       warnAboutDuplicateResolutions(this, duplicateResolutionsForWarn)
       warnAboutConversionNotes(this, source.getConversionNotes?.() ?? null)
+      if (localNextStepsDir) this.printLocalNextSteps(localNextStepsDir)
     }
+  }
+
+  /**
+   * After a local (non-push) migration commits, the user is left at a prompt
+   * with a fresh directory and no obvious next move. Spell out the review →
+   * push flow explicitly.
+   */
+  private printLocalNextSteps(dir: string): void {
+    this.log('')
+    this.log('Migration written to a local directory — nothing has been pushed to Quonfig cloud yet.')
+    this.log('')
+    this.log('Next steps:')
+    this.log(`  1. Review the migrated config files in ${dir}`)
+    this.log(`  2. Read ${path.join(dir, 'MIGRATION_REPORT.md')} — it lists every config that was`)
+    this.log('     skipped, coerced, or needs a manual follow-up.')
+    this.log('  3. Publish to a Quonfig workspace once the migration looks right:')
+    this.log(`       qfg push --dir ${dir} --workspace <org-slug>/<workspace-slug>`)
+    this.log('     (run `qfg login` first if you have not). You can also re-run this command')
+    this.log('     with `--push --workspace <org-slug>/<workspace-slug>` to migrate and push')
+    this.log('     in one step.')
+    this.log('')
+    this.log('Re-running `qfg migrate` later picks up only the changes made since this run.')
   }
 
   private async resolvePushWorkspace(

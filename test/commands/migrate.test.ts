@@ -223,6 +223,67 @@ describe('migrate', () => {
     })
   })
 
+  // The command is silent for a long time on a large account (fetch + write
+  // phases). It should narrate what it is doing and what to do next so it
+  // never looks frozen.
+  describe('launch local run progress + next-steps', () => {
+    const server = setupServer()
+
+    before(() => {
+      server.listen({onUnhandledRequest: 'error'})
+    })
+
+    afterEach(() => {
+      server.resetHandlers()
+    })
+
+    after(() => {
+      server.close()
+    })
+
+    const mockLaunch = () => {
+      server.use(
+        http.get(`${LAUNCH_PROD_URL}/api/v1/project-environments`, () =>
+          HttpResponse.json({envs: [{id: 1, name: 'Production'}], projectId: 1}),
+        ),
+        http.get(`${LAUNCH_PROD_URL}/api/v1/change-history`, () =>
+          HttpResponse.json({
+            changes: [
+              {
+                changedAt: 1_700_000_000_000,
+                changedBy: {email: 'a@b', id: '1', type: 'user'},
+                deleted: false,
+                key: 'some-flag',
+                newConfig: {configType: 'FEATURE_FLAG', key: 'some-flag', rows: []},
+                type: 'FEATURE_FLAG',
+              },
+            ],
+            cursor: null,
+          }),
+        ),
+      )
+    }
+
+    test
+      .do(() => mockLaunch())
+      .stdout()
+      .command(['migrate', '--from', 'launch', '--api-key', 'k', '--dir', './out'])
+      .it('narrates the plan, each phase, and the next steps for a local migration', (ctx) => {
+        // Plan up front.
+        expect(ctx.stdout).to.contain('Migrating from launch into')
+        expect(ctx.stdout).to.contain('Mode: local migration only')
+        // A line before each otherwise-silent phase.
+        expect(ctx.stdout).to.contain('Authenticating with launch')
+        expect(ctx.stdout).to.contain('Reading the environment list from launch')
+        expect(ctx.stdout).to.contain('Fetching change history from launch')
+        expect(ctx.stdout).to.contain('Committed 1 change(s)')
+        // "What now?" guidance for a local (non-push) migration.
+        expect(ctx.stdout).to.contain('Next steps:')
+        expect(ctx.stdout).to.contain('qfg push --dir')
+        expect(ctx.stdout).to.contain('MIGRATION_REPORT.md')
+      })
+  })
+
   // Epic 5 write-mode wiring for --from launchdarkly. Two command-layer gaps:
   // migrate.ts never called applyLaunchDarklyBaseUrl() (so LAUNCHDARKLY_API_URL
   // was unreachable) and had no --project flag (so non-default LD projects were
