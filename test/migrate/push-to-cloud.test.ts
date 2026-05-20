@@ -175,7 +175,7 @@ describe('pushMigrationToCloud', () => {
     expect(fs.existsSync(path.join(reader, 'feature-flags/flag-a.json'))).to.equal(true)
     expect(fs.existsSync(path.join(reader, 'feature-flags/flag-b.json'))).to.equal(true)
 
-    const report = fs.readFileSync(path.join(reader, 'MIGRATION_REPORT.md'), 'utf8')
+    const report = fs.readFileSync(path.join(reader, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
     expect(report).to.match(/Flags migrated: 2/)
     expect(report).to.match(/flag-a/)
     expect(report).to.match(/flag-b/)
@@ -281,7 +281,7 @@ describe('pushMigrationToCloud', () => {
     expect(flagB.default.rules[0].value.value).to.equal(false)
 
     // MIGRATION_REPORT.md reflects ONLY the delta of this run (flag-a + flag-c), not flag-b
-    const report = fs.readFileSync(path.join(reader, 'MIGRATION_REPORT.md'), 'utf8')
+    const report = fs.readFileSync(path.join(reader, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
     expect(report).to.match(/flag-a/)
     expect(report).to.match(/flag-c/)
     expect(report).to.not.match(/flag-b/)

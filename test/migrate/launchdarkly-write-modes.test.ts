@@ -141,7 +141,7 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       // Flag file landed on disk via the source-agnostic write path.
       expect(fs.existsSync(path.join(localDir, 'feature-flags', 'gradual-rollout.json'))).to.equal(true)
 
-      const report = fs.readFileSync(path.join(localDir, 'MIGRATION_REPORT.md'), 'utf8')
+      const report = fs.readFileSync(path.join(localDir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       // The required "users will be re-bucketed" section names the rollout flag (plan §5.4).
       expect(report).to.match(/^##\s*Users will be re-bucketed/m)
       const rebucketSection = report.slice(report.indexOf('## Users will be re-bucketed'))
@@ -211,7 +211,7 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
         source: launchdarklySource,
       })
 
-      const report = fs.readFileSync(path.join(localDir, 'MIGRATION_REPORT.md'), 'utf8')
+      const report = fs.readFileSync(path.join(localDir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       const tableStart = report.indexOf('## Environment mapping table')
       const nextHeading = report.indexOf('\n## ', tableStart + 1)
       const tableSection = report.slice(tableStart, nextHeading === -1 ? undefined : nextHeading)
@@ -260,7 +260,7 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
         source: launchdarklySource,
       })
 
-      const report = fs.readFileSync(path.join(localDir, 'MIGRATION_REPORT.md'), 'utf8')
+      const report = fs.readFileSync(path.join(localDir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       expect(report).to.not.match(/Users will be re-bucketed/)
       expect(report).to.not.match(/^##\s*Conversion notes/m)
       // qfg-bth9: with no lossy events, both follow-up sub-sections still render `_(none)_`.
@@ -357,7 +357,7 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
       run(readClone, 'clone', remoteDir, '.')
       expect(fs.existsSync(path.join(readClone, 'feature-flags', 'gradual-rollout.json'))).to.equal(true)
 
-      const report = fs.readFileSync(path.join(readClone, 'MIGRATION_REPORT.md'), 'utf8')
+      const report = fs.readFileSync(path.join(readClone, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       expect(report).to.match(/^##\s*Users will be re-bucketed/m)
       expect(report.slice(report.indexOf('## Users will be re-bucketed'))).to.include('gradual-rollout')
       expect(report).to.match(/^##\s*Conversion notes/m)

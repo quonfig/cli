@@ -11,7 +11,7 @@ import type {CommitMeta, LegacyChange, MigrationSource, QuonfigFile} from '../..
 // its own git commit, authored as the Launch user with the original
 // changedAt as GIT_AUTHOR_DATE and the change `summary` as the message.
 // One final state-file commit lands on top (migrator identity, now), carrying
-// .qf/import-state.json + MIGRATION_REPORT.md so the audit-log commits aren't
+// .qf/import-state.json + .qf/MIGRATION_REPORT.md so the audit-log commits aren't
 // polluted by bookkeeping churn.
 
 function run(cwd: string, ...args: string[]): string {
@@ -238,7 +238,7 @@ describe('migrate --full-summary: per-change audit-log commits (qfg-wbkj)', func
     expect(new Date(t3.authorIsoDate).getTime()).to.equal(3000)
 
     // Final commit is the state-file bookkeeping
-    expect(final.changedPaths).to.include.members(['.qf/import-state.json', 'MIGRATION_REPORT.md'])
+    expect(final.changedPaths).to.include.members(['.qf/import-state.json', '.qf/MIGRATION_REPORT.md'])
     expect(final.changedPaths).to.not.include('feature-flags/flag-x.json')
 
     // Latest content matches the final change (false)
@@ -379,7 +379,7 @@ describe('migrate --full-summary: per-change audit-log commits (qfg-wbkj)', func
     // Final commit touches state files and the migration report only
     const finalPaths = new Set(log[3].changedPaths)
     expect(finalPaths.has('.qf/import-state.json')).to.equal(true)
-    expect(finalPaths.has('MIGRATION_REPORT.md')).to.equal(true)
+    expect(finalPaths.has('.qf/MIGRATION_REPORT.md')).to.equal(true)
     expect(finalPaths.has('feature-flags/flag-x.json')).to.equal(false)
   })
 

@@ -7,6 +7,7 @@ import {
   buildMigrationReport,
   deriveFollowUpFromConversionNotes,
   type MigrationReportData,
+  migrationReportPath,
   writeMigrationReport,
 } from '../../src/migrate/migration-report.js'
 import type {ConversionNote} from '../../src/migrate/quonfig-target/report.js'
@@ -694,16 +695,23 @@ describe('migrate/migration-report', () => {
       fs.rmSync(tmpdir, {force: true, recursive: true})
     })
 
-    it('writes MIGRATION_REPORT.md at the output dir root', () => {
+    it('migrationReportPath points under the .qf/ bookkeeping dir, not the repo root', () => {
+      expect(migrationReportPath('/ws')).to.equal(path.join('/ws', '.qf', 'MIGRATION_REPORT.md'))
+    })
+
+    it('writes MIGRATION_REPORT.md into .qf/ so qfg push (which skips dotdirs) does not sweep it up', () => {
       writeMigrationReport(tmpdir, baseData())
-      const reportPath = path.join(tmpdir, 'MIGRATION_REPORT.md')
+      const reportPath = path.join(tmpdir, '.qf', 'MIGRATION_REPORT.md')
       expect(fs.existsSync(reportPath)).to.equal(true)
+      // It must NOT land at the repo root, where the server push allow-list rejects it.
+      expect(fs.existsSync(path.join(tmpdir, 'MIGRATION_REPORT.md'))).to.equal(false)
       const contents = fs.readFileSync(reportPath, 'utf8')
       expect(contents).to.match(/^#\s*Migration Report/m)
     })
 
-    it('overwrites an existing MIGRATION_REPORT.md on re-run', () => {
-      fs.writeFileSync(path.join(tmpdir, 'MIGRATION_REPORT.md'), 'OLD CONTENT\n')
+    it('overwrites an existing report on re-run', () => {
+      fs.mkdirSync(path.join(tmpdir, '.qf'), {recursive: true})
+      fs.writeFileSync(path.join(tmpdir, '.qf', 'MIGRATION_REPORT.md'), 'OLD CONTENT\n')
 
       writeMigrationReport(
         tmpdir,
@@ -720,7 +728,7 @@ describe('migrate/migration-report', () => {
         }),
       )
 
-      const contents = fs.readFileSync(path.join(tmpdir, 'MIGRATION_REPORT.md'), 'utf8')
+      const contents = fs.readFileSync(path.join(tmpdir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       expect(contents).to.not.include('OLD CONTENT')
       expect(contents).to.match(/Flags migrated.*2/)
     })
@@ -760,7 +768,7 @@ describe('migrate/migration-report', () => {
         }),
       )
 
-      const contents = fs.readFileSync(path.join(tmpdir, 'MIGRATION_REPORT.md'), 'utf8')
+      const contents = fs.readFileSync(path.join(tmpdir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       expect(contents).to.match(/Flags migrated.*1/)
       expect(contents).to.not.include('flag-1')
       expect(contents).to.not.include('flag-2')
@@ -769,14 +777,14 @@ describe('migrate/migration-report', () => {
 
     it('still writes a report when dryRun=true', () => {
       writeMigrationReport(tmpdir, baseData({dryRun: true}))
-      const contents = fs.readFileSync(path.join(tmpdir, 'MIGRATION_REPORT.md'), 'utf8')
+      const contents = fs.readFileSync(path.join(tmpdir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       expect(contents).to.match(/DRY RUN/)
     })
 
-    it('creates the output directory if it does not exist', () => {
+    it('creates the .qf/ directory under an output dir that does not exist', () => {
       const nested = path.join(tmpdir, 'nested', 'out')
       writeMigrationReport(nested, baseData())
-      expect(fs.existsSync(path.join(nested, 'MIGRATION_REPORT.md'))).to.equal(true)
+      expect(fs.existsSync(path.join(nested, '.qf', 'MIGRATION_REPORT.md'))).to.equal(true)
     })
   })
 })

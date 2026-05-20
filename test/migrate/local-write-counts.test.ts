@@ -40,7 +40,7 @@ describe('buildMigrationCounts (qfg-7eig)', () => {
   })
 
   it('ignores paths that do not match a known type-dir', () => {
-    const counts = buildMigrationCounts(['quonfig.json', 'README.md', 'MIGRATION_REPORT.md'], 0, 0)
+    const counts = buildMigrationCounts(['quonfig.json', 'README.md', '.qf/MIGRATION_REPORT.md'], 0, 0)
     expect(counts.flagsMigrated).to.equal(0)
     expect(counts.configsMigrated).to.equal(0)
   })

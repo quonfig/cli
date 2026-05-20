@@ -8,7 +8,7 @@ import {BaseCommand} from '../index.js'
 import {CrossSourceError, type ImportState, assertSourceMatches, readImportState} from '../migrate/import-state.js'
 import {applyLocalMigration, MigratorKeyCollisionError} from '../migrate/local-write.js'
 import {buildPushConflictSuggestion} from '../migrate/migrate-suggestion.js'
-import {type MigrationReportData} from '../migrate/migration-report.js'
+import {type MigrationReportData, migrationReportPath} from '../migrate/migration-report.js'
 import {type ConversionNote} from '../migrate/quonfig-target/report.js'
 import {PushConflictError, PushHookRejectedError} from '../util/clone-and-stack-push.js'
 import {MigratorVerifyError, pushMigrationToCloud} from '../migrate/push-to-cloud.js'
@@ -327,6 +327,10 @@ export default class Migrate extends BaseCommand {
               ? `Pushed ${toProcess.length} change(s). commit=${result.commitSha?.slice(0, 8) ?? ''} action=${result.action}`
               : `No net changes produced by this run. Nothing to commit or push.`,
           )
+          this.log(
+            `Migration report written to ${migrationReportPath(dir)} — review it before cutover ` +
+              '(it lives in the hidden .qf/ directory).',
+          )
 
           return {
             ...payload,
@@ -426,8 +430,10 @@ export default class Migrate extends BaseCommand {
     this.log('')
     this.log('Next steps:')
     this.log(`  1. Review the migrated config files in ${dir}`)
-    this.log(`  2. Read ${path.join(dir, 'MIGRATION_REPORT.md')} — it lists every config that was`)
-    this.log('     skipped, coerced, or needs a manual follow-up.')
+    this.log('  2. Read the migration report — it lists every config that was skipped,')
+    this.log('     coerced, or needs a manual follow-up:')
+    this.log(`       ${migrationReportPath(dir)}`)
+    this.log('     (it lives in the hidden .qf/ directory — use `ls -a` to see it)')
     this.log('  3. Publish to a Quonfig workspace once the migration looks right:')
     this.log(`       qfg push --dir ${dir} --workspace <org-slug>/<workspace-slug>`)
     this.log('     (run `qfg login` first if you have not). You can also re-run this command')
@@ -505,7 +511,7 @@ function warnAboutDroppedOverrides(cmd: BaseCommand, dropped: DroppedOverrideSum
   }
 
   cmd.warn(
-    `If any of these envs are still in use, restore them in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
+    `If any of these envs are still in use, restore them in the source system and re-run the migration. Full detail is also written to .qf/MIGRATION_REPORT.md.`,
   )
 }
 
@@ -521,7 +527,7 @@ function warnAboutDuplicateResolutions(cmd: BaseCommand, resolved: DuplicateReso
     )
   }
 
-  cmd.warn('Full detail is also written to MIGRATION_REPORT.md.')
+  cmd.warn('Full detail is also written to .qf/MIGRATION_REPORT.md.')
 }
 
 function warnAboutCoercedSentinels(cmd: BaseCommand, coerced: CoercedSentinelSummary | null): void {
@@ -540,7 +546,7 @@ function warnAboutCoercedSentinels(cmd: BaseCommand, coerced: CoercedSentinelSum
   }
 
   cmd.warn(
-    `If you want a real default for these rules, set one in the source system and re-run the migration. Full detail is also written to MIGRATION_REPORT.md.`,
+    `If you want a real default for these rules, set one in the source system and re-run the migration. Full detail is also written to .qf/MIGRATION_REPORT.md.`,
   )
 }
 
@@ -551,7 +557,7 @@ function warnAboutConversionNotes(cmd: BaseCommand, notes: ConversionNote[] | nu
     cmd.warn(
       `${rebucketed.length} flag(s)/segment(s) use a percentage rollout — LaunchDarkly and Quonfig bucket users ` +
         `differently, so individual user assignments WILL change after migration (the rollout percentage is preserved). ` +
-        `See the "Users will be re-bucketed" section of MIGRATION_REPORT.md.`,
+        `See the "Users will be re-bucketed" section of .qf/MIGRATION_REPORT.md.`,
     )
   }
 
@@ -559,7 +565,7 @@ function warnAboutConversionNotes(cmd: BaseCommand, notes: ConversionNote[] | nu
   if (other.length > 0) {
     cmd.warn(
       `${other.length} source concept(s) could not be converted exactly (dropped prerequisites, lossy individual ` +
-        `targets, etc.). Nothing was silently dropped — see the "Conversion notes" section of MIGRATION_REPORT.md.`,
+        `targets, etc.). Nothing was silently dropped — see the "Conversion notes" section of .qf/MIGRATION_REPORT.md.`,
     )
   }
 }
@@ -574,7 +580,7 @@ function warnAboutSkippedConfigs(cmd: BaseCommand, skipped: null | SkippedConfig
     cmd.warn(`  ${entry.key}: ${entry.reason}`)
   }
 
-  cmd.warn('Full detail is also written to MIGRATION_REPORT.md.')
+  cmd.warn('Full detail is also written to .qf/MIGRATION_REPORT.md.')
 }
 
 function resolveTargetDir(dirFlag: string | undefined, cwd: string): string {

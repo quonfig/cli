@@ -770,11 +770,22 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   return sections.join('\n\n') + '\n'
 }
 
-export const migrationReportPath = (outputDir: string): string => path.join(outputDir, 'MIGRATION_REPORT.md')
+/**
+ * Path of the migration report. It lives inside the `.qf/` bookkeeping
+ * directory (next to `import-state.json`), NOT the workspace root (qfg-a631).
+ *
+ * `qfg push` mirrors every non-dotfile on disk and the server's
+ * config-path-allowlist only permits `configs/`, `feature-flags/`, etc. plus
+ * `quonfig.json`/`README.md`. A root-level `MIGRATION_REPORT.md` got swept
+ * into the push and rejected ("Path not allowed by push allow-list"). Keeping
+ * it under the `.qf/` dotdir means the existing dotfile/dotdir skip in
+ * `bare-path-diff.ts` excludes it — no server change needed.
+ */
+export const migrationReportPath = (outputDir: string): string => path.join(outputDir, '.qf', 'MIGRATION_REPORT.md')
 
 export const writeMigrationReport = (outputDir: string, data: MigrationReportData): string => {
-  fs.mkdirSync(outputDir, {recursive: true})
   const filePath = migrationReportPath(outputDir)
+  fs.mkdirSync(path.dirname(filePath), {recursive: true})
   fs.writeFileSync(filePath, buildMigrationReport(data), 'utf8')
   return filePath
 }

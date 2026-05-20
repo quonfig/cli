@@ -436,7 +436,7 @@ export interface BuildAuditFinalCommitOptions {
 
 /**
  * qfg-wbkj: build the final state-file commit for audit-log mode. Writes
- * `.qf/import-state.json` + `MIGRATION_REPORT.md` with cumulative counts read
+ * `.qf/import-state.json` + `.qf/MIGRATION_REPORT.md` with cumulative counts read
  * from disk, and surfaces the source's accumulated dropped/skipped/coerced
  * summaries via `onAccumulatorUpdate`. The `preWrite` / `postWrite` hooks let
  * push-to-cloud merge environments and run server-side-equivalent validation

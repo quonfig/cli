@@ -307,7 +307,7 @@ describe('migrate/sources/flagsmith — both write modes + reporting (Epic 5)', 
       expect(fs.existsSync(path.join(localDir, 'segments', 'fx-seg-modulo.json'))).to.equal(true)
       expect(fs.existsSync(path.join(localDir, 'segments', 'fx-seg-traits.json'))).to.equal(true)
 
-      const report = fs.readFileSync(path.join(localDir, 'MIGRATION_REPORT.md'), 'utf8')
+      const report = fs.readFileSync(path.join(localDir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
 
       // Plan §5.4 "users will be re-bucketed" lists every MV feature.
       expect(report).to.match(/^##\s*Users will be re-bucketed/m)
@@ -408,7 +408,7 @@ describe('migrate/sources/flagsmith — both write modes + reporting (Epic 5)', 
       expect(fs.existsSync(path.join(readClone, 'feature-flags', 'fx-mv-experiment.json'))).to.equal(true)
       expect(fs.existsSync(path.join(readClone, 'segments', 'fx-seg-traits.json'))).to.equal(true)
 
-      const report = fs.readFileSync(path.join(readClone, 'MIGRATION_REPORT.md'), 'utf8')
+      const report = fs.readFileSync(path.join(readClone, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
       expect(report).to.match(/^##\s*Users will be re-bucketed/m)
       expect(report.slice(report.indexOf('## Users will be re-bucketed'))).to.include('fx-mv-experiment')
       expect(report).to.match(/^##\s*Conversion notes/m)

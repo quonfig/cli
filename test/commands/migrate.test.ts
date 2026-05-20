@@ -280,7 +280,9 @@ describe('migrate', () => {
         // "What now?" guidance for a local (non-push) migration.
         expect(ctx.stdout).to.contain('Next steps:')
         expect(ctx.stdout).to.contain('qfg push --dir')
+        // The report now lives in the hidden .qf/ dir; the guidance must say so (qfg-a631).
         expect(ctx.stdout).to.contain('MIGRATION_REPORT.md')
+        expect(ctx.stdout).to.contain('hidden .qf/ directory')
       })
   })
 

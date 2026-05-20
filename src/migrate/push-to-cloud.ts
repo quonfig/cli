@@ -63,8 +63,8 @@ export interface PushMigrationToCloudOptions {
    * each commit authored as the original Launch user with their `changedAt` as
    * GIT_AUTHOR_DATE and `summary` as the message. One final state-file commit
    * (migrator identity, now) lands on top carrying .qf/import-state.json +
-   * MIGRATION_REPORT.md so the audit-log commits aren't polluted by bookkeeping
-   * churn. Requires that `source.getCommitMeta` be defined.
+   * .qf/MIGRATION_REPORT.md so the audit-log commits aren't polluted by
+   * bookkeeping churn. Requires that `source.getCommitMeta` be defined.
    */
   fullHistory?: boolean
   importState: ImportState
