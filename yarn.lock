@@ -1888,7 +1888,7 @@ __metadata:
     acorn: "npm:^8.10.0"
     acorn-walk: "npm:^8.3.5"
     chai: "npm:^4"
-    chalk: "npm:^5.4.1"
+    chalk: "npm:^5.6.2"
     common-tags: "npm:^1.8.2"
     eslint: "npm:^8"
     eslint-config-oclif: "npm:^5"
@@ -3336,10 +3336,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"chalk@npm:^5.3.0, chalk@npm:^5.4.1":
+"chalk@npm:^5.3.0":
   version: 5.5.0
   resolution: "chalk@npm:5.5.0"
   checksum: 10c0/23063b544f7c2fe57d25ff814807de561f8adfff72e4f0051051eaa606f772586470507ccd38d89166300eeaadb0164acde8bb8a0716a0f2d56ccdf3761d5e4f
+  languageName: node
+  linkType: hard
+
+"chalk@npm:^5.6.2":
+  version: 5.6.2
+  resolution: "chalk@npm:5.6.2"
+  checksum: 10c0/99a4b0f0e7991796b1e7e3f52dceb9137cae2a9dfc8fc0784a550dc4c558e15ab32ed70b14b21b52beb2679b4892b41a0aa44249bcb996f01e125d58477c6976
   languageName: node
   linkType: hard
 
