@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.55 - 2026-05-21
+
+- chore(deps): dependency-only release — picks up four just-merged Dependabot bumps with no user-facing CLI behavior change. `chalk` 5.5.0 → 5.6.2 (terminal-color runtime dep) and `@oclif/plugin-help` 6.2.32 → 6.2.49 (oclif help-output runtime dep); `tsx` 4.21.0 → 4.22.0 and `oclif` 4.22.29 → 4.23.7 (build/dev-only — TypeScript runner and the oclif manifest/readme tooling). Cut so the published `@quonfig/cli` is not left sitting behind `main`. (#26, #27, #28, #30)
+
 ## 0.0.54 - 2026-05-20
 
 - fix(push): bare-path `qfg push` now sends the workspace-HEAD optimistic lock (`expectedSha`) the server requires. Pushing from a `qfg migrate` output directory failed with `configs.push failed (HTTP 426): Your qfg CLI is older than 0.0.37 ...` even on an up-to-date CLI — the bare-path push branch never sent `expectedSha`, and the server rejects its absence as a presumed-too-old client. A migrated directory is a git repo with no origin, so `qfg push` from it always takes the bare path, which meant the migrate→push flow was broken on the happy path. The bare-path probe-clone already clones the cloud repo to compute the diff, so the CLI now uses that clone's HEAD as `expectedSha`. (qfg-nhcb)
