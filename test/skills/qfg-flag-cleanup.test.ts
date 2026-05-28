@@ -33,7 +33,7 @@ describe('qfg-flag-cleanup skill', () => {
     let frontMatter: string
 
     before(() => {
-      const body = fs.readFileSync(skillPath, 'utf8')
+      const body = fs.readFileSync(skillPath, 'utf8').replaceAll('\r\n', '\n')
       const match = body.match(/^---\n([\S\s]*?)\n---/)
       expect(match, 'SKILL.md must open with a YAML front-matter block').to.not.equal(null)
       frontMatter = match![1]
@@ -63,7 +63,7 @@ describe('qfg-flag-cleanup skill', () => {
     let body: string
 
     before(() => {
-      body = fs.readFileSync(skillPath, 'utf8')
+      body = fs.readFileSync(skillPath, 'utf8').replaceAll('\r\n', '\n')
     })
 
     it('points the agent at the .qf/cleanup/<key>.json payload as the source of truth', () => {

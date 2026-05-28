@@ -283,7 +283,7 @@ telemetry before retiring.`
     fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2) + '\n', 'utf8')
     ensureGitignoreEntry(cwd)
 
-    const relPayloadPath = path.relative(cwd, payloadPath) || payloadPath
+    const relPayloadPath = (path.relative(cwd, payloadPath) || payloadPath).split(path.sep).join('/')
 
     this.log(`Skill:        ${SKILL_NAME}`)
     this.log(`Flag:         ${flag.key} (${flag.valueType})`)
