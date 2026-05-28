@@ -88,9 +88,11 @@ Related commands:
       return this.err(errorMsg, {error: errorMsg})
     }
 
-    const fullConfig = configRequest.json
+    const fullConfig = configRequest.json as Record<string, unknown>
 
     this.verboseLog('Full config:', fullConfig)
+
+    const readyForCleanup = fullConfig?.readyForCleanup === true
 
     // Get environments
     const environments = await getEnvironments(this)
@@ -106,6 +108,9 @@ Related commands:
     this.log('')
 
     const json: JsonObj = {url}
+    if (readyForCleanup) {
+      json.readyForCleanup = true
+    }
 
     json.values = this.parseConfig(fullConfig, environments, url)
     this.log('')
@@ -116,6 +121,12 @@ Related commands:
       if (evalStats) {
         json.evaluations = evalStats
       }
+    }
+
+    if (readyForCleanup) {
+      this.log(
+        `→ This flag is marked for cleanup. Run \`qfg cleanup status ${key}\` for telemetry, \`qfg cleanup remove ${key}\` to start the removal handoff.`,
+      )
     }
 
     return {[key]: json}

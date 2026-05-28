@@ -8,6 +8,7 @@ import {
   keyWithEvaluations,
   keyWithNoEvaluations,
   rawSecret,
+  readyForCleanupKey,
   rolloutRuleKey,
   secretKey,
   server,
@@ -183,6 +184,35 @@ No evaluations found for the past 24 hours
       .it('renders [see rules] for an env with a weighted_values rollout (qfg-5j9i)', (ctx) => {
         expect(ctx.stdout).not.contains('[object Object]')
         expect(ctx.stdout).contains('jeffrey: [see rules]')
+      })
+  })
+
+  // qfg-olm2.6: when a flag is marked readyForCleanup=true, `qfg info` should
+  // surface a hint pointing at the cleanup workflow. Agents call `info` often,
+  // so this is the highest-leverage discovery surface for the cleanup flow.
+  describe('when the flag is marked readyForCleanup=true', () => {
+    test
+      .stdout()
+      .command(['info', readyForCleanupKey, '--exclude-evaluations'])
+      .it('appends a cleanup hint to the non-JSON output (qfg-olm2.6)', (ctx) => {
+        expect(ctx.stdout).to.contain('This flag is marked for cleanup.')
+        expect(ctx.stdout).to.contain(`qfg cleanup status ${readyForCleanupKey}`)
+        expect(ctx.stdout).to.contain(`qfg cleanup remove ${readyForCleanupKey}`)
+      })
+
+    test
+      .stdout()
+      .command(['info', readyForCleanupKey, '--exclude-evaluations', '--json'])
+      .it('includes readyForCleanup=true in --json output (qfg-olm2.6)', (ctx) => {
+        const output = JSON.parse(ctx.stdout)
+        expect(output[readyForCleanupKey].readyForCleanup).to.equal(true)
+      })
+
+    test
+      .stdout()
+      .command(['info', keyWithNoEvaluations, '--exclude-evaluations'])
+      .it('does NOT show the cleanup hint when readyForCleanup is unset (qfg-olm2.6)', (ctx) => {
+        expect(ctx.stdout).to.not.contain('This flag is marked for cleanup.')
       })
   })
 

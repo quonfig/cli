@@ -9,6 +9,7 @@ export const secretKey = 'a.secret.config'
 export const confidentialKey = 'a.confidential.config'
 export const jsonKey = 'question.max-response.override'
 export const rolloutRuleKey = 'fx-rule-rollout'
+export const readyForCleanupKey = 'flag.ready-for-cleanup'
 
 export const rawSecret = `875247386844c18c58a97c--b307b97a8288ac9da3ce0cf2--7ab0c32e044869e355586ed653a435de`
 
@@ -181,6 +182,19 @@ const rolloutRuleConfig = {
   ],
 }
 
+// Flag marked readyForCleanup=true — verifies that `qfg info` appends the
+// cleanup hint to non-JSON output and surfaces the field in --json (qfg-olm2.6).
+const readyForCleanupConfig = {
+  key: readyForCleanupKey,
+  type: 'feature_flag',
+  valueType: 'bool',
+  readyForCleanup: true,
+  default: {
+    rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: true}}],
+  },
+  environments: [],
+}
+
 const confidentialConfig = {
   key: confidentialKey,
   type: 'config',
@@ -242,6 +256,16 @@ const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
           name: 'Rollout Rule',
           description: '',
         },
+        {
+          key: readyForCleanupKey,
+          type: 'feature_flag',
+          valueType: 'bool',
+          version: 1,
+          id: 7,
+          name: 'Ready For Cleanup',
+          description: '',
+          readyForCleanup: true,
+        },
       ],
     },
   }),
@@ -274,6 +298,10 @@ const configHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, asyn
 
   if (key === rolloutRuleKey) {
     return HttpResponse.json({json: rolloutRuleConfig})
+  }
+
+  if (key === readyForCleanupKey) {
+    return HttpResponse.json({json: readyForCleanupConfig})
   }
 
   return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
