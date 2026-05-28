@@ -128,7 +128,6 @@ drill-in or hand off the removal to the qfg-flag-cleanup Claude skill.`
     const todayMs = startOfDayUtcMs(new Date())
     const daysAgoByKey = new Map<string, Map<number, number>>()
 
-     
     for (const env of environments) {
       // eslint-disable-next-line no-await-in-loop
       const req = await this.apiClient.post('/api/v1/analytics/sparklines', {

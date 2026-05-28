@@ -203,6 +203,32 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
     })
   }
 
+  if (key === variantFlagKey) {
+    return HttpResponse.json({
+      json: {
+        key: variantFlagKey,
+        type: 'feature_flag',
+        valueType: 'string',
+        readyForCleanup: true,
+        default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'on'}}]},
+        environments: [],
+      },
+    })
+  }
+
+  if (key === notReadyFlagKey) {
+    return HttpResponse.json({
+      json: {
+        key: notReadyFlagKey,
+        type: 'feature_flag',
+        valueType: 'bool',
+        readyForCleanup: false,
+        default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}]},
+        environments: [],
+      },
+    })
+  }
+
   return HttpResponse.json({json: {error: 'Not found'}}, {status: 404})
 })
 
