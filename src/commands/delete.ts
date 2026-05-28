@@ -1,7 +1,8 @@
 import {Args, Flags} from '@oclif/core'
 
 import {APICommand} from '../index.js'
-import {confirmTypedSlug} from '../push/confirm.js'
+import {checkRecentEvalsSafetyNudge, type SparklinesResult} from '../delete/safety-nudge.js'
+import {confirmTypedSlug, confirmYesNo} from '../push/confirm.js'
 import isInteractive from '../util/is-interactive.js'
 import {checkmark} from '../util/color.js'
 import {loadTokens} from '../util/token-storage.js'
@@ -98,6 +99,32 @@ Examples
     if (!flags.yes) {
       if (!isInteractive(flags)) {
         return this.err(`Refusing to delete ${key} without confirmation. Pass --yes or run interactively.`)
+      }
+
+      if (item.type === 'feature_flag') {
+        const safety = await checkRecentEvalsSafetyNudge({
+          key,
+          fetchSparklines: async (): Promise<SparklinesResult> => {
+            const res = await this.apiClient.post('/api/v1/analytics/configSparklines', {
+              workspaceId: this.workspaceId,
+              configKey: key,
+            })
+            if (!res.ok) {
+              const errMsg = (res.error as {error?: string} | undefined)?.error ?? `HTTP ${res.status}`
+              return {ok: false, error: errMsg}
+            }
+
+            const json = res.json as {rows?: Array<{counts: number[]; days: string[]; environment: string}>}
+            return {ok: true, rows: json.rows ?? []}
+          },
+          prompt: (msg) => confirmYesNo(msg),
+          warn: (msg) => this.log(`warning: ${msg}`),
+        })
+        if (!safety.proceed) {
+          return this.err(
+            `Aborted: ${key} still has recent evals. Run \`qfg cleanup remove ${key}\` first, then retry.`,
+          )
+        }
       }
 
       this.log(`About to delete ${item.type.replaceAll('_', ' ')}: ${key}`)

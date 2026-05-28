@@ -20,6 +20,7 @@ export let lastLogLevelDeleteInput: any = null
 export let flagDeleteCallCount = 0
 export let configDeleteCallCount = 0
 export let logLevelDeleteCallCount = 0
+export let configSparklinesCallCount = 0
 
 // Track stale-SHA retry behavior: first call rejects, second accepts.
 let staleRetryArmed = false
@@ -34,6 +35,7 @@ export function resetCaptured() {
   flagDeleteCallCount = 0
   configDeleteCallCount = 0
   logLevelDeleteCallCount = 0
+  configSparklinesCallCount = 0
   staleRetryArmed = false
 }
 
@@ -98,4 +100,15 @@ const logLevelsDeleteHandler = http.post(`${getApiBase()}/api/v1/logLevels/delet
   return HttpResponse.json({json: {ok: true, commitSha: 'sha-after-delete'}})
 })
 
-export const server = setupServer(metadataListHandler, flagsDeleteHandler, configsDeleteHandler, logLevelsDeleteHandler)
+const configSparklinesHandler = http.post(`${getApiBase()}/api/v1/analytics/configSparklines`, () => {
+  configSparklinesCallCount += 1
+  return HttpResponse.json({json: {daysOfHistory: 60, rows: []}})
+})
+
+export const server = setupServer(
+  metadataListHandler,
+  flagsDeleteHandler,
+  configsDeleteHandler,
+  logLevelsDeleteHandler,
+  configSparklinesHandler,
+)

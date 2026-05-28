@@ -63,6 +63,24 @@ describe('delete', () => {
       })
   })
 
+  describe('safety nudge (qfg-olm2.7)', () => {
+    test
+      .stdout()
+      .command(['delete', 'feature.flag.to-delete', '--yes'])
+      .it('--yes skips the configSparklines safety-nudge call', () => {
+        expect(deleteResponses.configSparklinesCallCount).to.equal(0)
+        expect(deleteResponses.flagDeleteCallCount).to.equal(1)
+      })
+
+    test
+      .stdout()
+      .command(['delete', 'config.to-delete', '--yes'])
+      .it('does not call configSparklines for non-flag types', () => {
+        expect(deleteResponses.configSparklinesCallCount).to.equal(0)
+        expect(deleteResponses.configDeleteCallCount).to.equal(1)
+      })
+  })
+
   describe('confirmation gate (acceptance #2)', () => {
     test
       .stderr()
