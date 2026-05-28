@@ -2,7 +2,8 @@
 *-debug.log
 *-error.log
 /.idea
-/.claude
+/.claude/*
+!/.claude/skills/
 /.beads
 /.nyc_output
 /dist
