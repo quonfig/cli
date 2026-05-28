@@ -46,7 +46,9 @@ Log levels:
   # Log-level keys must start with "${LOG_LEVEL_KEY_PREFIX}".
   # For per-logger targeting, create ONE log-level config per service and add
   # rules on the "quonfig-sdk-logging.key" context property (e.g.
-  # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.`
+  # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.
+
+When this flag has done its job, mark readyForCleanup: true in the UI and run \`qfg cleanup list\` to retire it.`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.new.flag --type boolean-flag',

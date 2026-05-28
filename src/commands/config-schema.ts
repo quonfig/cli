@@ -138,6 +138,11 @@ Weights are integers out of 100,000 (not percentages):
 hashByPropertyName controls the bucket assignment property (default: "user.key").
 
 ────────────────────────────────────────────────────────────
+LIFECYCLE FIELDS
+────────────────────────────────────────────────────────────
+  readyForCleanup  (boolean)  Marks a feature_flag as safe to retire. See \`qfg cleanup\` for the retirement workflow.
+
+────────────────────────────────────────────────────────────
 RELATED COMMANDS
 ────────────────────────────────────────────────────────────
   qfg create my.flag --type boolean-flag          create a new flag
@@ -146,6 +151,7 @@ RELATED COMMANDS
   qfg pull --dir ./config                         clone workspace to edit JSON directly
   qfg verify ./config                             validate all JSON files before pushing
   qfg info my.flag                                inspect current values and rules
+  qfg cleanup list                                list flags marked readyForCleanup=true
   qfg config-schema --json-schema                 print the machine-readable JSON Schema
 `.trim()
 
