@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.55 darwin-arm64 node-v24.4.1
+@quonfig/cli/0.0.55 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -126,6 +126,11 @@ script doesn't need to know which env it's running in.
 * [`qfg activity history [NAME]`](#qfg-activity-history-name)
 * [`qfg activity restore [NAME]`](#qfg-activity-restore-name)
 * [`qfg audit-log [NAME]`](#qfg-audit-log-name)
+* [`qfg cleanup`](#qfg-cleanup)
+* [`qfg cleanup list`](#qfg-cleanup-list)
+* [`qfg cleanup remove [NAME]`](#qfg-cleanup-remove-name)
+* [`qfg cleanup status [NAME]`](#qfg-cleanup-status-name)
+* [`qfg cleanup verify [NAME]`](#qfg-cleanup-verify-name)
 * [`qfg config-schema`](#qfg-config-schema)
 * [`qfg create NAME`](#qfg-create-name)
 * [`qfg delete NAME`](#qfg-delete-name)
@@ -363,6 +368,224 @@ EXAMPLES
 
 _See code: [src/commands/audit-log.ts](https://github.com/quonfig/cli/blob/v0.0.55/src/commands/audit-log.ts)_
 
+## `qfg cleanup`
+
+Retire feature flags that have done their job.
+
+```
+USAGE
+  $ qfg cleanup [--json] [--interactive] [--no-color] [--verbose]
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Retire feature flags that have done their job.
+
+  The cleanup workflow turns a flag's "Ready for cleanup" marker into an end-to-end
+  removal flow: surface the flags that are safe to retire, hand the actual code
+  removal to the qfg-flag-cleanup Claude skill, then delete the flag definition
+  once the call sites are gone.
+
+  Lifecycle (high-level):
+  1. Owner flips readyForCleanup=true in the UI            (already exists)
+  2. qfg cleanup list                                       see candidates + telemetry
+  3. qfg cleanup status <key>                               drill into one flag
+  4. qfg cleanup remove <key>                               handoff to the cleanup skill
+  5. PR merges, SDK redeploys, telemetry confirms 0 evals
+  6. qfg cleanup verify <key>                               (optional) confirm safe
+  7. qfg delete <key>                                       remove the flag definition
+
+EXAMPLES
+  $ qfg cleanup list
+
+  $ qfg cleanup list --json
+
+  $ qfg cleanup status my.flag.key
+```
+
+_See code: [src/commands/cleanup.ts](https://github.com/quonfig/cli/blob/v0.0.55/src/commands/cleanup.ts)_
+
+## `qfg cleanup list`
+
+List feature flags marked readyForCleanup=true, with eval volume per window.
+
+```
+USAGE
+  $ qfg cleanup list [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+
+FLAGS
+  --json  Return structured rows for agent consumption
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  List feature flags marked readyForCleanup=true, with eval volume per window.
+
+  Columns:
+  KEY         the flag key
+  TYPE        the flag's valueType (bool, string, int, etc.)
+  EVALS_24H   evals counted in today's bucket (latest day)
+  EVALS_2D    evals in the last 2 calendar days
+  EVALS_7D    evals in the last 7 calendar days
+  EVALS_30D   evals in the last 30 calendar days
+  LAST_EVAL   most recent calendar day with any evals (UTC), blank if none
+  CLASS       quiet (zero evals in last 2 days) or active
+
+  Default sort: quiet first, oldest LAST_EVAL at top.
+
+  Pass --json for the structured object (rows[]). Each row carries the columns
+  above plus the raw eval counts your agent can reason about itself.
+
+  Once you've picked a candidate, run `qfg cleanup status <key>` for the
+  drill-in or hand off the removal to the qfg-flag-cleanup Claude skill.
+
+EXAMPLES
+  $ qfg cleanup list
+
+  $ qfg cleanup list --json
+```
+
+_See code: [src/commands/cleanup/list.ts](https://github.com/quonfig/cli/blob/v0.0.55/src/commands/cleanup/list.ts)_
+
+## `qfg cleanup remove [NAME]`
+
+Write a cleanup payload for a ready-for-cleanup flag and hand off to the qfg-flag-cleanup Claude skill.
+
+```
+USAGE
+  $ qfg cleanup remove [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--force]
+
+ARGUMENTS
+  NAME  config/feature-flag/etc. name
+
+FLAGS
+  --force  Skip the evals_2d > 0 safety gate (useful when telemetry is delayed but you know the flag is dead)
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Write a cleanup payload for a ready-for-cleanup flag and hand off to the qfg-flag-cleanup Claude skill.
+
+  Modeled on `qfg migrate my-code` — this command never edits source files
+  itself. It validates that the flag is marked readyForCleanup=true, refuses to
+  proceed if there are still evals_2d > 0 (use --force to override), writes
+  `.qf/cleanup/<key>.json` describing the flag's current rule shape +
+  telemetry, and prints instructions to invoke the qfg-flag-cleanup skill which
+  asks the engineer which value should "win" and applies the inlining.
+
+  The payload deliberately does NOT suggest a winning value; that's the
+  engineer's call. Run `qfg cleanup status <key>` first if you want to inspect
+  telemetry before retiring.
+
+EXAMPLES
+  $ qfg cleanup remove my.flag.key
+
+  $ qfg cleanup remove my.flag.key --force
+
+  $ qfg cleanup remove my.flag.key --json
+```
+
+_See code: [src/commands/cleanup/remove.ts](https://github.com/quonfig/cli/blob/v0.0.55/src/commands/cleanup/remove.ts)_
+
+## `qfg cleanup status [NAME]`
+
+Drill into one ready-for-cleanup flag — show telemetry across all environments and the current rule shape.
+
+```
+USAGE
+  $ qfg cleanup status [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+
+ARGUMENTS
+  NAME  config/feature-flag/etc. name
+
+FLAGS
+  --json  Return structured object for agent consumption
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Drill into one ready-for-cleanup flag — show telemetry across all environments and the current rule shape.
+
+  Use this after `qfg cleanup list` to inspect a specific flag before handing
+  removal off to the qfg-flag-cleanup Claude skill. The eval counts come from
+  analytics.configSparklines (the same backing data the per-flag sparklines on
+  the flag detail page use), summed into 24h/2d/7d/30d windows so you can decide
+  whether it's safe to retire.
+
+  Pass --json for the structured object including the full rule shape per
+  environment — the cleanup skill consumes this directly.
+
+EXAMPLES
+  $ qfg cleanup status my.flag.key
+
+  $ qfg cleanup status my.flag.key --json
+```
+
+_See code: [src/commands/cleanup/status.ts](https://github.com/quonfig/cli/blob/v0.0.55/src/commands/cleanup/status.ts)_
+
+## `qfg cleanup verify [NAME]`
+
+Confirm zero evals for a flag in the trailing N days (default 7). Exits 0 if safe to delete, non-zero otherwise.
+
+```
+USAGE
+  $ qfg cleanup verify [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--days <value>]
+
+ARGUMENTS
+  NAME  config/feature-flag/etc. name
+
+FLAGS
+  --days=<value>  [default: 7] Number of trailing calendar days that must have zero evals
+  --json          Return structured object for agent consumption
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Confirm zero evals for a flag in the trailing N days (default 7). Exits 0 if safe to delete, non-zero otherwise.
+
+  Read-only gate intended for chaining with `qfg delete` after a cleanup PR
+  has merged and the SDK has redeployed:
+
+  qfg cleanup verify my.flag.key && qfg delete my.flag.key
+
+  The trailing window is stricter than the `qfg cleanup remove` 2-day gate on
+  purpose — `remove` only writes a payload describing the flag, but `delete`
+  permanently removes the flag definition, so we want a longer quiet period
+  before chaining. Bump --days N if you want a more conservative window.
+
+EXAMPLES
+  $ qfg cleanup verify my.flag.key
+
+  $ qfg cleanup verify my.flag.key --days 14
+
+  $ qfg cleanup verify my.flag.key --json
+
+  $ qfg cleanup verify my.flag.key && qfg delete my.flag.key
+```
+
+_See code: [src/commands/cleanup/verify.ts](https://github.com/quonfig/cli/blob/v0.0.55/src/commands/cleanup/verify.ts)_
+
 ## `qfg config-schema`
 
 Print the config file format reference: rules engine, operators, targeting criteria, segments, and weighted rollouts. Use --json-schema for the machine-readable JSON Schema document.
@@ -452,6 +675,8 @@ DESCRIPTION
   # For per-logger targeting, create ONE log-level config per service and add
   # rules on the "quonfig-sdk-logging.key" context property (e.g.
   # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.
+
+  When this flag has done its job, mark readyForCleanup: true in the UI and run `qfg cleanup list` to retire it.
 
 EXAMPLES
   $ qfg create my.new.flag --type boolean-flag
