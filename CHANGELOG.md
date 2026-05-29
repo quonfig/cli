@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.59 - 2026-05-29
+
+- fix(migrate): `qfg migrate --from launch` is now resilient to transient Reforge API failures. Requests to the change-history endpoint retry on HTTP 429 and 5xx with exponential backoff + jitter, and pages are paced with a small inter-request delay — bringing the Launch importer up to the resilience the LaunchDarkly and Flagsmith importers already had. A 403 now fails fast with the response body surfaced, instead of being retried: a 403 from Reforge is an authorization failure or a server-side firewall block that does not clear by waiting, so retrying only delayed the error. (Surfaced by a form-health migration where a Reforge WAF rule briefly 403'd change-history requests whose pagination cursor contained certain flag-key substrings; the rule was fixed on the Reforge side.)
+
 ## 0.0.58 - 2026-05-29
 
 - fix(migrate): `qfg migrate --push` (and any `cloneAndStackPush` clone-reuse) now re-points the local clone's `origin` at the freshly-minted Gitea token before fetching or pushing. Re-running a push from a directory used on a previous run reused the _stale_ token baked into `origin` at clone time — write-scope PATs are 1h TTL (and tokens can be swept), so that embedded credential was frequently dead and git failed with `remote: Failed to authenticate user` / `Authentication failed`. A fresh `--dir` worked (clone-path mints a live token) while an existing dir kept failing, which masqueraded as an intermittent server-side auth race. The reuse branch now runs `git remote set-url origin <fresh-url>` so every network op uses the live token, not the one captured at clone time. (qfg-fsdj)
