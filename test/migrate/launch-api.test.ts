@@ -243,29 +243,52 @@ describe('migrate/sources/launch/api', () => {
     })
   })
 
-  describe('edge rate-limit handling', () => {
+  describe('retry / error handling', () => {
     const okPage = {changes: [], cursor: undefined}
 
-    it('retries an HTML 403 edge-block (Cloudflare-style) then succeeds', async () => {
+    // A 403 (genuine authz failure OR a hard edge/WAF block) is not transient —
+    // retrying just wastes the backoff budget, so it must fail fast.
+    it('fails fast on a 403 without retrying (HTML edge/WAF block)', async () => {
       let calls = 0
       server = setupServer(
         http.get(`${TEST_BASE_URL}/api/v1/change-history`, () => {
           calls++
-          if (calls < 3) {
-            return new HttpResponse(EDGE_403_HTML, {
-              headers: {'Content-Type': 'text/html'},
-              status: 403,
-            })
-          }
-
-          return HttpResponse.json(okPage)
+          return new HttpResponse(EDGE_403_HTML, {headers: {'Content-Type': 'text/html'}, status: 403})
         }),
       )
       server.listen({onUnhandledRequest: 'error'})
 
-      const changes = await fetchAllChangeHistory('test-api-key')
-      expect(calls, 'should have retried twice before the 200').to.equal(3)
-      expect(changes).to.deep.equal([])
+      let threw = false
+      try {
+        await fetchAllChangeHistory('test-api-key')
+      } catch (error) {
+        threw = true
+        expect((error as Error).message).to.match(/403/)
+      }
+
+      expect(threw, 'a 403 must surface immediately').to.equal(true)
+      expect(calls, 'a 403 must NOT be retried').to.equal(1)
+    })
+
+    it('fails fast on a JSON 403 (real authz error) without retrying', async () => {
+      let calls = 0
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/api/v1/change-history`, () => {
+          calls++
+          return HttpResponse.json({error: 'forbidden: token lacks read scope'}, {status: 403})
+        }),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+
+      let threw = false
+      try {
+        await fetchAllChangeHistory('test-api-key')
+      } catch {
+        threw = true
+      }
+
+      expect(threw).to.equal(true)
+      expect(calls).to.equal(1)
     })
 
     it('retries a 429 then succeeds', async () => {
@@ -283,37 +306,27 @@ describe('migrate/sources/launch/api', () => {
       expect(calls).to.equal(2)
     })
 
-    it('throws immediately on a JSON 403 (real authz error) without retrying', async () => {
+    it('retries a 503 then succeeds', async () => {
       let calls = 0
       server = setupServer(
         http.get(`${TEST_BASE_URL}/api/v1/change-history`, () => {
           calls++
-          return HttpResponse.json({error: 'forbidden: token lacks read scope'}, {status: 403})
+          if (calls < 3) return new HttpResponse('unavailable', {status: 503})
+          return HttpResponse.json(okPage)
         }),
       )
       server.listen({onUnhandledRequest: 'error'})
 
-      let threw = false
-      try {
-        await fetchAllChangeHistory('test-api-key')
-      } catch (error) {
-        threw = true
-        expect((error as Error).message).to.match(/403/)
-      }
-
-      expect(threw, 'a JSON 403 must surface immediately').to.equal(true)
-      expect(calls, 'an authz 403 must NOT be retried').to.equal(1)
+      await fetchAllChangeHistory('test-api-key')
+      expect(calls).to.equal(3)
     })
 
-    it('gives up with a clear error after exhausting retries on a persistent HTML 403', async () => {
+    it('gives up with a clear error after exhausting retries on a persistent 503', async () => {
       let calls = 0
       server = setupServer(
         http.get(`${TEST_BASE_URL}/api/v1/change-history`, () => {
           calls++
-          return new HttpResponse(EDGE_403_HTML, {
-            headers: {'Content-Type': 'text/html'},
-            status: 403,
-          })
+          return new HttpResponse('unavailable', {status: 503})
         }),
       )
       server.listen({onUnhandledRequest: 'error'})
@@ -323,7 +336,7 @@ describe('migrate/sources/launch/api', () => {
         await fetchAllChangeHistory('test-api-key')
       } catch (error) {
         threw = true
-        expect((error as Error).message).to.match(/403/)
+        expect((error as Error).message).to.match(/503/)
       }
 
       expect(threw).to.equal(true)

@@ -12,11 +12,10 @@ const MAX_RETRIES = 6
 /** Fallback wait when a response carries no usable backoff header. */
 const DEFAULT_BACKOFF_MS = 2000
 /**
- * Proactive pause between history pages. Reforge's edge (Cloudflare-style)
- * rate-limits sustained sequential pagination — on a large account it blocks
- * after ~60 rapid pages with an HTML 403. Unlike LaunchDarkly/Flagsmith it
- * sends no rate-budget headers to pre-throttle against, so we smooth the burst
- * with a fixed inter-page delay rather than only reacting after the block.
+ * Politeness pause between history pages. On a large account this endpoint is
+ * walked for hundreds of sequential pages; a small fixed delay keeps us from
+ * tripping a rate limit. (Reforge sends no rate-budget headers to pre-throttle
+ * against, unlike LaunchDarkly/Flagsmith.)
  */
 const INTER_PAGE_THROTTLE_MS = 300
 
@@ -57,20 +56,18 @@ export function __resetSleepForTests(): void {
 }
 
 /**
- * Tell an edge rate-limit block apart from a genuine authorization failure.
+ * Only transient errors are retried: 429 (throttling) and 5xx (availability).
  *
- * Reforge's *application* returns JSON errors; the CDN/WAF in front of it
- * returns an HTML body. A 403 with an HTML body that appears mid-pagination is
- * the edge throttling us and is worth retrying. A 403 with a JSON (or any
- * non-HTML) body is a real authz error — a bad/under-scoped key — and must
- * fail fast rather than spin through the whole retry budget. 429/502/503/504
- * are always transient.
+ * A 403 is NOT retried. It is either a genuine authorization failure (a bad or
+ * under-scoped key) or a hard edge/WAF block — neither clears by waiting, so
+ * retrying just burns the whole backoff budget (~2 min) before surfacing the
+ * same error. Fail fast with a clear message instead. (Observed: Reforge's
+ * edge WAF blocked change-history cursors whose flag key contained certain
+ * substrings; that is a server-side rule, fixed upstream, not something the
+ * client can retry past.)
  */
-function isRetryable(status: number, contentType: null | string, body: string): boolean {
-  if (status === 429 || status === 502 || status === 503 || status === 504) return true
-  if (status !== 403) return false
-  const looksHtml = (contentType ?? '').toLowerCase().includes('html') || /^\s*<(?:!doctype|html|head)/i.test(body)
-  return looksHtml
+function isRetryable(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504
 }
 
 /**
@@ -99,9 +96,9 @@ function truncateBody(body: string): string {
 }
 
 /**
- * Single GET with HTTP Basic auth, retrying edge rate-limit blocks (HTML 403,
- * 429, 5xx) with exponential backoff. A JSON/non-HTML 403 and other non-ok
- * statuses throw immediately — only transient throttling is retried.
+ * Single GET with HTTP Basic auth, retrying transient errors (429, 5xx) with
+ * exponential backoff. 403 and other non-ok statuses throw immediately — only
+ * throttling/availability errors are retried.
  */
 async function apiFetch(path: string, apiKey: string): Promise<unknown> {
   const url = `${baseUrl}${path}`
@@ -118,9 +115,7 @@ async function apiFetch(path: string, apiKey: string): Promise<unknown> {
 
     if (res.ok) return res.json()
 
-    // eslint-disable-next-line no-await-in-loop
-    const body = await res.text().catch(() => '(no body)')
-    const retryable = isRetryable(res.status, res.headers.get('Content-Type'), body)
+    const retryable = isRetryable(res.status)
 
     if (retryable && attempt < MAX_RETRIES) {
       // eslint-disable-next-line no-await-in-loop
@@ -128,7 +123,9 @@ async function apiFetch(path: string, apiKey: string): Promise<unknown> {
       continue
     }
 
-    const hint = retryable ? ` (gave up after ${MAX_RETRIES + 1} attempts — Reforge edge rate-limit)` : ''
+    // eslint-disable-next-line no-await-in-loop
+    const body = await res.text().catch(() => '(no body)')
+    const hint = retryable ? ` (gave up after ${MAX_RETRIES + 1} attempts)` : ''
     throw new Error(`Launch API request failed: ${res.status} ${res.statusText}${hint} — ${url}\n${truncateBody(body)}`)
   }
 
