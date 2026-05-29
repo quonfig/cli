@@ -130,6 +130,14 @@ const ensureCloneOrReuse = async (
   if (fs.existsSync(localDir) && (await isGitRepo(localDir))) {
     const origin = await getOriginUrl(localDir)
     if (origin && normalizeRemoteUrl(origin) === normalizeRemoteUrl(remoteUrl)) {
+      // The local clone is the right repo, but its `origin` may carry a STALE
+      // embedded token. Write-scope PATs are 1h TTL and tokens can be swept, so
+      // a dir reused across runs (the canonical "re-run the migrator" flow) ends
+      // up authenticating git with a dead credential — `git fetch`/`git push`
+      // then fail with "remote: Failed to authenticate user". Re-point origin at
+      // the freshly-minted remoteUrl so every network op below uses the live
+      // token, not the one baked into origin at clone time (qfg-fsdj).
+      await runGit(localDir, ['remote', 'set-url', 'origin', remoteUrl])
       // Reuse: fetch + ff-merge
       await runGit(localDir, ['fetch', 'origin', branch])
       await runGit(localDir, ['checkout', branch])
