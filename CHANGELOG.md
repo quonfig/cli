@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.58 - 2026-05-29
+
+- fix(migrate): `qfg migrate --push` (and any `cloneAndStackPush` clone-reuse) now re-points the local clone's `origin` at the freshly-minted Gitea token before fetching or pushing. Re-running a push from a directory used on a previous run reused the _stale_ token baked into `origin` at clone time — write-scope PATs are 1h TTL (and tokens can be swept), so that embedded credential was frequently dead and git failed with `remote: Failed to authenticate user` / `Authentication failed`. A fresh `--dir` worked (clone-path mints a live token) while an existing dir kept failing, which masqueraded as an intermittent server-side auth race. The reuse branch now runs `git remote set-url origin <fresh-url>` so every network op uses the live token, not the one captured at clone time. (qfg-fsdj)
+
 ## 0.0.57 - 2026-05-28
 
 - fix(cleanup): `qfg cleanup remove` now emits forward-slash payload paths on Windows (e.g. `.qf/cleanup/<key>.json`) instead of backslashes, matching the docs and the gitignore entry. v0.0.56 was tagged but never published — Windows CI caught the path-separator divergence in `cleanup remove`'s next-step output / `--json` payloadPath, plus a CRLF-vs-LF mismatch in the `qfg-flag-cleanup` skill structural test. This release ships the same `qfg cleanup` workflow as v0.0.56 with those three failures fixed.
