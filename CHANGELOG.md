@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.60 - 2026-05-30
+
+- fix(workspace): `QUONFIG_WORKSPACE` (and `--workspace`) now require the org-qualified `org/workspace` form in `QUONFIG_API_KEY` (CI/headless) mode, matching every other surface — `quonfig.json`, the interactive shell, and all error messages. Previously the API-key path matched on the bare workspace slug while the OAuth path and `quonfig.json` required `org/workspace`, so test-`*` apps and CI had to special-case a bare `prod-testing` against `mhw-works/prod-testing` used everywhere else. A bare slug now fails fast with the same migration message the OAuth path emits, the org component disambiguates a slug shared across orgs, and the not-found error lists org-qualified pins (`org/workspace`) rather than bare slugs. UUIDs are still accepted directly. (qfg-dl87)
+
 ## 0.0.59 - 2026-05-29
 
 - fix(migrate): `qfg migrate --from launch` is now resilient to transient Reforge API failures. Requests to the change-history endpoint retry on HTTP 429 and 5xx with exponential backoff + jitter, and pages are paced with a small inter-request delay — bringing the Launch importer up to the resilience the LaunchDarkly and Flagsmith importers already had. A 403 now fails fast with the response body surfaced, instead of being retried: a 403 from Reforge is an authorization failure or a server-side firewall block that does not clear by waiting, so retrying only delayed the error. (Surfaced by a form-health migration where a Reforge WAF rule briefly 403'd change-history requests whose pagination cursor contained certain flag-key substrings; the rule was fixed on the Reforge side.)
