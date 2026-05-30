@@ -48,7 +48,7 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
   if (apiKey && apiKey.length > 0) {
     if (!override) {
       command.error(
-        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<workspace-slug> or pass --workspace=<slug>. (UUIDs also work.)',
+        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<org>/<workspace> (e.g. acme/foo) or pass --workspace=<org>/<workspace>. (UUIDs also work.)',
         {exit: 1},
       )
     }
@@ -58,7 +58,15 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
       return {workspaceId: override, orgSlug: ''}
     }
 
-    // Slug — resolve via the server since there's no local auth config in CI mode.
+    // QUONFIG_WORKSPACE must be org-qualified, the same single form used by
+    // quonfig.json, the interactive shell, and every error message (qfg-dl87).
+    // Bare slugs are rejected here too so there is no per-surface special case.
+    const pin = tryParseWorkspacePin(override)
+    if (!pin) {
+      command.error(BARE_SLUG_ENV_MIGRATION_MESSAGE, {exit: 1})
+    }
+
+    // Resolve via the server since there's no local auth config in CI mode.
     // API-key path short-circuits before consulting the orgId.
     const jwt = await getValidAccessToken('', command.verboseLog)
     let res: Response
@@ -70,30 +78,35 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
       })
     } catch (error) {
       command.error(
-        `Failed to resolve workspace slug "${override}": ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to resolve workspace "${override}": ${error instanceof Error ? error.message : String(error)}`,
         {exit: 1},
       )
     }
 
     if (!res.ok) {
       command.error(
-        `Failed to resolve workspace slug "${override}" (HTTP ${res.status}). Check that QUONFIG_API_KEY is valid.`,
+        `Failed to resolve workspace "${override}" (HTTP ${res.status}). Check that QUONFIG_API_KEY is valid.`,
         {exit: 1},
       )
     }
 
-    type WorkspaceEntry = {workspaceId: string; workspaceSlug: string}
+    type WorkspaceEntry = {organizationSlug?: string; workspaceId: string; workspaceSlug: string}
     const body = (await res.json()) as {json?: WorkspaceEntry[]}
     const entries = body.json ?? (body as unknown as WorkspaceEntry[]) ?? []
-    const match = entries.find((w) => w.workspaceSlug === override)
+    // Match on the org-qualified pin so a slug shared across orgs resolves
+    // to the right workspace.
+    const match = entries.find((w) => w.organizationSlug === pin.orgSlug && w.workspaceSlug === pin.workspaceSlug)
     if (!match) {
-      const available = entries.map((w) => w.workspaceSlug).join(', ') || '(none)'
-      command.error(`No workspace with slug "${override}" is accessible with this API key. Available: ${available}.`, {
+      const available =
+        entries
+          .map((w) => (w.organizationSlug ? `${w.organizationSlug}/${w.workspaceSlug}` : w.workspaceSlug))
+          .join(', ') || '(none)'
+      command.error(`No workspace matching "${override}" is accessible with this API key. Available: ${available}.`, {
         exit: 1,
       })
     }
 
-    command.verboseLog('ApiKey auth', {source: 'slug', slug: override, workspaceId: match.workspaceId})
+    command.verboseLog('ApiKey auth', {source: 'org/ws', pin, workspaceId: match.workspaceId})
     return {workspaceId: match.workspaceId, orgSlug: ''}
   }
 

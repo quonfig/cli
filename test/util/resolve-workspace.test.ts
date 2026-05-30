@@ -458,9 +458,36 @@ describe('resolve-workspace org/ws addressing', () => {
     expect(caught!.message).to.match(/missing-workspace|not found/i)
   })
 
-  it('still accepts bare slug in QUONFIG_API_KEY mode (the documented exception)', async () => {
+  // qfg-dl87: bare slugs are no longer accepted in QUONFIG_API_KEY mode
+  // either — QUONFIG_WORKSPACE has a single org/workspace form across every
+  // surface (quonfig.json, interactive shell, error messages, CI).
+  it('rejects bare slug in QUONFIG_API_KEY mode with the migration message', async () => {
     process.env.QUONFIG_API_KEY = 'qf_uk_abcdef'
     process.env.QUONFIG_WORKSPACE = 'bare-slug-in-ci'
+
+    globalThis.fetch = (async () => {
+      throw new Error('fetch should not be called: bare slug must be rejected before any HTTP call')
+    }) as typeof globalThis.fetch
+
+    const cmd = makeFakeCommand()
+    let caught: Error | undefined
+    try {
+      await resolveWorkspaceUuid(cmd)
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught, 'expected resolveWorkspaceUuid to throw').to.exist
+    expect(caught!.message).to.include('org/workspace form')
+    expect(caught!.message).to.include('acme/foo')
+  })
+
+  // qfg-dl87: API-key path accepts the org-qualified form so test-* apps
+  // set QUONFIG_WORKSPACE=mhw-works/prod-testing — the same value
+  // quonfig.json, the interactive shell, and error messages all use.
+  it('accepts org/workspace form in QUONFIG_API_KEY mode and matches on the org-qualified pin', async () => {
+    process.env.QUONFIG_API_KEY = 'qf_uk_abcdef'
+    process.env.QUONFIG_WORKSPACE = 'mhw-works/prod-testing'
 
     let listCalled = false
     globalThis.fetch = (async (url: unknown) => {
@@ -470,11 +497,21 @@ describe('resolve-workspace org/ws addressing', () => {
         return new Response(
           JSON.stringify({
             json: [
+              // Same workspace slug exists in two orgs; the org component
+              // must disambiguate so we don't return the wrong workspace.
               {
-                workspaceId: 'ws-ci-uuid',
-                workspaceSlug: 'bare-slug-in-ci',
-                workosOrgId: 'org_ci',
-                organizationName: 'CI Org',
+                workspaceId: 'ws-other-org',
+                workspaceSlug: 'prod-testing',
+                workosOrgId: 'org_other',
+                organizationName: 'Other',
+                organizationSlug: 'other-org',
+              },
+              {
+                workspaceId: 'ws-mhw-prod-uuid',
+                workspaceSlug: 'prod-testing',
+                workosOrgId: 'org_mhw',
+                organizationName: 'MHW Works',
+                organizationSlug: 'mhw-works',
               },
             ],
           }),
@@ -488,10 +525,44 @@ describe('resolve-workspace org/ws addressing', () => {
     const result = await resolveWorkspaceUuid(cmd)
 
     expect(listCalled).to.equal(true)
-    expect(result.workspaceId).to.equal('ws-ci-uuid')
-    // API-key mode has no org concept on the CLI side; the orgSlug is
-    // empty because getValidAccessTokenForOrgSlug short-circuits on the
-    // env key before consulting it.
+    expect(result.workspaceId).to.equal('ws-mhw-prod-uuid')
     expect(result.orgSlug).to.equal('')
+  })
+
+  it('lists org-qualified pins in the API-key not-found error', async () => {
+    process.env.QUONFIG_API_KEY = 'qf_uk_abcdef'
+    process.env.QUONFIG_WORKSPACE = 'mhw-works/does-not-exist'
+
+    globalThis.fetch = (async (url: unknown) => {
+      const u = typeof url === 'string' ? url : (url as URL).toString()
+      if (u.endsWith('/api/v1/userWorkspaces/list')) {
+        return new Response(
+          JSON.stringify({
+            json: [
+              {
+                workspaceId: 'ws-mhw-prod-uuid',
+                workspaceSlug: 'prod-testing',
+                workosOrgId: 'org_mhw',
+                organizationName: 'MHW Works',
+                organizationSlug: 'mhw-works',
+              },
+            ],
+          }),
+          {status: 200, headers: {'Content-Type': 'application/json'}},
+        )
+      }
+      throw new Error(`unexpected fetch in test: ${u}`)
+    }) as typeof globalThis.fetch
+
+    const cmd = makeFakeCommand()
+    let caught: Error | undefined
+    try {
+      await resolveWorkspaceUuid(cmd)
+    } catch (error) {
+      caught = error as Error
+    }
+
+    expect(caught, 'expected resolveWorkspaceUuid to throw').to.exist
+    expect(caught!.message).to.include('mhw-works/prod-testing')
   })
 })
