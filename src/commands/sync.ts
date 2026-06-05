@@ -7,6 +7,7 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {loadGiteaToken, isGiteaTokenExpired, saveGiteaToken} from '../util/gitea-token-storage.js'
 import {mintGiteaToken} from '../util/gitea-api.js'
+import {evaluateOriginGuard} from '../push/identity-check.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {
   isGitRepo,
@@ -16,6 +17,9 @@ import {
   hasDivergedFromRemote,
   gitMergeFfOnly,
   gitSetRemote,
+  getAllRemoteUrls,
+  getRemoteUrl,
+  displayUrl,
 } from '../util/git-ops.js'
 
 const sleep = (ms: number): Promise<void> =>
@@ -61,7 +65,7 @@ export default class Sync extends BaseCommand {
 
     this.resolvedDir = path.resolve(dir)
 
-    const resolved = await resolveWorkspaceUuid(this)
+    const resolved = await resolveWorkspaceUuid(this, undefined, this.resolvedDir)
     this.workspaceId = resolved.workspaceId
     this.orgSlug = resolved.orgSlug
 
@@ -98,7 +102,7 @@ export default class Sync extends BaseCommand {
       return
     }
 
-    await gitSetRemote(this.resolvedDir, entry.repoUrl)
+    await this.setRemoteGuarded(entry.repoUrl)
   }
 
   private looksLike401(err: unknown): boolean {
@@ -110,7 +114,7 @@ export default class Sync extends BaseCommand {
     const data = await mintGiteaToken(this.workspaceId, this.orgSlug, 'read', 'pull')
     const entry = {token: data.token, repoUrl: data.repoUrl, expiresAt: data.expiresAt}
     await saveGiteaToken(this.workspaceId, entry)
-    await gitSetRemote(this.resolvedDir, entry.repoUrl)
+    await this.setRemoteGuarded(entry.repoUrl)
     this.verboseLog('Sync', 'Token refreshed.')
   }
 
@@ -172,5 +176,42 @@ export default class Sync extends BaseCommand {
         this.log(`[${timestamp}] Warning: sync failed: ${msg}`)
       }
     }
+  }
+
+  /**
+   * Point `origin` at `repoUrl`, but refuse first if the dir already has a
+   * remote pointing at a DIFFERENT workspace (qfg-08i). Without this guard,
+   * `qfg sync --dir ./our-config` under an unrelated active profile silently
+   * rewrites origin to the wrong repo and fetches it in, producing phantom
+   * "diverged" state. Mirrors the guard `qfg pull` runs (qfg-glrd.3).
+   */
+  private async setRemoteGuarded(repoUrl: string): Promise<void> {
+    const allRemotes = await getAllRemoteUrls(this.resolvedDir)
+    const originUrl = await getRemoteUrl(this.resolvedDir)
+    const guard = evaluateOriginGuard(allRemotes, originUrl, repoUrl)
+
+    if (guard.kind === 'no-quonfig-remote') {
+      const remoteList = allRemotes.map((r) => `  - ${displayUrl(r)}`).join('\n')
+      this.error(
+        `Refusing to sync ${this.resolvedDir}: no configured git remote matches the resolved Quonfig workspace.\n` +
+          `Configured remotes:\n${remoteList}\n` +
+          `Expected: ${displayUrl(repoUrl)}\n\n` +
+          `This usually means the active workspace doesn't match this directory. Pin it in quonfig.json ` +
+          `(\`"workspace": "<org>/<ws>"\`) or pass the right workspace, then retry — sync will not rewrite origin.`,
+        {exit: 1},
+      )
+    }
+
+    if (guard.kind === 'not-origin') {
+      this.error(
+        `Refusing to sync ${this.resolvedDir}: the Quonfig remote is not named "origin".\n` +
+          `  matching remote: ${displayUrl(guard.matching)}\n` +
+          `  origin:          ${originUrl ? displayUrl(originUrl) : '(unset)'}\n\n` +
+          `Rename the Quonfig remote to origin, or point origin at ${displayUrl(repoUrl)}.`,
+        {exit: 1},
+      )
+    }
+
+    await gitSetRemote(this.resolvedDir, repoUrl)
   }
 }

@@ -96,7 +96,7 @@ Enforces three guards before touching the remote:
     // Resolve requested target. --workspace > QUONFIG_WORKSPACE > active OAuth
     // profile. Supports API-key mode for headless runs so `qfg push` behaves
     // the same way `qfg create` does (both resolve via resolve-workspace.ts).
-    const {workspaceId: requestedTarget, orgSlug} = await resolveWorkspaceUuid(this, flags.workspace)
+    const {workspaceId: requestedTarget, orgSlug} = await resolveWorkspaceUuid(this, flags.workspace, resolvedDir)
 
     const {deps, cleanup} = buildRealDeps(this, orgSlug)
     try {

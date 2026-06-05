@@ -1,6 +1,6 @@
 import {expect} from 'chai'
 
-import {checkIdentity, IdentityCheckInput} from '../../src/push/identity-check.js'
+import {checkIdentity, evaluateOriginGuard, IdentityCheckInput} from '../../src/push/identity-check.js'
 
 const BACKEND = {
   workspaceSlug: 'acme-prod',
@@ -278,5 +278,32 @@ describe('checkIdentity (Guards 1 + 2)', () => {
       )
       expect(result.kind).to.equal('abort')
     })
+  })
+})
+
+describe('evaluateOriginGuard (qfg-08i)', () => {
+  const REPO = 'https://qf-ws-abc:tok@git.quonfig.com/mhw-works/our-config.git'
+
+  it('returns ok for a fresh dir with no remotes (caller may set origin)', () => {
+    expect(evaluateOriginGuard([], null, REPO)).to.deep.equal({kind: 'ok'})
+  })
+
+  it('returns ok when origin matches the backend (ignoring auth + .git)', () => {
+    const origin = 'https://other-token@git.quonfig.com/mhw-works/our-config'
+    expect(evaluateOriginGuard([origin], origin, REPO)).to.deep.equal({kind: 'ok'})
+  })
+
+  it('refuses with no-quonfig-remote when origin points at a DIFFERENT workspace', () => {
+    // The exact corruption case: dir pinned to our-config but origin is semgrep-test-1.
+    const origin = 'https://t@git.quonfig.com/mhw-works/semgrep-test-1.git'
+    expect(evaluateOriginGuard([origin], origin, REPO)).to.deep.equal({kind: 'no-quonfig-remote'})
+  })
+
+  it('refuses with not-origin when a matching remote exists but is not named origin', () => {
+    const quonfig = 'https://t@git.quonfig.com/mhw-works/our-config.git'
+    const origin = 'https://github.com/mhw-works/configs.git'
+    const result = evaluateOriginGuard([origin, quonfig], origin, REPO)
+    expect(result.kind).to.equal('not-origin')
+    expect((result as {matching: string}).matching).to.equal(quonfig)
   })
 })

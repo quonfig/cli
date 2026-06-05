@@ -2,7 +2,7 @@ import type {BaseCommand} from '../index.js'
 
 import {getApiUrl} from './domain-urls.js'
 import {getValidAccessToken} from './get-valid-token.js'
-import {tryParseWorkspacePin} from './quonfig-json.js'
+import {readWorkspaceSlug, tryParseWorkspacePin} from './quonfig-json.js'
 import {
   type AuthConfig,
   findOrgIdBySlug,
@@ -34,15 +34,30 @@ export interface ResolvedWorkspace {
  * don't extend APICommand (e.g. pull, push — which talk to Gitea, not the
  * oRPC API, but still need to mint a Gitea token for the right org).
  *
- * Handles all three auth paths in the same order as util/get-client.ts:
- *   1. QUONFIG_API_KEY + QUONFIG_WORKSPACE (or --workspace flag) — CI/headless.
- *   2. OAuth profile — the default interactive path.
+ * Resolution precedence (qfg-08i):
+ *   1. --workspace flag
+ *   2. QUONFIG_WORKSPACE env
+ *   3. the target dir's quonfig.json `workspace` pin (when `dir` is given)
+ *   4. active OAuth profile / QUONFIG_API_KEY + QUONFIG_WORKSPACE
+ *
+ * Ranking the pin above the active profile makes a pinned workspace dir
+ * self-describing: a bare `qfg pull`/`qfg sync` inside it targets the pinned
+ * workspace no matter which workspace the user's default profile points at.
+ * Without this, `qfg sync --dir ./our-config` under an unrelated active
+ * profile would rewrite that dir's git origin to the wrong workspace.
  *
  * Mirrors the error messages from get-client.ts so behavior feels identical
  * whether you're hitting the API directly or going through Gitea.
  */
-export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: string): Promise<ResolvedWorkspace> {
-  const override = flagOverride ?? process.env.QUONFIG_WORKSPACE
+export async function resolveWorkspaceUuid(
+  command: BaseCommand,
+  flagOverride?: string,
+  dir?: string,
+): Promise<ResolvedWorkspace> {
+  // The pin only acts as a fallback BELOW the flag and env var, so a user can
+  // always point a pinned dir at a different workspace for a one-off command.
+  const pinOverride = flagOverride || process.env.QUONFIG_WORKSPACE ? undefined : await readPinOverride(command, dir)
+  const override = flagOverride ?? process.env.QUONFIG_WORKSPACE ?? pinOverride
   const apiKey = process.env.QUONFIG_API_KEY
 
   if (apiKey && apiKey.length > 0) {
@@ -145,6 +160,31 @@ export async function resolveWorkspaceUuid(command: BaseCommand, flagOverride?: 
   }
 
   return {workspaceId: profileData.workspace, orgSlug: profileData.organizationSlug}
+}
+
+/**
+ * Read the `<org>/<ws>` workspace pin from `<dir>/quonfig.json`, returning it
+ * as the same override string the flag/env path accepts. Returns `undefined`
+ * when no dir is given, the file/field is absent, or the pin can't be parsed
+ * (e.g. a legacy bare slug) — resolution then falls through to the active
+ * profile, exactly as before this fix. A malformed pin must never crash
+ * `qfg pull`/`qfg sync`, so all errors degrade to `undefined` with a verbose
+ * log rather than propagating.
+ */
+async function readPinOverride(command: BaseCommand, dir?: string): Promise<string | undefined> {
+  if (!dir) return undefined
+  try {
+    const pin = await readWorkspaceSlug(dir)
+    if (!pin) return undefined
+    command.verboseLog('resolve-workspace: using quonfig.json pin', pin)
+    return `${pin.orgSlug}/${pin.workspaceSlug}`
+  } catch (error) {
+    command.verboseLog('resolve-workspace: ignoring unreadable quonfig.json pin', {
+      dir,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
 }
 
 /**

@@ -82,7 +82,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
     // Resolve workspace ID — supports both OAuth and QUONFIG_API_KEY paths,
     // mirroring what APICommand does via get-client.ts so `qfg pull` behaves
     // the same in CI as `qfg create` or `qfg push`.
-    const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this, flags.workspace)
+    const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this, flags.workspace, resolvedDir)
 
     this.verboseLog('Pull', {workspaceId, orgSlug, dir: resolvedDir})
 

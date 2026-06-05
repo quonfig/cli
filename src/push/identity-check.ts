@@ -235,3 +235,34 @@ export function findQuonfigRemote(remotes: string[], backendRepoUrl: string): st
   }
   return undefined
 }
+
+export type OriginGuardResult = {kind: 'ok'} | {kind: 'no-quonfig-remote'} | {kind: 'not-origin'; matching: string}
+
+/**
+ * Decide — WITHOUT mutating git — whether a working dir's remotes are safe to
+ * point at `backendRepoUrl`. Pure, so it unit-tests cleanly. Mirrors the
+ * inline guard `qfg pull` already runs (qfg-glrd.3); `qfg sync` uses it so it
+ * stops blindly rewriting `origin` to the active workspace and corrupting a
+ * dir pinned to a different one (qfg-08i).
+ *
+ *  - No remotes configured        -> 'ok' (fresh dir; caller may set origin).
+ *  - A remote matches & is origin  -> 'ok'.
+ *  - A remote matches but isn't origin -> 'not-origin' (refuse; don't clobber).
+ *  - Remotes exist, none match     -> 'no-quonfig-remote' (refuse).
+ */
+export function evaluateOriginGuard(
+  allRemotes: string[],
+  originUrl: string | null,
+  backendRepoUrl: string,
+): OriginGuardResult {
+  if (allRemotes.length === 0) return {kind: 'ok'}
+
+  const matching = findQuonfigRemote(allRemotes, backendRepoUrl)
+  if (!matching) return {kind: 'no-quonfig-remote'}
+
+  const target = normalizeRemoteUrl(backendRepoUrl)
+  const originMatches = originUrl !== null && normalizeRemoteUrl(originUrl) === target
+  if (!originMatches) return {kind: 'not-origin', matching}
+
+  return {kind: 'ok'}
+}
