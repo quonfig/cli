@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.61 - 2026-06-05
+
+- fix(workspace): a directory's `quonfig.json` `workspace` pin is now authoritative over the active profile when resolving which workspace `qfg pull`, `qfg push`, and `qfg sync` target. Resolution precedence is now `--workspace` flag → `QUONFIG_WORKSPACE` env → `quonfig.json` pin → active OAuth profile. Previously the pin was never consulted as a resolution source — only as a guard — so a bare `qfg pull`/`qfg sync` in a pinned dir resolved to whatever the active profile pointed at. With an unrelated active profile (e.g. a `semgrep-test-1` default), `qfg sync --dir ./our-config` silently rewrote that dir's git `origin` to the wrong workspace on every poll and fetched it in, producing a phantom "diverged" state against unrelated history. A pinned dir is now self-describing: bare commands in it target the pinned workspace regardless of the global default. (qfg-08i)
+- fix(sync): `qfg sync` now refuses to rewrite `origin` when the directory's existing remote points at a different workspace than the one being synced, instead of clobbering it. It reuses the same multi-remote guard `qfg pull` already runs, and errors with the configured-vs-expected remotes so the mismatch is obvious. (qfg-08i)
+
 ## 0.0.60 - 2026-05-30
 
 - fix(workspace): `QUONFIG_WORKSPACE` (and `--workspace`) now require the org-qualified `org/workspace` form in `QUONFIG_API_KEY` (CI/headless) mode, matching every other surface — `quonfig.json`, the interactive shell, and all error messages. Previously the API-key path matched on the bare workspace slug while the OAuth path and `quonfig.json` required `org/workspace`, so test-`*` apps and CI had to special-case a bare `prod-testing` against `mhw-works/prod-testing` used everywhere else. A bare slug now fails fast with the same migration message the OAuth path emits, the org component disambiguates a slug shared across orgs, and the not-found error lists org-qualified pins (`org/workspace`) rather than bare slugs. UUIDs are still accepted directly. (qfg-dl87)
