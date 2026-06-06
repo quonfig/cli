@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.62 - 2026-06-06
+
+- chore(deps): bump `@quonfig/node` to `^1.0.0` to track the stable Quonfig Node SDK 1.0.0 release. No CLI behavior change — the SDK is API-identical to 0.0.37.
+
 ## 0.0.61 - 2026-06-05
 
 - fix(workspace): a directory's `quonfig.json` `workspace` pin is now authoritative over the active profile when resolving which workspace `qfg pull`, `qfg push`, and `qfg sync` target. Resolution precedence is now `--workspace` flag → `QUONFIG_WORKSPACE` env → `quonfig.json` pin → active OAuth profile. Previously the pin was never consulted as a resolution source — only as a guard — so a bare `qfg pull`/`qfg sync` in a pinned dir resolved to whatever the active profile pointed at. With an unrelated active profile (e.g. a `semgrep-test-1` default), `qfg sync --dir ./our-config` silently rewrote that dir's git `origin` to the wrong workspace on every poll and fetched it in, producing a phantom "diverged" state against unrelated history. A pinned dir is now self-describing: bare commands in it target the pinned workspace regardless of the global default. (qfg-08i)
