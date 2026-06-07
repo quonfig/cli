@@ -153,14 +153,13 @@ Related commands:
       for (const interval of envStats.intervals) {
         if (interval.data) {
           for (const dataPoint of interval.data) {
-            totalEvaluations += dataPoint.count || 0
+            const count = this.evalRowCount(dataPoint)
+            totalEvaluations += count
 
-            let valueKey = 'unknown'
-            if (dataPoint.selectedValue) {
-              valueKey = this.extractSimpleValue(dataPoint.selectedValue)
-            }
+            const parsedValue = this.evalRowValue(dataPoint)
+            const valueKey = parsedValue ? this.extractSimpleValue(parsedValue) : 'unknown'
 
-            valueBreakdown.set(valueKey, (valueBreakdown.get(valueKey) || 0) + (dataPoint.count || 0))
+            valueBreakdown.set(valueKey, (valueBreakdown.get(valueKey) || 0) + count)
           }
         }
       }
@@ -209,6 +208,40 @@ Related commands:
       this.log('No evaluations found for the past 24 hours')
       this.log('')
     }
+  }
+
+  // The analytics/evaluationStats endpoint returns ClickHouse EvalStatRow[]
+  // (app-quonfig/src/lib/clickhouse/queries.ts): each row carries `total` (the
+  // evaluation count) and `selected_value` — a JSON-encoded STRING like
+  // '{"bool":false}', NOT an object. Earlier code read `count` / `selectedValue`
+  // (an object), which silently yielded 0 / undefined: totals summed to 0
+  // ("No evaluations found" even with real data) and the undefined value crashed
+  // transformValueForJson ('Cannot read properties of undefined (reading bool)').
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private evalRowCount(dataPoint: any): number {
+    const total = dataPoint?.total
+    return typeof total === 'number' ? total : Number(total) || 0
+  }
+
+  // Parse a row's `selected_value` into the object shape ({bool: false}, etc.)
+  // that extractSimpleValue / transformValueForJson expect. Returns undefined
+  // for missing or unparseable values so callers render them as 'unknown'
+  // rather than throwing.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private evalRowValue(dataPoint: any): Record<string, unknown> | undefined {
+    const raw = dataPoint?.selected_value
+    if (raw === undefined || raw === null) return undefined
+    if (typeof raw === 'object') return raw as Record<string, unknown>
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined
+      } catch {
+        return undefined
+      }
+    }
+
+    return undefined
   }
 
   private extractSimpleValue(value: Record<string, unknown>): string {
@@ -550,18 +583,21 @@ Related commands:
       for (const interval of envStats.intervals) {
         if (interval.data) {
           for (const dataPoint of interval.data) {
-            totalEvaluations += dataPoint.count || 0
+            const count = this.evalRowCount(dataPoint)
+            totalEvaluations += count
+
+            const parsedValue = this.evalRowValue(dataPoint)
 
             // Create a key for deduplication
-            const valueKey = JSON.stringify(dataPoint.selectedValue)
+            const valueKey = JSON.stringify(parsedValue ?? null)
             const existing = seenValues.get(valueKey)
 
             if (existing) {
-              existing.count += dataPoint.count || 0
+              existing.count += count
             } else {
               const entry = {
-                configValue: this.transformValueForJson(dataPoint.selectedValue),
-                count: dataPoint.count || 0,
+                configValue: parsedValue ? this.transformValueForJson(parsedValue) : {},
+                count,
               }
               seenValues.set(valueKey, entry)
               valueCounts.push(entry)
@@ -604,6 +640,10 @@ Related commands:
   }
 
   private transformValueForJson(value: Record<string, unknown>): Record<string, unknown> {
+    // Tolerate a missing value — a row with no selected_value should render as
+    // an empty object, never throw 'Cannot read properties of undefined'.
+    if (!value || typeof value !== 'object') return {}
+
     // If already in new format ({bool: true}, {string: "test"}, etc.), return as-is
     if (
       value.bool !== undefined ||

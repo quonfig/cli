@@ -6,6 +6,7 @@ import {
   evaluationStatsRequests,
   jsonKey,
   keyWithEvaluations,
+  keyWithMalformedEvals,
   keyWithNoEvaluations,
   rawSecret,
   readyForCleanupKey,
@@ -97,6 +98,38 @@ jeffrey: 42
           },
         ])
         expect(output[keyWithEvaluations].evaluations.total).to.equal(34_831)
+      })
+  })
+
+  // qfg-nkpe: the real evaluationStats endpoint returns ClickHouse rows shaped
+  // {selected_value: '{"bool":false}', total: N} — a JSON-encoded STRING and a
+  // `total` column. The CLI used to read {selectedValue: {...}, count: N}, so it
+  // reported "No evaluations found" even with real data and then threw
+  // 'Cannot read properties of undefined (reading bool)'. These tests pin the
+  // wire shape; see the matching fixture note in test/responses/info.ts.
+  describe('value-summary rendering tolerates malformed/missing eval values (qfg-nkpe)', () => {
+    test
+      .stdout()
+      .command(['info', keyWithMalformedEvals])
+      .it('renders details and does not throw when rows lack selected_value', (ctx) => {
+        // The flag's core details still render...
+        expect(ctx.stdout).to.contain('Default: true')
+        // ...and the unparseable value is shown as 'unknown', not a crash.
+        expect(ctx.stdout).to.contain('Production: 10')
+        expect(ctx.stdout).to.contain('unknown')
+        expect(ctx.stdout).to.not.contain('Cannot read properties of undefined')
+      })
+
+    test
+      .stdout()
+      .command(['info', keyWithMalformedEvals, '--json'])
+      .it('builds JSON evaluations without throwing on a missing value', (ctx) => {
+        const output = JSON.parse(ctx.stdout)
+        const env = output[keyWithMalformedEvals].evaluations.environments[0]
+        expect(env.name).to.equal('Production')
+        expect(env.total).to.equal(10)
+        // A row with no selected_value transforms to {} rather than throwing.
+        expect(env.counts[0].configValue).to.deep.equal({})
       })
   })
 

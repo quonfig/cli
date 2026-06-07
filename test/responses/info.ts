@@ -8,6 +8,7 @@ export const keyWithNoEvaluations = 'jeffreys.test.key.reforge'
 export const secretKey = 'a.secret.config'
 export const confidentialKey = 'a.confidential.config'
 export const jsonKey = 'question.max-response.override'
+export const keyWithMalformedEvals = 'flag.malformed-eval-rows'
 export const rolloutRuleKey = 'fx-rule-rollout'
 export const readyForCleanupKey = 'flag.ready-for-cleanup'
 
@@ -195,6 +196,18 @@ const readyForCleanupConfig = {
   environments: [],
 }
 
+// A flag whose eval rows are missing `selected_value` — the value-summary
+// path must tolerate this and never throw (qfg-nkpe regression).
+const malformedEvalsConfig = {
+  key: keyWithMalformedEvals,
+  type: 'feature_flag',
+  valueType: 'bool',
+  default: {
+    rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: true}}],
+  },
+  environments: [],
+}
+
 const confidentialConfig = {
   key: confidentialKey,
   type: 'config',
@@ -248,6 +261,15 @@ const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
         },
         {key: jsonKey, type: 'config', valueType: 'json', version: 1, id: 5, name: 'JSON Override', description: ''},
         {
+          key: keyWithMalformedEvals,
+          type: 'feature_flag',
+          valueType: 'bool',
+          version: 1,
+          id: 8,
+          name: 'Malformed Evals',
+          description: '',
+        },
+        {
           key: rolloutRuleKey,
           type: 'feature_flag',
           valueType: 'bool',
@@ -296,6 +318,10 @@ const configHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, asyn
     return HttpResponse.json({json: jsonConfig})
   }
 
+  if (key === keyWithMalformedEvals) {
+    return HttpResponse.json({json: malformedEvalsConfig})
+  }
+
   if (key === rolloutRuleKey) {
     return HttpResponse.json({json: rolloutRuleConfig})
   }
@@ -332,23 +358,41 @@ const evaluationStatsHandler = http.post(`${getApiBase()}/api/v1/analytics/evalu
   const environment = body?.json?.environment
   evaluationStatsRequests.push(body?.json as Record<string, unknown>)
 
-  // For keyWithEvaluations, return stats
+  // For keyWithEvaluations, return stats.
+  //
+  // Shape MUST mirror the real ClickHouse EvalStatRow
+  // (app-quonfig/src/lib/clickhouse/queries.ts): snake_case `selected_value`
+  // is a JSON-encoded STRING (not an object) and the count column is `total`
+  // (not `count`). An earlier fixture used {selectedValue: {...}, count: N},
+  // which masked the prod crash in qfg-nkpe — the CLI read the wrong fields,
+  // reported "No evaluations found", then threw 'reading bool'. Keep this in
+  // sync with the server's row shape.
   if (configKey === keyWithEvaluations) {
     if (environment === 'Production') {
-      // Production environment - return actual stats
+      // Production environment - return actual stats, split across two hourly
+      // buckets to exercise cross-interval aggregation.
       return HttpResponse.json({
         json: [
           {
-            configId: '1',
-            configType: 'config',
-            selectedValue: {bool: false},
-            count: 11_473,
+            config_key: keyWithEvaluations,
+            selected_value: '{"bool":false}',
+            config_row_index: 0,
+            bucket: 1_780_768_800,
+            total: 5473,
           },
           {
-            configId: '1',
-            configType: 'config',
-            selectedValue: {bool: true},
-            count: 23_316,
+            config_key: keyWithEvaluations,
+            selected_value: '{"bool":false}',
+            config_row_index: 0,
+            bucket: 1_780_772_400,
+            total: 6000,
+          },
+          {
+            config_key: keyWithEvaluations,
+            selected_value: '{"bool":true}',
+            config_row_index: 0,
+            bucket: 1_780_768_800,
+            total: 23_316,
           },
         ],
       })
@@ -359,14 +403,26 @@ const evaluationStatsHandler = http.post(`${getApiBase()}/api/v1/analytics/evalu
       return HttpResponse.json({
         json: [
           {
-            configId: '1',
-            configType: 'config',
-            selectedValue: {string: 'test'},
-            count: 42,
+            config_key: keyWithEvaluations,
+            selected_value: '{"string":"test"}',
+            config_row_index: 0,
+            bucket: 1_780_768_800,
+            total: 42,
           },
         ],
       })
     }
+  }
+
+  // Rows that exist but carry no `selected_value` — must not crash the
+  // value-summary / JSON-transform paths (qfg-nkpe regression).
+  if (configKey === keyWithMalformedEvals && environment === 'Production') {
+    return HttpResponse.json({
+      json: [
+        {config_key: keyWithMalformedEvals, config_row_index: 0, bucket: 1_780_768_800, total: 7},
+        {config_key: keyWithMalformedEvals, selected_value: null, config_row_index: 0, bucket: 1_780_772_400, total: 3},
+      ],
+    })
   }
 
   // For other keys or envs, return empty stats
