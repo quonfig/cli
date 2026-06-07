@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.63 - 2026-06-07
+
+- fix(info): `qfg info <key>` no longer crashes with `Cannot read properties of undefined (reading 'bool')`, and now actually renders evaluation stats. The command read the `analytics/evaluationStats` response with the wrong field names — `count`/`selectedValue` (an object) — but the endpoint returns ClickHouse `EvalStatRow[]` with `total` and `selected_value` (a JSON-encoded string like `{"bool":false}`). As a result every total summed to 0, so `qfg info` printed "No evaluations found for the past 24 hours" even for flags with real traffic, then threw on the undefined value while building its output. The 24h eval breakdown (per-environment counts and value percentages) now displays correctly, and rows with a missing/unparseable value render as `unknown` instead of throwing. Display-only fix — no change to what the server returns. (qfg-nkpe)
+
 ## 0.0.62 - 2026-06-06
 
 - chore(deps): bump `@quonfig/node` to `^1.0.0` to track the stable Quonfig Node SDK 1.0.0 release. No CLI behavior change — the SDK is API-identical to 0.0.37.
