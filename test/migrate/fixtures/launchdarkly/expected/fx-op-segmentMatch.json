@@ -41,7 +41,6 @@
           "criteria": [
             {
               "operator": "IN_SEG",
-              "propertyName": "user.segmentMatch",
               "valueToMatch": {
                 "type": "string",
                 "value": "fx-seg-included-only"

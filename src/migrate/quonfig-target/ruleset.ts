@@ -188,8 +188,12 @@ export function clauseToCriterion(clause: SourceClause, ctx: RulesetContext): Qu
   }
 
   const {operator} = mapping
-  const propertyName = normalizeAttribute(clause.contextKind, clause.attribute)
-  const criterion: QuonfigCriterion = {operator, propertyName}
+  // Segment matches key off valueToMatch alone — LD's pseudo-attribute
+  // ("segmentMatch") must not leak in as a propertyName (qfg-gc3u).
+  const criterion: QuonfigCriterion =
+    operator === 'IN_SEG' || operator === 'NOT_IN_SEG'
+      ? {operator}
+      : {operator, propertyName: normalizeAttribute(clause.contextKind, clause.attribute)}
   criterion.valueToMatch = valueToMatchFor(operator, clause, ctx)
   return criterion
 }

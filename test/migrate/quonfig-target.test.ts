@@ -115,6 +115,23 @@ describe('migrate/quonfig-target', () => {
       expect(report.byCategory('skipped-rule')[0].detail).to.match(/negated comparison/)
     })
 
+    it('omits propertyName on segment-match criteria — canonical shape is operator + valueToMatch (qfg-gc3u)', () => {
+      const inSeg = clauseToCriterion({attribute: 'segmentMatch', op: 'segmentMatch', values: ['beta-users']}, ctx())
+      expect(inSeg).to.deep.equal({
+        operator: 'IN_SEG',
+        valueToMatch: {type: 'string', value: 'beta-users'},
+      })
+
+      const notInSeg = clauseToCriterion(
+        {attribute: 'segmentMatch', negate: true, op: 'segmentMatch', values: ['beta-users']},
+        ctx(),
+      )
+      expect(notInSeg).to.deep.equal({
+        operator: 'NOT_IN_SEG',
+        valueToMatch: {type: 'string', value: 'beta-users'},
+      })
+    })
+
     it('keeps only the first segment key for a multi-segment segmentMatch and reports the rest', () => {
       const report = new ConversionReport()
       const c = clauseToCriterion(
