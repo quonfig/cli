@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.64 - 2026-06-10
+
+- fix(migrate): the LaunchDarkly importer no longer writes a junk `propertyName` (e.g. `user.segmentMatch`) onto segment-match criteria. LD `segmentMatch` clauses have no real attribute, but the clause converter normalized the pseudo-attribute into `propertyName` on every `IN_SEG`/`NOT_IN_SEG` criterion. Evaluation was unaffected (segment match keys off `valueToMatch`), but the criterion was non-canonical and previously rendered as an empty Property bubble in the app's rule editor. Segment criteria now serialize as operator + `valueToMatch` only, matching what the app editor expects and what the Launch importer already emits. Existing imports need no re-run — the stray field is ignored everywhere. (qfg-gc3u)
+
 ## 0.0.63 - 2026-06-07
 
 - fix(info): `qfg info <key>` no longer crashes with `Cannot read properties of undefined (reading 'bool')`, and now actually renders evaluation stats. The command read the `analytics/evaluationStats` response with the wrong field names — `count`/`selectedValue` (an object) — but the endpoint returns ClickHouse `EvalStatRow[]` with `total` and `selected_value` (a JSON-encoded string like `{"bool":false}`). As a result every total summed to 0, so `qfg info` printed "No evaluations found for the past 24 hours" even for flags with real traffic, then threw on the undefined value while building its output. The 24h eval breakdown (per-environment counts and value percentages) now displays correctly, and rows with a missing/unparseable value render as `unknown` instead of throwing. Display-only fix — no change to what the server returns. (qfg-nkpe)
