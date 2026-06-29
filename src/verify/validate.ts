@@ -9,7 +9,8 @@
  *  - Valid JSON
  *  - Schema compliance (StoredConfigSchema from Zod)
  *  - Key matches filename
- *  - Key constraints (1-512 chars, no slashes, not "new")
+ *  - Key constraints (1-200 chars, no slashes, not "new", FS-safety floor)
+ *  - Case-insensitive key uniqueness (no Foo/foo collisions)
  *  - Config type matches directory
  *  - Segment constraints (valueType=bool, sendToClientSdk=false)
  *  - Log level constraints (valueType=log_level)
@@ -646,42 +647,12 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     }
   }
 
-  // Check for duplicate keys across directories
-  const keyToFiles = new Map<string, string[]>()
-  for (const c of allConfigs) {
-    const existing = keyToFiles.get(c.key) || []
-    existing.push(c.file)
-    keyToFiles.set(c.key, existing)
-  }
-  for (const [key, files] of keyToFiles) {
-    if (files.length > 1) {
-      issues.push({
-        file: files.join(', '),
-        message: `Duplicate key "${key}" found in multiple files`,
-        severity: 'error',
-        suggestion: `Each key must be unique across the workspace`,
-      })
-    }
-  }
+  // Check for duplicate keys across directories (case-insensitive — see
+  // detectDuplicateKeys).
+  const uniqueConfigKeys = detectDuplicateKeys(allConfigs, 'key', issues)
+  const uniqueSchemaKeys = detectDuplicateKeys(allSchemaFiles, 'schema key', issues)
 
-  const schemaKeyToFiles = new Map<string, string[]>()
-  for (const schemaFile of allSchemaFiles) {
-    const existing = schemaKeyToFiles.get(schemaFile.key) || []
-    existing.push(schemaFile.file)
-    schemaKeyToFiles.set(schemaFile.key, existing)
-  }
-  for (const [key, files] of schemaKeyToFiles) {
-    if (files.length > 1) {
-      issues.push({
-        file: files.join(', '),
-        message: `Duplicate schema key "${key}" found in multiple files`,
-        severity: 'error',
-        suggestion: `Each schema key must be unique across schema directories`,
-      })
-    }
-  }
-
-  stats.uniqueKeysVerified = keyToFiles.size + schemaKeyToFiles.size
+  stats.uniqueKeysVerified = uniqueConfigKeys + uniqueSchemaKeys
 
   const hasErrors = issues.some((i) => i.severity === 'error')
   return {issues, filesChecked, valid: !hasErrors, stats}
@@ -918,38 +889,9 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
     }
   }
 
-  // Duplicate keys
-  const keyToFiles = new Map<string, string[]>()
-  for (const c of allConfigs) {
-    const existing = keyToFiles.get(c.key) || []
-    existing.push(c.file)
-    keyToFiles.set(c.key, existing)
-  }
-  for (const [key, fileList] of keyToFiles) {
-    if (fileList.length > 1) {
-      issues.push({
-        file: fileList.join(', '),
-        message: `Duplicate key "${key}" found in multiple files`,
-        severity: 'error',
-      })
-    }
-  }
-
-  const schemaKeyToFiles = new Map<string, string[]>()
-  for (const schemaFile of allSchemaFiles) {
-    const existing = schemaKeyToFiles.get(schemaFile.key) || []
-    existing.push(schemaFile.file)
-    schemaKeyToFiles.set(schemaFile.key, existing)
-  }
-  for (const [key, fileList] of schemaKeyToFiles) {
-    if (fileList.length > 1) {
-      issues.push({
-        file: fileList.join(', '),
-        message: `Duplicate schema key "${key}" found in multiple files`,
-        severity: 'error',
-      })
-    }
-  }
+  // Duplicate keys (case-insensitive — see detectDuplicateKeys).
+  detectDuplicateKeys(allConfigs, 'key', issues)
+  detectDuplicateKeys(allSchemaFiles, 'schema key', issues)
 
   const hasErrors = issues.some((i) => i.severity === 'error')
   return {issues, filesChecked, valid: !hasErrors, stats: emptyStats()}
@@ -981,12 +923,43 @@ function validateEnvironmentIds(
   }
 }
 
-function validateKey(key: string, file: string, issues: ValidationIssue[]): void {
+// FS-safety floor checks (qfg-6na9.4). These are the names that pass the loose
+// historical rule but produce a file that cannot be cloned/checked-out on a
+// customer machine (macOS/Windows). The audit (project/plans/26-06-tighter-naming.md,
+// "FS-safety floor") found ZERO existing violations, so every one is a hard
+// error from day one.
+//
+// IMPORTANT: this floor must stay conceptually in lockstep with app-quonfig's
+// src/lib/domain/config-schemas.ts (the charset precedent there is
+// `SchemaKeySchema`; Policy A is `PolicyAKeySchema`). The general charset check
+// (`^[A-Za-z0-9._-]+$`) is deliberately NOT here — it ships separately as a
+// warning (bead qfg-6na9.5). This module is the FS-floor + dedup only.
+//
+// Structured as a table so severity is trivially adjustable later.
+const FS_SAFETY_FLOOR_CHECKS: ReadonlyArray<{test: (k: string) => boolean; message: string}> = [
+  {test: (k) => k.startsWith('.'), message: `Key has a leading dot (files starting with "." are skipped by verify)`},
+  // eslint-disable-next-line no-control-regex -- matching control chars/NUL is the point
+  {test: (k) => /[\u0000-\u001F\u007F]/.test(k), message: `Key contains control chars or NUL`},
+  {test: (k) => /["*:<>?|]/.test(k), message: `Key contains Windows-reserved chars (: * ? " < > |)`},
+  {
+    test: (k) => /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(k.split('.')[0]),
+    message: `Key is a Windows reserved device name (con/prn/aux/nul/com1-9/lpt1-9)`,
+  },
+  {test: (k) => /[ .]$/.test(k), message: `Key has a trailing dot or space (silently stripped on Windows)`},
+]
+
+// Exported so the FS-safety floor (incl. the leading-dot rule, whose files are
+// pre-filtered by the directory walk before they'd reach the file-map path) can
+// be unit-tested directly.
+export function validateKey(key: string, file: string, issues: ValidationIssue[]): void {
   if (key.length === 0) {
     issues.push({file, message: `Key is empty`, severity: 'error'})
   }
-  if (key.length > 512) {
-    issues.push({file, message: `Key exceeds 512 characters (${key.length})`, severity: 'error'})
+  // Length cap lowered 512 -> 200 (project/plans/26-06-tighter-naming.md,
+  // "Length cap: 200"): ASCII-only Policy A means 200 chars == 200 bytes, well
+  // under the 255-byte filesystem path-component limit even with `.json`.
+  if (key.length > 200) {
+    issues.push({file, message: `Key exceeds 200 characters (${key.length})`, severity: 'error'})
   }
   if (key === 'new') {
     issues.push({file, message: `Key cannot be "new" (reserved)`, severity: 'error'})
@@ -994,6 +967,58 @@ function validateKey(key: string, file: string, issues: ValidationIssue[]): void
   if (/[/\\]/.test(key)) {
     issues.push({file, message: `Key contains slash or backslash`, severity: 'error'})
   }
+  for (const check of FS_SAFETY_FLOOR_CHECKS) {
+    if (check.test(key)) {
+      issues.push({file, message: check.message, severity: 'error'})
+    }
+  }
+}
+
+// Case-insensitive duplicate-key detection (qfg-6na9.4,
+// project/plans/26-06-tighter-naming.md "Case-insensitive uniqueness").
+// `Foo` and `foo` are distinct keys server-side (case-sensitive Linux ext4) but
+// collide to one file on a case-insensitive macOS/Windows clone, silently
+// dropping a config. Group by the DOWNCASED key and branch the message:
+//   - all original keys byte-identical -> exact-duplicate message
+//   - they differ only by case        -> case-collision message
+// The audit found 0 such collisions today, so this is a hard error from day one.
+function detectDuplicateKeys(
+  entries: ReadonlyArray<{key: string; file: string}>,
+  label: 'key' | 'schema key',
+  issues: ValidationIssue[],
+): number {
+  const byLowercase = new Map<string, Array<{key: string; file: string}>>()
+  for (const e of entries) {
+    const lower = e.key.toLowerCase()
+    const existing = byLowercase.get(lower) || []
+    existing.push(e)
+    byLowercase.set(lower, existing)
+  }
+  for (const group of byLowercase.values()) {
+    if (group.length <= 1) continue
+    const files = group.map((g) => g.file).join(', ')
+    const originalKeys = group.map((g) => g.key)
+    const allIdentical = originalKeys.every((k) => k === originalKeys[0])
+    if (allIdentical) {
+      issues.push({
+        file: files,
+        message: `Duplicate ${label} "${originalKeys[0]}" found in multiple files`,
+        severity: 'error',
+        suggestion:
+          label === 'schema key'
+            ? `Each schema key must be unique across schema directories`
+            : `Each key must be unique across the workspace`,
+      })
+    } else {
+      issues.push({
+        file: files,
+        message: `Keys differ only by case (${originalKeys.join(', ')}); they collide to one file on case-insensitive filesystems (macOS/Windows)`,
+        severity: 'error',
+        suggestion: `Rename so the ${label}s are also unique when lowercased`,
+      })
+    }
+  }
+  return byLowercase.size
 }
 
 function validateRules(

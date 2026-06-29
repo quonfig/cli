@@ -3,7 +3,9 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import {validateFileMap, validateWorkspace} from '../../src/verify/validate.js'
+import type {ValidationIssue} from '../../src/verify/validate.js'
+
+import {validateFileMap, validateKey, validateWorkspace} from '../../src/verify/validate.js'
 
 function createWorkspace(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-'))
@@ -762,6 +764,200 @@ describe('validate', () => {
         expect(result.issues).to.be.empty
       })
     }
+  })
+
+  // qfg-6na9.4: FS-safety floor + case-insensitive duplicate detection.
+  // See project/plans/26-06-tighter-naming.md ("FS-safety floor", "Length
+  // cap: 200", "Case-insensitive uniqueness").
+  describe('key FS-safety floor (qfg-6na9.4)', () => {
+    // Exercise validateKey directly: the leading-dot case never reaches
+    // validateKey via the file walk (dot-prefixed files are pre-filtered), and
+    // the floor is a pure per-key constraint, so a direct call is the
+    // confound-free unit.
+    function floorErrors(key: string): ValidationIssue[] {
+      const issues: ValidationIssue[] = []
+      validateKey(key, `configs/${key}.json`, issues)
+      return issues
+    }
+
+    const rejected: Array<[string, string, string]> = [
+      ['leading dot', '.beta', 'leading dot'],
+      ['control char', 'foo\u0001bar', 'control'],
+      ['Windows-reserved char (feature:beta)', 'feature:beta', 'Windows-reserved'],
+      ['Windows reserved device name (con)', 'con', 'reserved device name'],
+      ['Windows reserved device name with extension (con.foo)', 'con.foo', 'reserved device name'],
+      ['trailing space', 'foo ', 'trailing dot or space'],
+      ['trailing dot', 'foo.', 'trailing dot or space'],
+      ['201-character key', 'a'.repeat(201), '200 characters'],
+    ]
+
+    for (const [label, key, fragment] of rejected) {
+      it(`rejects a key with a ${label}`, () => {
+        const errors = floorErrors(key)
+        expect(
+          errors.some((i) => i.severity === 'error' && i.message.includes(fragment)),
+          JSON.stringify(errors),
+        ).to.be.true
+      })
+    }
+
+    it('accepts a 200-character key', () => {
+      expect(floorErrors('a'.repeat(200))).to.be.empty
+    })
+
+    it('accepts a clean lowercase key with no floor errors', () => {
+      expect(floorErrors('my.clean-key_1')).to.be.empty
+    })
+
+    it('rejects feature:beta end-to-end via validateFileMap', () => {
+      const result = validateFileMap(
+        new Map<string, string>([
+          [
+            'configs/feature:beta.json',
+            JSON.stringify({
+              key: 'feature:beta',
+              type: 'config',
+              valueType: 'string',
+              default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'a'}}]},
+              environments: [],
+              variants: [],
+            }),
+          ],
+        ]),
+      )
+      expect(result.valid).to.be.false
+      expect(result.issues.some((i) => i.message.includes('Windows-reserved'))).to.be.true
+    })
+
+    it('passes a clean lowercase workspace with no new floor errors', () => {
+      const result = validateFileMap(
+        new Map<string, string>([
+          [
+            'configs/my.clean-key_1.json',
+            JSON.stringify({
+              key: 'my.clean-key_1',
+              type: 'config',
+              valueType: 'string',
+              default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'a'}}]},
+              environments: [],
+              variants: [],
+            }),
+          ],
+        ]),
+      )
+      expect(result.valid, JSON.stringify(result.issues)).to.be.true
+      expect(result.issues).to.be.empty
+    })
+  })
+
+  describe('case-insensitive duplicate detection (qfg-6na9.4)', () => {
+    function twoConfigs(keyA: string, keyB: string): Map<string, string> {
+      const mk = (key: string) => ({
+        key,
+        type: 'config',
+        valueType: 'string',
+        default: {
+          rules: [
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {type: 'string', value: 'alpha'},
+            },
+          ],
+        },
+        environments: [],
+        variants: [],
+      })
+      return new Map<string, string>([
+        [`configs/${keyA}.json`, JSON.stringify(mk(keyA))],
+        [`configs/${keyB}.json`, JSON.stringify(mk(keyB))],
+      ])
+    }
+
+    it('errors on a Foo/foo pair with the case-collision message', () => {
+      const result = validateFileMap(twoConfigs('Foo', 'foo'))
+      expect(result.valid).to.be.false
+      const caseIssues = result.issues.filter((i) => i.message.includes('differ only by case'))
+      expect(caseIssues, JSON.stringify(result.issues)).to.have.length(1)
+      expect(caseIssues[0].severity).to.equal('error')
+      expect(caseIssues[0].message).to.include('Foo')
+      expect(caseIssues[0].message).to.include('foo')
+    })
+
+    it('errors on an exact duplicate with the duplicate-key message', () => {
+      // Two files, same exact key, in different directories.
+      const dupConfig = (dir: string) =>
+        new Map<string, string>([
+          [
+            `${dir}/dup.json`,
+            JSON.stringify({
+              key: 'dup',
+              type: dir === 'segments' ? 'segment' : 'config',
+              valueType: dir === 'segments' ? 'bool' : 'string',
+              ...(dir === 'segments' ? {sendToClientSdk: false} : {}),
+              default: {
+                rules: [
+                  {
+                    criteria: [{operator: 'ALWAYS_TRUE'}],
+                    value: dir === 'segments' ? {type: 'bool', value: false} : {type: 'string', value: 'a'},
+                  },
+                ],
+              },
+              environments: [],
+              variants: [],
+            }),
+          ],
+        ])
+      const files = new Map([...dupConfig('configs'), ...dupConfig('segments')])
+      const result = validateFileMap(files)
+      expect(result.valid).to.be.false
+      const dupIssues = result.issues.filter((i) => i.message.includes('Duplicate key'))
+      expect(dupIssues, JSON.stringify(result.issues)).to.have.length(1)
+      expect(dupIssues[0].message).to.not.include('differ only by case')
+    })
+
+    it('detects a case collision via validateWorkspace', () => {
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-case-'))
+      try {
+        fs.mkdirSync(path.join(workspace, 'configs'), {recursive: true})
+        fs.mkdirSync(path.join(workspace, 'feature-flags'), {recursive: true})
+        fs.writeFileSync(path.join(workspace, 'quonfig.json'), JSON.stringify({environments: []}, null, 2))
+        const mkConfig = (key: string) =>
+          JSON.stringify({
+            key,
+            type: 'config',
+            valueType: 'string',
+            default: {
+              rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'a'}}],
+            },
+            environments: [],
+            variants: [],
+          })
+        const mkFlag = (key: string) =>
+          JSON.stringify({
+            key,
+            type: 'feature_flag',
+            valueType: 'bool',
+            default: {
+              rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: true}}],
+            },
+            environments: [],
+            variants: [],
+          })
+        // Each file's key matches its filename and lives in the directory its
+        // type requires; the two keys collide only case-insensitively. Distinct
+        // directories so they don't overwrite each other on the case-insensitive
+        // filesystem the test itself runs on (macOS).
+        fs.writeFileSync(path.join(workspace, 'configs', 'MyFlag.json'), mkConfig('MyFlag'))
+        fs.writeFileSync(path.join(workspace, 'feature-flags', 'myflag.json'), mkFlag('myflag'))
+
+        const result = validateWorkspace(workspace)
+        expect(result.valid).to.be.false
+        const caseIssues = result.issues.filter((i) => i.message.includes('differ only by case'))
+        expect(caseIssues, JSON.stringify(result.issues)).to.have.length(1)
+      } finally {
+        fs.rmSync(workspace, {recursive: true, force: true})
+      }
+    })
   })
 
   // qfg-7jnb.8: IS_PRESENT / IS_NOT_PRESENT take only `propertyName` and
