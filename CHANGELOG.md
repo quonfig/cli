@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.65 - 2026-06-30
+
+- feat(verify): `qfg verify` (and `qfg push`'s preflight, which runs verify) now hard-errors on filesystem-unsafe config/flag keys and on case-insensitive duplicate keys, matching the validation the app-gitea `qfg-verify` pre-receive hook already enforces server-side (qfg-6na9.4). Until now this validation lived only in the compiled server-side hook, so a bad key was caught only after the pack reached the cloud; running it in local preflight surfaces a clear, actionable error before anything is sent (and ahead of the server rejection -- a companion app-quonfig fix maps that rejection to a clean `HTTP 422` carrying the reason rather than the previous opaque `HTTP 500`). The Policy A production audit found zero existing keys that violate any of these rules, so no existing workspace is affected. Specifically:
+  - Key length cap lowered from 512 to 200 characters. A key becomes a `<key>.json` filename in a git repo customers clone onto macOS/Windows machines; 200 chars leaves ample headroom under the 255-byte filesystem path-component limit even with the `.json` suffix.
+  - New hard errors for keys that produce un-clonable or invisible files on a customer's checkout: a leading dot, control characters / NUL, Windows-reserved characters (`: * ? " < > |`), Windows reserved device names (`con`/`prn`/`aux`/`nul`/`com1`-`com9`/`lpt1`-`lpt9`), and a trailing dot or space.
+  - Case-insensitive duplicate detection: two keys in a workspace that differ only by case (e.g. `Foo`/`foo`, `MyFlag`/`myflag`) now error with a distinct "differ only by case" message -- they collide to a single file on case-insensitive macOS/Windows clones, silently dropping a config.
+  - The general Policy A charset rule (`^[A-Za-z0-9._-]+$`) is intentionally NOT part of this release; it ships later as a warning, then a hard error, after a soak (qfg-6na9.5 / qfg-6na9.6). (qfg-6na9.4)
+
 ## 0.0.64 - 2026-06-10
 
 - fix(migrate): the LaunchDarkly importer no longer writes a junk `propertyName` (e.g. `user.segmentMatch`) onto segment-match criteria. LD `segmentMatch` clauses have no real attribute, but the clause converter normalized the pseudo-attribute into `propertyName` on every `IN_SEG`/`NOT_IN_SEG` criterion. Evaluation was unaffected (segment match keys off `valueToMatch`), but the criterion was non-canonical and previously rendered as an empty Property bubble in the app's rule editor. Segment criteria now serialize as operator + `valueToMatch` only, matching what the app editor expects and what the Launch importer already emits. Existing imports need no re-run — the stray field is ignored everywhere. (qfg-gc3u)
