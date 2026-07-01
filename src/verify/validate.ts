@@ -952,6 +952,7 @@ const FS_SAFETY_FLOOR_CHECKS: ReadonlyArray<{test: (k: string) => boolean; messa
 // pre-filtered by the directory walk before they'd reach the file-map path) can
 // be unit-tested directly.
 export function validateKey(key: string, file: string, issues: ValidationIssue[]): void {
+  const errorsBefore = issues.length
   if (key.length === 0) {
     issues.push({file, message: `Key is empty`, severity: 'error'})
   }
@@ -971,6 +972,24 @@ export function validateKey(key: string, file: string, issues: ValidationIssue[]
     if (check.test(key)) {
       issues.push({file, message: check.message, severity: 'error'})
     }
+  }
+
+  // qfg-6na9.5: the general Policy A charset as a WARNING — the warn stage of the
+  // warn->error soak (project/plans/26-06-tighter-naming.md). A config that trips
+  // this must STILL push, so severity is 'warning' (does not set result.valid =
+  // false); qfg-6na9.6 will flip it to a hard error after a clean soak. The
+  // charset `^[A-Za-z0-9._-]+$` is kept in sync with app-quonfig's
+  // PolicyAKeySchema (hard at create). Skipped when this key already earned a
+  // hard error above (e.g. a Windows-reserved char is both a floor error AND a
+  // charset miss) so we don't double-report the same key.
+  // eslint-disable-next-line unicorn/better-regex -- keep the explicit charset in sync with app-quonfig
+  if (issues.length === errorsBefore && !/^[A-Za-z0-9._-]+$/.test(key)) {
+    issues.push({
+      file,
+      message: `Key "${key}" has characters outside the allowed set (letters, numbers, ".", "-", "_"). This will become a hard error in a future release — rename it to conform.`,
+      severity: 'warning',
+      suggestion: `Rename to use only letters, numbers, ".", "-", and "_"`,
+    })
   }
 }
 

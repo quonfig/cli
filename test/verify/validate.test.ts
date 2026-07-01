@@ -850,6 +850,60 @@ describe('validate', () => {
     })
   })
 
+  describe('Policy A charset warning (qfg-6na9.5)', () => {
+    function keyIssues(key: string): ValidationIssue[] {
+      const issues: ValidationIssue[] = []
+      validateKey(key, `configs/${key}.json`, issues)
+      return issues
+    }
+
+    it('WARNS (not errors) on a floor-clean charset violation', () => {
+      for (const key of ['my key', 'feature@v2', 'a+b', 'café']) {
+        const issues = keyIssues(key)
+        expect(
+          issues.some((i) => i.severity === 'warning'),
+          `${key}: ${JSON.stringify(issues)}`,
+        ).to.be.true
+        expect(
+          issues.some((i) => i.severity === 'error'),
+          key,
+        ).to.be.false
+      }
+    })
+
+    it('does not warn on a conforming key (uppercase IS allowed by Policy A)', () => {
+      for (const key of ['my.clean-key_1', 'CamelCase', 'A.B_c-1', 'SCREAMING_CASE']) {
+        expect(keyIssues(key), key).to.be.empty
+      }
+    })
+
+    it('does not double-report: a floor violation errors WITHOUT an extra charset warning', () => {
+      const issues = keyIssues('feature:beta') // ':' is a Windows-reserved floor char
+      expect(issues.some((i) => i.severity === 'error')).to.be.true
+      expect(issues.some((i) => i.severity === 'warning')).to.be.false
+    })
+
+    it('a floor-clean charset-violating config still PASSES (accepted with a warning) via validateFileMap', () => {
+      const result = validateFileMap(
+        new Map<string, string>([
+          [
+            'configs/my key.json',
+            JSON.stringify({
+              key: 'my key',
+              type: 'config',
+              valueType: 'string',
+              default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'a'}}]},
+              environments: [],
+              variants: [],
+            }),
+          ],
+        ]),
+      )
+      expect(result.valid, JSON.stringify(result.issues)).to.be.true
+      expect(result.issues.some((i) => i.severity === 'warning' && /allowed set/i.test(i.message))).to.be.true
+    })
+  })
+
   describe('case-insensitive duplicate detection (qfg-6na9.4)', () => {
     function twoConfigs(keyA: string, keyB: string): Map<string, string> {
       const mk = (key: string) => ({
