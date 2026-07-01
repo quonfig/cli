@@ -669,4 +669,30 @@ describe('create', () => {
         expect(ctx.stdout).to.contain('Created boolean flag: flag.no-dir')
       })
   })
+
+  // qfg-6na9.2: Policy A charset is a HARD client-side error at create, failing
+  // fast before the network. A charset-violating key must never reach the API.
+  describe('Policy A key validation (qfg-6na9.2)', () => {
+    test
+      .command(['create', 'has a space', '--type=string', '--value=hi'])
+      .catch((error) => {
+        expect(error.message).to.contain('Invalid key "has a space"')
+        expect(error.message).to.contain('letters, numbers, dots, dashes')
+      })
+      .it('rejects a charset-violating config key before hitting the server')
+
+    test
+      .command(['create', 'feature:beta', '--type=boolean-flag'])
+      .catch((error) => {
+        expect(error.message).to.contain('Invalid key "feature:beta"')
+      })
+      .it('rejects a Windows-reserved-char boolean-flag key')
+
+    test
+      .command(['create', 'log-level.bad key', '--type=log_level', '--value=WARN'])
+      .catch((error) => {
+        expect(error.message).to.contain('Invalid key "log-level.bad key"')
+      })
+      .it('rejects a charset-violating log-level key (charset checked before the prefix rule)')
+  })
 })

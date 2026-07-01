@@ -11,6 +11,7 @@ import {mapConfigValueToDto, mapValueTypeToString} from '../util/config-value-dt
 import {makeConfidentialValue} from '../util/encryption.js'
 import {EntitySubdir, writeStoredConfigToWorkspace} from '../util/local-config-writer.js'
 import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.js'
+import {policyAKeyError} from '../util/policy-a-key.js'
 import secretFlags, {parsedSecretFlags} from '../util/secret-flags.js'
 
 export default class Create extends APICommand {
@@ -76,6 +77,15 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Create)
+
+    // qfg-6na9.2: hard-enforce Policy A client-side before any network/prompt,
+    // so a bad key fails fast here instead of a 4xx from the server (which
+    // hard-enforces the same rule at create via PolicyAKeySchema, qfg-6na9.1).
+    // Covers all three creation paths below (config / boolean-flag / log-level).
+    const keyError = policyAKeyError(args.name)
+    if (keyError) {
+      return this.err(`Invalid key "${args.name}": ${keyError}`, {key: args.name, phase: 'validation'})
+    }
 
     if (flags.type === 'boolean-flag') {
       return this.createBooleanFlag(args, flags.value)
