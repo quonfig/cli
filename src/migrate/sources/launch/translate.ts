@@ -1,5 +1,6 @@
 import type {LaunchChangeEntry, LaunchChangeGroup, LaunchConfig} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema.js'
+import {resolveKey} from '../../key-rewriter.js'
 
 /**
  * Thrown by transformConfig when the source config is structurally invalid
@@ -30,13 +31,27 @@ export function normalizeLogLevelKey(key: string): string {
 }
 
 /**
- * qfg-qhk1: Quonfig keys cannot contain `/` — keys are stored as flat dotted
- * filenames, and a `/` in a source key would create a nested directory tree
- * (data-loss-on-tombstone, cross-key collisions). Normalize `/` to `.` so the
- * destination is always flat.
+ * qfg-qhk1 + qfg-6na9.3: resolve keys through the per-run key rewriter so the
+ * destination is always flat AND 100% Policy-A conformant (charset + FS-floor,
+ * with collision disambiguation). Launch keys are dotted identifiers, so this is
+ * a no-op in the common case; an odd key still gets made safe, and the matching
+ * IN_SEG reference (resolveSegmentRef, below) resolves the same source string so
+ * a rewritten segment key never dangles its rules.
  */
 export function normalizeKey(key: string): string {
-  return key.replaceAll('/', '.')
+  return resolveKey(key)
+}
+
+/**
+ * qfg-6na9.3: an IN_SEG/NOT_IN_SEG criterion's `valueToMatch` holds a referenced
+ * segment KEY (not an arbitrary value) — resolve it through the same rewriter as
+ * the segment's own key definition so the two stay in sync.
+ */
+function resolveSegmentRef(valueToMatch: unknown): void {
+  if (!valueToMatch || typeof valueToMatch !== 'object') return
+  const v = valueToMatch as {value?: unknown}
+  if (typeof v.value === 'string') v.value = resolveKey(v.value)
+  else if (Array.isArray(v.value)) v.value = v.value.map((x) => (typeof x === 'string' ? resolveKey(x) : x))
 }
 
 /**
@@ -218,9 +233,12 @@ function normalizeRules(rules: unknown, configKey: string, path: string): void {
     if (Array.isArray(r.criteria)) {
       for (const [j, crit] of r.criteria.entries()) {
         if (!crit || typeof crit !== 'object') continue
-        const c = crit as {valueToMatch?: unknown}
+        const c = crit as {operator?: unknown; valueToMatch?: unknown}
         if (c.valueToMatch) {
           normalizeLaunchValue(c.valueToMatch, configKey, `${path}[${i}].criteria[${j}].valueToMatch`)
+          if (c.operator === 'IN_SEG' || c.operator === 'NOT_IN_SEG') {
+            resolveSegmentRef(c.valueToMatch)
+          }
         }
       }
     }

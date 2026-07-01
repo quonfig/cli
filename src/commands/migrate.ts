@@ -6,6 +6,7 @@ import type {JsonObj} from '../result.js'
 
 import {BaseCommand} from '../index.js'
 import {CrossSourceError, type ImportState, assertSourceMatches, readImportState} from '../migrate/import-state.js'
+import {StrictKeysError} from '../migrate/key-rewriter.js'
 import {applyLocalMigration, MigratorKeyCollisionError} from '../migrate/local-write.js'
 import {buildPushConflictSuggestion} from '../migrate/migrate-suggestion.js'
 import {type MigrationReportData, migrationReportPath} from '../migrate/migration-report.js'
@@ -114,6 +115,12 @@ export default class Migrate extends BaseCommand {
     staging: Flags.boolean({
       default: false,
       description: 'Hit the staging API for the source (dev-only)',
+    }),
+    'strict-keys': Flags.boolean({
+      default: false,
+      description:
+        'Refuse to migrate if any source key would need rewriting to satisfy Quonfig key rules ' +
+        '(Policy A), instead of rewriting it. Use when you require byte-identical keys.',
     }),
     workspace: Flags.string({
       description:
@@ -319,6 +326,7 @@ export default class Migrate extends BaseCommand {
             remoteUrl: repoUrl,
             reportData: buildReportData(flags.from),
             source,
+            strictKeys: flags['strict-keys'],
           })
 
           duplicateResolutionsForWarn = result.duplicateResolutions
@@ -385,6 +393,7 @@ export default class Migrate extends BaseCommand {
         localDir: dir,
         reportData: buildReportData(flags.from),
         source,
+        strictKeys: flags['strict-keys'],
       })
 
       duplicateResolutionsForWarn = localResult.duplicateResolutions
@@ -406,6 +415,7 @@ export default class Migrate extends BaseCommand {
     } catch (error) {
       if (error instanceof NotYetImplementedError) return this.err(error.message)
       if (error instanceof MigratorKeyCollisionError) return this.err(error.message)
+      if (error instanceof StrictKeysError) return this.err(error.message)
       throw error
     } finally {
       // Surface source-level warnings even if apply/push threw (e.g.

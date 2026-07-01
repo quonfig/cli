@@ -6,6 +6,7 @@ import path from 'node:path'
 import {
   buildMigrationReport,
   deriveFollowUpFromConversionNotes,
+  keyMapPath,
   type MigrationReportData,
   migrationReportPath,
   writeMigrationReport,
@@ -785,6 +786,39 @@ describe('migrate/migration-report', () => {
       const nested = path.join(tmpdir, 'nested', 'out')
       writeMigrationReport(nested, baseData())
       expect(fs.existsSync(path.join(nested, '.qf', 'MIGRATION_REPORT.md'))).to.equal(true)
+    })
+  })
+
+  describe('rewritten keys (qfg-6na9.3)', () => {
+    const rewrite = {final: 'Beta-Users', reasons: ['replaced disallowed characters with "-"'], source: 'Beta Users'}
+
+    it('renders an ACTION REQUIRED "Rewritten keys" section listing source -> quonfig', () => {
+      const md = buildMigrationReport(baseData({keyRewrites: [rewrite]}))
+      expect(md).to.match(/##\s*Rewritten keys \(ACTION REQUIRED\)/m)
+      expect(md).to.include('`Beta Users`')
+      expect(md).to.include('`Beta-Users`')
+    })
+
+    it('omits the section entirely when nothing was rewritten (e.g. LD imports)', () => {
+      expect(buildMigrationReport(baseData({keyRewrites: []}))).to.not.match(/Rewritten keys/)
+      expect(buildMigrationReport(baseData())).to.not.match(/Rewritten keys/)
+    })
+
+    it('writes .qf/key-map.json only when rewrites exist', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'keymap-'))
+      const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'keymap-'))
+      try {
+        writeMigrationReport(dir, baseData({keyRewrites: [rewrite], source: 'flagsmith'}))
+        const parsed = JSON.parse(fs.readFileSync(keyMapPath(dir), 'utf8'))
+        expect(parsed.source).to.equal('flagsmith')
+        expect(parsed.rewrites).to.deep.equal([rewrite])
+
+        writeMigrationReport(empty, baseData())
+        expect(fs.existsSync(keyMapPath(empty))).to.equal(false)
+      } finally {
+        fs.rmSync(dir, {force: true, recursive: true})
+        fs.rmSync(empty, {force: true, recursive: true})
+      }
     })
   })
 })

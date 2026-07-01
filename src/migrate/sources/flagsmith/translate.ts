@@ -16,6 +16,7 @@
  * argument supplied by the caller (the `flagsmith.ts` source).
  */
 
+import {resolveKey} from '../../key-rewriter.js'
 import type {ConversionReport} from '../../quonfig-target/report.js'
 import type {QuonfigOperator} from '../../quonfig-target/operators.js'
 import type {QuonfigCriterion, QuonfigRule, QuonfigRuleValue} from '../../quonfig-target/ruleset.js'
@@ -74,8 +75,12 @@ export function segmentOutputPath(name: string): string {
   return `segments/${normalizeKey(name)}.json`
 }
 
+// qfg-6na9.3: resolve every key through the per-run key rewriter so imported
+// keys 100% conform to Policy A (charset + FS-floor). Used for the segment/flag
+// key field AND the output path; the matching IN_SEG reference below resolves
+// the same source string, so a rewritten segment key never dangles its rules.
 function normalizeKey(key: string): string {
-  return key.replaceAll('/', '.')
+  return resolveKey(key)
 }
 
 /** Env name → Quonfig env id slug (matches the source-module slugifier). */
@@ -854,7 +859,10 @@ function buildSegmentOverrideRule(
     criteria: [
       {
         operator: 'IN_SEG',
-        valueToMatch: {type: 'string', value: segmentName},
+        // qfg-6na9.3: resolve the referenced segment key through the same
+        // rewriter as the segment's own key def, so a sanitized/disambiguated
+        // segment key stays in sync here (no dangling targeting).
+        valueToMatch: {type: 'string', value: resolveKey(segmentName)},
       },
     ],
     value,

@@ -87,3 +87,43 @@ export function resolveKey(sourceKey: string): string {
 export function getKeyRewrites(): KeyRewrite[] {
   return [...state.bySource.values()].filter((r) => r.final !== r.source)
 }
+
+/**
+ * Run-level pre-pass: reset the rewriter and plan every source key BEFORE any
+ * change is translated, so both key-definition and by-key reference sites
+ * resolve against the same fully-disambiguated map. Structurally typed on
+ * `{key?}` to stay decoupled from LegacyChange.
+ */
+export function planKeyRewritesForChanges(changes: ReadonlyArray<{key?: string}>): void {
+  resetKeyRewriter()
+  planKeyRewrites(changes.flatMap((c) => (typeof c.key === 'string' ? [c.key] : [])))
+}
+
+/**
+ * `--strict-keys` escape hatch: refuse to migrate if any source key would need
+ * rewriting, so a customer who requires byte-identical keys can clean up the
+ * source first instead of accepting the (reported) rewrites.
+ */
+export class StrictKeysError extends Error {
+  constructor(public readonly rewrites: KeyRewrite[]) {
+    super(
+      `--strict-keys: ${rewrites.length} source key(s) do not conform to Policy A and would be rewritten:\n` +
+        rewrites.map((r) => `  "${r.source}" -> "${r.final}" (${r.reasons.join('; ')})`).join('\n') +
+        `\nRename the key(s) in the source system and re-run, or drop --strict-keys to accept the rewrites.`,
+    )
+    this.name = 'StrictKeysError'
+  }
+}
+
+/**
+ * Plan the rewrites for a run and, when `strict`, throw `StrictKeysError` if any
+ * key would be rewritten. Call once at the top of each migrate orchestrator
+ * before translating.
+ */
+export function preflightKeyRewrites(changes: ReadonlyArray<{key?: string}>, opts?: {strict?: boolean}): void {
+  planKeyRewritesForChanges(changes)
+  if (opts?.strict) {
+    const rewrites = getKeyRewrites()
+    if (rewrites.length > 0) throw new StrictKeysError(rewrites)
+  }
+}

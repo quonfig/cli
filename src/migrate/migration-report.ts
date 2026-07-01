@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type {IdentifierMap} from './identifier-map.js'
+import type {KeyRewrite} from './key-rewriter.js'
 import type {ConversionNote, ConversionNoteCategory} from './quonfig-target/report.js'
 import type {
   CoercedSentinelSummary,
@@ -77,6 +78,13 @@ export interface MigrationReportData {
   environmentMap: EnvironmentMapEntry[]
   followUp: FollowUpChecklist
   identifierMap: IdentifierMap
+  /**
+   * qfg-6na9.3: source keys the migrator rewrote so the workspace is 100%
+   * Policy-A conformant (bad charset, FS-floor, or collision). The renamed key
+   * is what the customer's SDK code must now look up. Null/empty when every
+   * source key already conformed (e.g. every LaunchDarkly import).
+   */
+  keyRewrites?: KeyRewrite[] | null
   lossyMappings: LossyMapping[]
   /**
    * qfg-l8uz: source maintainerId → email pairs. Rendered as a sub-table on
@@ -211,6 +219,24 @@ const renderDuplicateResolutions = (resolved: DuplicateResolutionSummary | null 
         .map((p) => `\`${p}\``)
         .join(', ')}`,
     )
+  }
+
+  return lines.join('\n')
+}
+
+const renderKeyRewrites = (rewrites: KeyRewrite[] | null | undefined): null | string => {
+  if (!rewrites || rewrites.length === 0) return null
+  const lines: string[] = [
+    '## Rewritten keys (ACTION REQUIRED)',
+    '',
+    `The migrator rewrote **${rewrites.length}** source key(s) that Quonfig does not allow verbatim (Policy A: letters, numbers, \`.\`, \`-\`, \`_\`; 200 chars max; no leading dot) or that collided with another key. **The Quonfig key is what your SDK code must now look up** — update any \`get("...")\` / \`variation("...")\` call that used the old name. A machine-readable map is also written to \`.qf/key-map.json\`.`,
+    '',
+    '| Source key | Quonfig key | Why |',
+    '| --- | --- | --- |',
+  ]
+  const sorted = [...rewrites].sort((a, b) => a.source.localeCompare(b.source))
+  for (const r of sorted) {
+    lines.push(`| \`${r.source}\` | \`${r.final}\` | ${r.reasons.join('; ')} |`)
   }
 
   return lines.join('\n')
@@ -742,6 +768,9 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   const dropped = renderDroppedOverrides(data.droppedOverrides)
   if (dropped !== null) sections.push(dropped)
 
+  const keyRewrites = renderKeyRewrites(data.keyRewrites)
+  if (keyRewrites !== null) sections.push(keyRewrites)
+
   const resolved = renderDuplicateResolutions(data.duplicateResolutions)
   if (resolved !== null) sections.push(resolved)
 
@@ -783,9 +812,32 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
  */
 export const migrationReportPath = (outputDir: string): string => path.join(outputDir, '.qf', 'MIGRATION_REPORT.md')
 
+/**
+ * qfg-6na9.3: machine-readable `source -> quonfig` key map, next to the report
+ * under `.qf/` (excluded from the push, like MIGRATION_REPORT.md). Lets a
+ * customer script the SDK-lookup updates for renamed keys.
+ */
+export const keyMapPath = (outputDir: string): string => path.join(outputDir, '.qf', 'key-map.json')
+
 export const writeMigrationReport = (outputDir: string, data: MigrationReportData): string => {
   const filePath = migrationReportPath(outputDir)
   fs.mkdirSync(path.dirname(filePath), {recursive: true})
   fs.writeFileSync(filePath, buildMigrationReport(data), 'utf8')
+
+  if (data.keyRewrites && data.keyRewrites.length > 0) {
+    fs.writeFileSync(
+      keyMapPath(outputDir),
+      JSON.stringify(
+        {
+          rewrites: data.keyRewrites.map((r) => ({final: r.final, reasons: r.reasons, source: r.source})),
+          source: data.source,
+        },
+        null,
+        2,
+      ) + '\n',
+      'utf8',
+    )
+  }
+
   return filePath
 }

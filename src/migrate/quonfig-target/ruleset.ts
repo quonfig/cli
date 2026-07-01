@@ -9,6 +9,7 @@
  * topology composes them differently.
  */
 
+import {resolveKey} from '../key-rewriter.js'
 import type {ConversionReport} from './report.js'
 import {type QuonfigOperator, mapLaunchDarklyOperator} from './operators.js'
 import {type QuonfigValue, type QuonfigValueType, toQuonfigValue} from './values.js'
@@ -142,7 +143,10 @@ function valueToMatchFor(operator: QuonfigOperator, clause: SourceClause, ctx: R
       )
     }
 
-    return {type: 'string', value: String(clause.values[0] ?? '')}
+    // qfg-6na9.3: this value is a referenced segment KEY — resolve it through
+    // the per-run rewriter so a sanitized/disambiguated segment key stays in
+    // sync with the IN_SEG rules pointing at it (no dangling targeting).
+    return {type: 'string', value: resolveKey(String(clause.values[0] ?? ''))}
   }
 
   if (operator === 'PROP_MATCHES' || operator === 'PROP_DOES_NOT_MATCH') {

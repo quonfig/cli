@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
+import {getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
 import {deriveFollowUpFromConversionNotes, type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {type CommitSpec, MIGRATOR_IDENTITY, type PushIdentity, stackCommits} from '../util/clone-and-stack-push.js'
@@ -38,6 +39,8 @@ export interface ApplyLocalMigrationOptions {
    */
   reportData: MigrationReportData
   source: MigrationSource
+  /** qfg-6na9.3: `--strict-keys` — refuse to migrate if any key would be rewritten. */
+  strictKeys?: boolean
 }
 
 export interface ApplyLocalMigrationResult {
@@ -257,6 +260,11 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const branch = opts.branch ?? 'main'
   const author = opts.author ?? MIGRATOR_IDENTITY
 
+  // qfg-6na9.3: plan Policy A key rewrites over ALL changes up front (run-level,
+  // not per-commit) so key-def and reference sites resolve identically, then
+  // enforce --strict-keys before writing anything.
+  preflightKeyRewrites(opts.changes, {strict: opts.strictKeys})
+
   if (opts.fullHistory && !opts.source.getCommitMeta) {
     throw new Error(
       `--full-summary requires the source to provide per-change author + date + summary, but \`${opts.source.name}\` does not. ` +
@@ -291,6 +299,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const reportData: MigrationReportData = {
     ...opts.reportData,
     counts,
+    keyRewrites: getKeyRewrites(),
     ...(environmentMap && environmentMap.length > 0 ? {environmentMap} : {}),
     followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
     ...(coercedSentinels ? {coercedSentinels} : {}),
@@ -483,6 +492,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
     const reportData: MigrationReportData = {
       ...opts.reportData,
       counts,
+      keyRewrites: getKeyRewrites(),
       ...(environmentMap && environmentMap.length > 0 ? {environmentMap} : {}),
       followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
       ...(coercedSentinels ? {coercedSentinels} : {}),

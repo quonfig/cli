@@ -1,6 +1,13 @@
 import {expect} from 'chai'
 
-import {getKeyRewrites, planKeyRewrites, resetKeyRewriter, resolveKey} from '../../src/migrate/key-rewriter.js'
+import {
+  getKeyRewrites,
+  planKeyRewrites,
+  preflightKeyRewrites,
+  resetKeyRewriter,
+  resolveKey,
+  StrictKeysError,
+} from '../../src/migrate/key-rewriter.js'
 
 // qfg-6na9.3: the per-run key rewriter turns the pure sanitizer into a
 // workspace-consistent map. planKeyRewrites() is the pre-pass over every source
@@ -68,5 +75,27 @@ describe('key-rewriter (qfg-6na9.3)', () => {
     planKeyRewrites(['foo-bar', 'foo bar'])
     const second = new Map(getKeyRewrites().map((r) => [r.source, r.final]))
     expect([...second.entries()]).to.deep.equal([...first.entries()])
+  })
+
+  describe('preflightKeyRewrites (--strict-keys)', () => {
+    it('plans the map (non-strict) and leaves it queryable', () => {
+      preflightKeyRewrites([{key: 'Beta Users'}, {key: 'ok.key'}])
+      expect(resolveKey('Beta Users')).to.equal('Beta-Users')
+      expect(getKeyRewrites().map((r) => r.source)).to.deep.equal(['Beta Users'])
+    })
+
+    it('throws StrictKeysError listing the rewrites when strict and any key is non-conforming', () => {
+      expect(() => preflightKeyRewrites([{key: 'Beta Users'}], {strict: true}))
+        .to.throw(StrictKeysError)
+        .that.satisfies((e: StrictKeysError) => /Beta Users.*Beta-Users/s.test(e.message))
+    })
+
+    it('does NOT throw in strict mode when every key already conforms', () => {
+      expect(() => preflightKeyRewrites([{key: 'ok.key'}, {key: 'Also-Fine_1'}], {strict: true})).to.not.throw()
+    })
+
+    it('ignores changes with no key', () => {
+      expect(() => preflightKeyRewrites([{}, {key: 'ok.key'}], {strict: true})).to.not.throw()
+    })
   })
 })

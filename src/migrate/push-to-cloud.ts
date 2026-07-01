@@ -10,6 +10,7 @@ import {
   buildMigrationCounts,
   writeQuonfigFiles,
 } from './local-write.js'
+import {getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
 import {deriveFollowUpFromConversionNotes, type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {
   type CloneAndStackPushOptions,
@@ -76,6 +77,8 @@ export interface PushMigrationToCloudOptions {
    */
   reportData: MigrationReportData
   source: MigrationSource
+  /** qfg-6na9.3: `--strict-keys` — refuse to migrate if any key would be rewritten. */
+  strictKeys?: boolean
 }
 
 export interface PushMigrationToCloudResult extends CloneAndStackPushResult {
@@ -122,6 +125,11 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
         `Drop --full-summary or use a source (e.g. launch) that supports it.`,
     )
   }
+
+  // qfg-6na9.3: plan Policy A key rewrites over ALL changes up front (run-level,
+  // not per-commit) so key-def and reference sites resolve identically, then
+  // enforce --strict-keys before any clone/commit/push.
+  preflightKeyRewrites(opts.changes, {strict: opts.strictKeys})
 
   const acc: AuditAccumulator = {
     coercedSentinels: null,
@@ -177,6 +185,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
             const reportData: MigrationReportData = {
               ...opts.reportData,
               counts,
+              keyRewrites: getKeyRewrites(),
               ...(environmentMap && environmentMap.length > 0 ? {environmentMap} : {}),
               followUp: deriveFollowUpFromConversionNotes(opts.reportData.followUp, conversionNotes ?? undefined),
               ...(acc.coercedSentinels ? {coercedSentinels: acc.coercedSentinels} : {}),

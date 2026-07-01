@@ -9,6 +9,7 @@
  * plan §5.4.
  */
 
+import {resolveKey} from '../../key-rewriter.js'
 import {ConversionReport} from '../../quonfig-target/report.js'
 import {
   clauseToCriterion,
@@ -23,12 +24,14 @@ import type {LDClause, LDFlag, LDSegment} from './types.js'
 const ALWAYS_TRUE = {operator: 'ALWAYS_TRUE' as const}
 
 /**
- * LaunchDarkly keys are already flat and URL-safe, but normalize `/` → `.`
- * defensively so a key can never create a nested directory tree (matches the
- * flat-path contract `local-write.ts` enforces).
+ * qfg-6na9.3: resolve keys through the per-run key rewriter for Policy A
+ * conformance. LD keys are already `[A-Za-z0-9._-]`, so this is a strict no-op
+ * in practice — wired for uniformity + future-proofing (an odd imported key
+ * would still be made safe, and stay in sync with any IN_SEG reference to it,
+ * which resolves through `ruleset.ts`).
  */
 function normalizeKey(key: string): string {
-  return key.replaceAll('/', '.')
+  return resolveKey(key)
 }
 
 /** Environment keys are LD slugs already; lowercase + hyphenate to be safe. */
