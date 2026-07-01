@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- feat(update-check): `qfg` now surfaces an "update available" notice on stderr when a newer version has been published to npm, via the official `@oclif/plugin-warn-if-update-available` plugin. The notice includes the upgrade command (`Run npm i -g @quonfig/cli to upgrade.`). The version check is cached under the CLI cache dir and refreshed in a detached background process, so it never adds latency to a command, and the notice is written to stderr (via oclif `warn`) so it never contaminates stdout or piped output. Pinned to `3.0.16` — the newest release that still targets our `@oclif/core ^3`: `3.0.17`–`3.0.19` regressed the message renderer to a bare `import('lodash')` + `lodash.template`, which throws `lodash.template is not a function` under Node ≥18 (the export lives at `.default.template`); the hook swallows that error so no notice would ever print. The properly fixed `3.1.x` line switched to `lodash.default.template` but requires `@oclif/core ^4`, so it is not yet usable here.
+
 ## 0.0.65 - 2026-06-30
 
 - feat(verify): `qfg verify` (and `qfg push`'s preflight, which runs verify) now hard-errors on filesystem-unsafe config/flag keys and on case-insensitive duplicate keys, matching the validation the app-gitea `qfg-verify` pre-receive hook already enforces server-side (qfg-6na9.4). Until now this validation lived only in the compiled server-side hook, so a bad key was caught only after the pack reached the cloud; running it in local preflight surfaces a clear, actionable error before anything is sent (and ahead of the server rejection -- a companion app-quonfig fix maps that rejection to a clean `HTTP 422` carrying the reason rather than the previous opaque `HTTP 500`). The Policy A production audit found zero existing keys that violate any of these rules, so no existing workspace is affected. Specifically:

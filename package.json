@@ -21,6 +21,7 @@
     "@oclif/core": "^3.18.2",
     "@oclif/plugin-help": "^6",
     "@oclif/plugin-plugins": "^4",
+    "@oclif/plugin-warn-if-update-available": "3.0.16",
     "@quonfig/node": "^1.0.0",
     "acorn": "^8.10.0",
     "acorn-walk": "^8.3.5",
@@ -77,7 +78,12 @@
     "bin": "qfg",
     "dirname": "qfg",
     "commands": "./dist/commands",
-    "plugins": [],
+    "plugins": [
+      "@oclif/plugin-warn-if-update-available"
+    ],
+    "warn-if-update-available": {
+      "message": "<%= config.name %> update available from <%= chalk.greenBright(config.version) %> to <%= chalk.greenBright(latest) %>.\nRun <%= chalk.cyan('npm i -g ' + config.name) %> to upgrade."
+    },
     "topicSeparator": " ",
     "helpClass": "./dist/help",
     "stacktrace": false,

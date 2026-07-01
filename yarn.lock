@@ -1635,7 +1635,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oclif/core@npm:^3.18.2, @oclif/core@npm:^3.25.2, @oclif/core@npm:^3.26.6":
+"@oclif/core@npm:^3.18.2, @oclif/core@npm:^3.25.2, @oclif/core@npm:^3.26.0, @oclif/core@npm:^3.26.6":
   version: 3.27.0
   resolution: "@oclif/core@npm:3.27.0"
   dependencies:
@@ -1761,6 +1761,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@oclif/plugin-warn-if-update-available@npm:3.0.16":
+  version: 3.0.16
+  resolution: "@oclif/plugin-warn-if-update-available@npm:3.0.16"
+  dependencies:
+    "@oclif/core": "npm:^3.26.0"
+    chalk: "npm:^5.3.0"
+    debug: "npm:^4.1.0"
+    http-call: "npm:^5.2.2"
+    lodash.template: "npm:^4.5.0"
+  checksum: 10c0/d3c66082a2314bf440b5dcc128c79ead400861efa4e13473536000dfcef5f8550e91161da0140c1390230ce2f4356c036dbd5b4ff2852428ac947c2832d6a0a1
+  languageName: node
+  linkType: hard
+
 "@oclif/plugin-warn-if-update-available@npm:^3.1.57":
   version: 3.1.65
   resolution: "@oclif/plugin-warn-if-update-available@npm:3.1.65"
@@ -1866,6 +1879,7 @@ __metadata:
     "@oclif/core": "npm:^3.18.2"
     "@oclif/plugin-help": "npm:^6"
     "@oclif/plugin-plugins": "npm:^4"
+    "@oclif/plugin-warn-if-update-available": "npm:3.0.16"
     "@oclif/prettier-config": "npm:^0.2.1"
     "@oclif/test": "npm:^3"
     "@quonfig/node": "npm:^1.0.0"
@@ -6395,6 +6409,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lodash._reinterpolate@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "lodash._reinterpolate@npm:3.0.0"
+  checksum: 10c0/cdf592374b5e9eb6d6290a9a07c7d90f6e632cca4949da2a26ae9897ab13f138f3294fd5e81de3e5d997717f6e26c06747a9ad3413c043fd36c0d87504d97da6
+  languageName: node
+  linkType: hard
+
 "lodash.camelcase@npm:^4.3.0":
   version: 4.3.0
   resolution: "lodash.camelcase@npm:4.3.0"
@@ -6406,6 +6427,25 @@ __metadata:
   version: 4.6.2
   resolution: "lodash.merge@npm:4.6.2"
   checksum: 10c0/402fa16a1edd7538de5b5903a90228aa48eb5533986ba7fa26606a49db2572bf414ff73a2c9f5d5fd36b31c46a5d5c7e1527749c07cbcf965ccff5fbdf32c506
+  languageName: node
+  linkType: hard
+
+"lodash.template@npm:^4.5.0":
+  version: 4.18.1
+  resolution: "lodash.template@npm:4.18.1"
+  dependencies:
+    lodash._reinterpolate: "npm:^3.0.0"
+    lodash.templatesettings: "npm:^4.0.0"
+  checksum: 10c0/b63531cd665533f84960f3ef239b0aea96b4bdac6bc5e8c5d94bab4ba6ecbde5095cc8c8d65f765391273925321203047f2dc702471e8ccb40acf44ea10bda91
+  languageName: node
+  linkType: hard
+
+"lodash.templatesettings@npm:^4.0.0":
+  version: 4.2.0
+  resolution: "lodash.templatesettings@npm:4.2.0"
+  dependencies:
+    lodash._reinterpolate: "npm:^3.0.0"
+  checksum: 10c0/2609fea36ed061114dfed701666540efc978b069b2106cd819b415759ed281419893d40f85825240197f1a38a98e846f2452e2d31c6d5ccee1e006c9de820622
   languageName: node
   linkType: hard
 
