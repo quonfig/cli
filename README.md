@@ -1337,7 +1337,7 @@ Migrate flags and configs from a legacy feature-flag system into a Quonfig works
 USAGE
   $ qfg migrate --from launch|launchdarkly|flagsmith [--json] [--interactive] [--no-color] [--verbose]
     [--api-key <value>] [--dir <value>] [--dry-run] [--full-summary] [--project <value>] [--push] [--recent <value>]
-    [--reset] [--since <value>] [--source-api-key <value>] [--staging] [--workspace <value>]
+    [--reset] [--since <value>] [--source-api-key <value>] [--staging] [--strict-keys] [--workspace <value>]
 
 FLAGS
   --api-key=<value>         Deprecated alias for --source-api-key, kept for the `launch` source (or set LAUNCH_API_KEY).
@@ -1360,6 +1360,8 @@ FLAGS
   --source-api-key=<value>  API key for the legacy source. Set this, QUONFIG_MIGRATE_API_KEY, or the per-provider env
                             var (LAUNCHDARKLY_API_KEY, LAUNCH_API_KEY, FLAGSMITH_API_KEY).
   --staging                 Hit the staging API for the source (dev-only)
+  --strict-keys             Refuse to migrate if any source key would need rewriting to satisfy Quonfig key rules
+                            (Policy A), instead of rewriting it. Use when you require byte-identical keys.
   --workspace=<value>       Quonfig cloud workspace slug to push to. Requires `qfg login` and is typically combined with
                             --push.
 
