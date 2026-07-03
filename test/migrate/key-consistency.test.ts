@@ -1,6 +1,6 @@
 import {expect} from 'chai'
 
-import {planKeyRewrites, resetKeyRewriter} from '../../src/migrate/key-rewriter.js'
+import {planKeyRewrites, resetKeyRewriter, resolveKey} from '../../src/migrate/key-rewriter.js'
 import {ConversionReport} from '../../src/migrate/quonfig-target/report.js'
 import {translateFeature, translateSegment} from '../../src/migrate/sources/flagsmith/translate.js'
 import type {
@@ -99,19 +99,22 @@ describe('migrate key/reference consistency (qfg-6na9.3)', () => {
 
   it('stays consistent under DISAMBIGUATION (two names collapse to one key)', () => {
     const report = new ConversionReport()
-    // 'Beta Users' and 'Beta-Users' both sanitize to 'Beta-Users'; segment 7 is
-    // the one that gets the numeric suffix. Both its key def and reference must
-    // pick up the SAME suffixed key.
+    // 'Beta Users' and 'Beta-Users' both resolve to the base name 'Beta-Users'.
+    // The ALREADY-VALID 'Beta-Users' keeps its own name (customer code looking
+    // it up must not silently hit a different flag); the sanitized 'Beta Users'
+    // — segment 7 here — takes the numeric suffix. Both its key def and
+    // reference must pick up the SAME suffixed key.
     planKeyRewrites(['Beta Users', 'Beta-Users', 'fx-segov'])
 
-    const seg = translateSegment(segment(7, 'Beta-Users'), report)
+    const seg = translateSegment(segment(7, 'Beta Users'), report)
     const feat = translateFeature(segovBundle('fx-segov', 7), report, {
       envNameByApiKey: new Map([['apk-dev', 'Development']]),
-      segmentNameById: new Map([[7, 'Beta-Users']]),
+      segmentNameById: new Map([[7, 'Beta Users']]),
     })
 
-    expect(seg.key).to.equal('Beta-Users-2') // disambiguated
+    expect(seg.key).to.equal('Beta-Users-2') // sanitized key gets the suffix
     expect(inSegValue(feat)).to.equal(seg.key) // reference follows the suffix
+    expect(resolveKey('Beta-Users')).to.equal('Beta-Users') // valid key keeps its name
   })
 
   it('is a strict no-op for an already-conforming segment name (LD-style)', () => {

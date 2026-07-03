@@ -53,6 +53,63 @@ describe('key-rewriter (qfg-6na9.3)', () => {
     expect(new Set([a, b])).to.deep.equal(new Set(['foo-bar', 'foo-bar-2']))
   })
 
+  it('never renames an already-valid key to make room for sanitized junk', () => {
+    // 'my flag' sanitizes to 'my-flag', colliding with the ALREADY-VALID source
+    // key 'my-flag'. The valid key must keep its own name — customer code calls
+    // get("my-flag") and must keep hitting the same flag — and the sanitized
+    // key takes the suffix.
+    planKeyRewrites(['my flag', 'my-flag'])
+    expect(resolveKey('my-flag')).to.equal('my-flag')
+    expect(resolveKey('my flag')).to.equal('my-flag-2')
+    // The unchanged valid key must NOT appear in the rewrites report.
+    expect(getKeyRewrites().map((r) => `${r.source}=>${r.final}`)).to.deep.equal(['my flag=>my-flag-2'])
+  })
+
+  it('valid key wins regardless of the order keys are planned in', () => {
+    for (const order of [
+      ['my flag', 'my-flag'],
+      ['my-flag', 'my flag'],
+    ]) {
+      resetKeyRewriter()
+      planKeyRewrites(order)
+      expect(resolveKey('my-flag'), order.join(',')).to.equal('my-flag')
+      expect(resolveKey('my flag'), order.join(',')).to.equal('my-flag-2')
+    }
+  })
+
+  it('a sanitized key that case-collides with a valid key gets the suffix, not the valid key', () => {
+    // 'Foo ' sanitizes to 'Foo', which collides case-insensitively with the
+    // valid source key 'foo'. 'foo' keeps its name; 'Foo ' is suffixed.
+    for (const order of [
+      ['Foo ', 'foo'],
+      ['foo', 'Foo '],
+    ]) {
+      resetKeyRewriter()
+      planKeyRewrites(order)
+      expect(resolveKey('foo'), order.join(',')).to.equal('foo')
+      expect(resolveKey('Foo '), order.join(',')).to.equal('Foo-2')
+      expect(
+        getKeyRewrites().map((r) => r.source),
+        order.join(','),
+      ).to.deep.equal(['Foo '])
+    }
+  })
+
+  it('two VALID keys that collide case-insensitively resolve lexicographically (genuine conflict)', () => {
+    // Both conform; the FS-floor still hard-rejects the case collision, so ONE
+    // of them must move. Deterministic: lexicographically-first valid key keeps
+    // its name.
+    for (const order of [
+      ['Foo', 'foo'],
+      ['foo', 'Foo'],
+    ]) {
+      resetKeyRewriter()
+      planKeyRewrites(order)
+      expect(resolveKey('Foo'), order.join(',')).to.equal('Foo')
+      expect(resolveKey('foo'), order.join(',')).to.equal('foo-2')
+    }
+  })
+
   it('disambiguates a case-insensitive collision (FS-floor is hard on those)', () => {
     planKeyRewrites(['Foo', 'foo'])
     const a = resolveKey('Foo')

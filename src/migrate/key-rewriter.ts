@@ -58,19 +58,46 @@ function disambiguate(base: string): string {
 }
 
 /**
- * Pre-pass: compute the final key for every source key. Sorted first so the
- * assignment of the un-suffixed base name on a collision is deterministic and
- * independent of the order changes were fetched in.
+ * Pre-pass: compute the final key for every source key. Two passes, each
+ * sorted so every assignment is deterministic and independent of the order
+ * changes were fetched in:
+ *
+ *   1. Keys that are ALREADY fully valid (sanitize is an identity: they pass
+ *      Policy A and the FS-floor) claim their own names FIRST and are never
+ *      renamed to make room for sanitized junk — customer code calling
+ *      get("my-flag") must keep resolving to the same flag even when a source
+ *      key like "my flag" sanitizes to the same name. If two VALID keys
+ *      collide case-insensitively ("Foo"/"foo" — a genuine source conflict the
+ *      FS-floor hard-rejects), the lexicographically-first one keeps its name
+ *      and the other is suffixed.
+ *   2. Keys that needed sanitizing then disambiguate AROUND the valid ones
+ *      (-2, -3, ...).
  */
 export function planKeyRewrites(sourceKeys: Iterable<string>): void {
-  for (const sourceKey of [...new Set(sourceKeys)].sort()) {
-    if (state.bySource.has(sourceKey)) continue
-    const san = sanitizePolicyAKey(sourceKey)
-    const final = disambiguate(san.key)
-    const reasons = [...san.reasons]
-    if (final !== san.key) reasons.push('appended a numeric suffix to keep the key unique')
+  const fresh = [...new Set(sourceKeys)].sort().filter((k) => !state.bySource.has(k))
+
+  const assign = (sourceKey: string, base: string, sanitizeReasons: string[]): void => {
+    const final = disambiguate(base)
+    const reasons = [...sanitizeReasons]
+    if (final !== base) reasons.push('appended a numeric suffix to keep the key unique')
     state.bySource.set(sourceKey, {final, reasons, source: sourceKey})
     state.takenLower.set(final.toLowerCase(), sourceKey)
+  }
+
+  // Pass 1: already-valid keys claim their own names.
+  const needsSanitizing: Array<{sanitized: ReturnType<typeof sanitizePolicyAKey>; sourceKey: string}> = []
+  for (const sourceKey of fresh) {
+    const sanitized = sanitizePolicyAKey(sourceKey)
+    if (sanitized.changed) {
+      needsSanitizing.push({sanitized, sourceKey})
+    } else {
+      assign(sourceKey, sourceKey, [])
+    }
+  }
+
+  // Pass 2: sanitized keys disambiguate around them.
+  for (const {sanitized, sourceKey} of needsSanitizing) {
+    assign(sourceKey, sanitized.key, sanitized.reasons)
   }
 }
 
