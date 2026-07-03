@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.67 - 2026-07-03
 
 - feat(verify): the Policy A key charset (`^[A-Za-z0-9._-]+$`) is now a **hard error** in `qfg verify` (and the app-gitea `qfg-verify` pre-receive hook) — the final stage of the warn→error rollout begun in 0.0.66. A key outside the charset now fails verification and cannot be pushed. Flipped only after a full-corpus enumeration of every production workspace (2026-07-03) verified zero non-conforming stored keys, so no existing workspace is affected. Create (`qfg create`, app-quonfig API) and migrate already hard-enforce the same rule, so all boundaries now agree. (qfg-6na9.6)
 - fix(verify): the `qfg-verify` pre-receive hook can no longer be bypassed by "unusual" filenames. The hook read the pushed tree with string-interpolated `execSync` calls and default `git ls-tree` output, so a filename containing a space (shell word-splitting) or non-ASCII characters (git's C-quoting of unusual paths) was **silently skipped and never validated** — exactly the Policy-A-violating keys the hook exists to catch (confirmed live on staging: a `configs/bad charset key.json` push was accepted unvalidated). File listing now uses `ls-tree -z` and all git invocations use `execFileSync` (no shell), and a listed-but-unreadable file now rejects the push (fail closed) instead of being skipped. (qfg-6na9.6)
