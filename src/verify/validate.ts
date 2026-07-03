@@ -932,8 +932,9 @@ function validateEnvironmentIds(
 // IMPORTANT: this floor must stay conceptually in lockstep with app-quonfig's
 // src/lib/domain/config-schemas.ts (the charset precedent there is
 // `SchemaKeySchema`; Policy A is `PolicyAKeySchema`). The general charset check
-// (`^[A-Za-z0-9._-]+$`) is deliberately NOT here — it ships separately as a
-// warning (bead qfg-6na9.5). This module is the FS-floor + dedup only.
+// (`^[A-Za-z0-9._-]+$`) is deliberately NOT here — it lives in `validateKey`
+// below (warning per qfg-6na9.5, hard error since qfg-6na9.6). This list is the
+// FS-floor only.
 //
 // Structured as a table so severity is trivially adjustable later.
 const FS_SAFETY_FLOOR_CHECKS: ReadonlyArray<{test: (k: string) => boolean; message: string}> = [
@@ -974,20 +975,20 @@ export function validateKey(key: string, file: string, issues: ValidationIssue[]
     }
   }
 
-  // qfg-6na9.5: the general Policy A charset as a WARNING — the warn stage of the
-  // warn->error soak (project/plans/26-06-tighter-naming.md). A config that trips
-  // this must STILL push, so severity is 'warning' (does not set result.valid =
-  // false); qfg-6na9.6 will flip it to a hard error after a clean soak. The
-  // charset `^[A-Za-z0-9._-]+$` is kept in sync with app-quonfig's
-  // PolicyAKeySchema (hard at create). Skipped when this key already earned a
-  // hard error above (e.g. a Windows-reserved char is both a floor error AND a
-  // charset miss) so we don't double-report the same key.
+  // qfg-6na9.6: the general Policy A charset as a HARD ERROR. Shipped as a
+  // warning first (qfg-6na9.5), flipped after a full-corpus enumeration of all
+  // prod workspaces verified zero non-conforming keys (2026-07-03; see the bead
+  // and project/plans/26-06-tighter-naming.md). The charset `^[A-Za-z0-9._-]+$`
+  // is kept in sync with app-quonfig's PolicyAKeySchema (hard at create).
+  // Skipped when this key already earned an error above (e.g. a
+  // Windows-reserved char is both a floor error AND a charset miss) so we
+  // don't double-report the same key.
   // eslint-disable-next-line unicorn/better-regex -- keep the explicit charset in sync with app-quonfig
   if (issues.length === errorsBefore && !/^[A-Za-z0-9._-]+$/.test(key)) {
     issues.push({
       file,
-      message: `Key "${key}" has characters outside the allowed set (letters, numbers, ".", "-", "_"). This will become a hard error in a future release — rename it to conform.`,
-      severity: 'warning',
+      message: `Key "${key}" has characters outside the allowed set (letters, numbers, ".", "-", "_").`,
+      severity: 'error',
       suggestion: `Rename to use only letters, numbers, ".", "-", and "_"`,
     })
   }

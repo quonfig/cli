@@ -850,40 +850,36 @@ describe('validate', () => {
     })
   })
 
-  describe('Policy A charset warning (qfg-6na9.5)', () => {
+  describe('Policy A charset hard error (qfg-6na9.6)', () => {
     function keyIssues(key: string): ValidationIssue[] {
       const issues: ValidationIssue[] = []
       validateKey(key, `configs/${key}.json`, issues)
       return issues
     }
 
-    it('WARNS (not errors) on a floor-clean charset violation', () => {
-      for (const key of ['my key', 'feature@v2', 'a+b', 'café']) {
+    it('ERRORS on a floor-clean charset violation', () => {
+      for (const key of ['my key', 'feature@v2', 'a+b', 'café', ' leading-space']) {
         const issues = keyIssues(key)
         expect(
-          issues.some((i) => i.severity === 'warning'),
+          issues.some((i) => i.severity === 'error' && /allowed set/i.test(i.message)),
           `${key}: ${JSON.stringify(issues)}`,
         ).to.be.true
-        expect(
-          issues.some((i) => i.severity === 'error'),
-          key,
-        ).to.be.false
       }
     })
 
-    it('does not warn on a conforming key (uppercase IS allowed by Policy A)', () => {
+    it('does not flag a conforming key (uppercase IS allowed by Policy A)', () => {
       for (const key of ['my.clean-key_1', 'CamelCase', 'A.B_c-1', 'SCREAMING_CASE']) {
         expect(keyIssues(key), key).to.be.empty
       }
     })
 
-    it('does not double-report: a floor violation errors WITHOUT an extra charset warning', () => {
+    it('does not double-report: a floor violation gets exactly one error, no extra charset issue', () => {
       const issues = keyIssues('feature:beta') // ':' is a Windows-reserved floor char
       expect(issues.some((i) => i.severity === 'error')).to.be.true
-      expect(issues.some((i) => i.severity === 'warning')).to.be.false
+      expect(issues.some((i) => /allowed set/i.test(i.message))).to.be.false
     })
 
-    it('a floor-clean charset-violating config still PASSES (accepted with a warning) via validateFileMap', () => {
+    it('a floor-clean charset-violating config now FAILS via validateFileMap', () => {
       const result = validateFileMap(
         new Map<string, string>([
           [
@@ -899,8 +895,8 @@ describe('validate', () => {
           ],
         ]),
       )
-      expect(result.valid, JSON.stringify(result.issues)).to.be.true
-      expect(result.issues.some((i) => i.severity === 'warning' && /allowed set/i.test(i.message))).to.be.true
+      expect(result.valid, JSON.stringify(result.issues)).to.be.false
+      expect(result.issues.some((i) => i.severity === 'error' && /allowed set/i.test(i.message))).to.be.true
     })
   })
 
