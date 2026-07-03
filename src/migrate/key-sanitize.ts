@@ -48,6 +48,15 @@ export function sanitizePolicyAKey(raw: string): KeySanitizeResult {
   const reasons: string[] = []
   let k = raw
 
+  // 0. Trim leading/trailing whitespace FIRST, so an edge space is dropped (a
+  //    trailing space is an FS-floor violation — stripped by Windows) rather
+  //    than surviving as a cosmetic dash via the charset replacement below.
+  const wsTrimmed = k.replaceAll(/^\s+|\s+$/g, '')
+  if (wsTrimmed !== k) {
+    k = wsTrimmed
+    reasons.push('trimmed leading/trailing whitespace')
+  }
+
   // 1. Path separators -> dot. Preserves the dotted-hierarchy intent (a `/` or
   //    `\` in a source key becomes a namespace dot, matching the historical
   //    normalizeKey) rather than a lossy dash.
@@ -62,13 +71,16 @@ export function sanitizePolicyAKey(raw: string): KeySanitizeResult {
     reasons.push('replaced disallowed characters with "-"')
   }
 
-  // 3. Trim leading/trailing separators. A leading dot is silently skipped by
-  //    the loader/verify; a trailing dot or space is stripped by Windows. A
-  //    leading/trailing dash is merely cosmetic but trimmed for tidiness.
-  const trimmed = k.replaceAll(/^[.-]+/g, '').replaceAll(/[.-]+$/g, '')
+  // 3. Trim leading/trailing DOTS only. A leading dot is silently skipped by
+  //    the loader/verify; a trailing dot is stripped by Windows — both are
+  //    floor violations. Leading/trailing DASHES are fully legal under Policy A
+  //    and the floor, so they are deliberately NOT trimmed: this function must
+  //    be an identity on every already-valid key (otherwise --strict-keys
+  //    aborts on keys the platform accepts, and a valid key gets "rewritten").
+  const trimmed = k.replaceAll(/^\.+/g, '').replaceAll(/\.+$/g, '')
   if (trimmed !== k) {
     k = trimmed
-    reasons.push('trimmed leading/trailing separators')
+    reasons.push('trimmed leading/trailing dots')
   }
 
   // 4. Windows reserved device name on the FIRST dot-segment (the segment the
@@ -86,10 +98,18 @@ export function sanitizePolicyAKey(raw: string): KeySanitizeResult {
     reasons.push('escaped reserved key "new"')
   }
 
-  // 6. Empty after sanitizing (e.g. the source key was all disallowed chars).
+  // 6. Empty — or reduced to pure separator junk — after sanitizing (e.g. the
+  //    source key was all disallowed chars, so every char became a dash). The
+  //    `k !== raw` guard keeps this an identity on ALREADY-valid separator-only
+  //    keys like "-" (legal under Policy A); only keys we transformed into
+  //    meaningless separators get the stable placeholder, so distinct junk
+  //    source keys ("!!!" vs "???") stay distinguishable.
   if (k.length === 0) {
     k = `key-${shortHash(raw)}`
     reasons.push('key was empty after sanitizing')
+  } else if (k !== raw && !/[A-Za-z0-9_]/.test(k)) {
+    k = `key-${shortHash(raw)}`
+    reasons.push('key had no letters, numbers, or underscores after sanitizing')
   }
 
   // 7. Length cap 200 (ASCII-only == byte length). Stable hash suffix keeps two
