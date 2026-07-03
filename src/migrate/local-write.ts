@@ -1,8 +1,8 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
-import {getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
+import {type ImportState, readKeyPlan, removeQfFromGitignore, writeImportState, writeKeyPlan} from './import-state.js'
+import {getFullKeyPlan, getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
 import {deriveFollowUpFromConversionNotes, type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {detectDuplicateKeys} from './sources/launch/translate.js'
 import {type CommitSpec, MIGRATOR_IDENTITY, type PushIdentity, stackCommits} from '../util/clone-and-stack-push.js'
@@ -262,8 +262,13 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
 
   // qfg-6na9.3: plan Policy A key rewrites over ALL changes up front (run-level,
   // not per-commit) so key-def and reference sites resolve identically, then
-  // enforce --strict-keys before writing anything.
-  preflightKeyRewrites(opts.changes, {strict: opts.strictKeys})
+  // enforce --strict-keys before writing anything. Mappings persisted by a
+  // previous run (.qf/key-plan.json) are authoritative so a delta run cannot
+  // replan a subset and land on different finals.
+  preflightKeyRewrites(opts.changes, {
+    persistedKeys: readKeyPlan(opts.localDir) ?? undefined,
+    strict: opts.strictKeys,
+  })
 
   if (opts.fullHistory && !opts.source.getCommitMeta) {
     throw new Error(
@@ -285,6 +290,7 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   const {livePaths, resolutions: resolutionEntries} = writeQuonfigFiles(opts.localDir, opts.changes, opts.source)
   removeQfFromGitignore(opts.localDir)
   writeImportState(opts.localDir, opts.importState)
+  writeKeyPlan(opts.localDir, getFullKeyPlan())
 
   const droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
   const skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
@@ -486,6 +492,7 @@ export const buildAuditFinalCommit = (opts: BuildAuditFinalCommitOptions): Commi
 
     removeQfFromGitignore(dir)
     writeImportState(dir, opts.importState)
+    writeKeyPlan(dir, getFullKeyPlan())
 
     const skippedTotal = (skippedConfigs?.total ?? 0) + resolutionEntries.reduce((sum, r) => sum + r.deleted.length, 0)
     const counts = buildMigrationCounts(livePaths, opts.environments.length, skippedTotal)

@@ -47,6 +47,55 @@ export function readImportState(outputDir: string): ImportState | null {
   return parsed as ImportState
 }
 
+/**
+ * `.qf/key-plan.json` — the COMPLETE source->final key mapping (unchanged keys
+ * included) for every key any previous run has planned. Unlike
+ * `.qf/key-map.json` (the customer-facing, rewrites-only report artifact for
+ * ONE run), this file is migrator bookkeeping: a delta run replans over only
+ * the subset of changes it fetched, so without the full-run plan a key that
+ * resolved to `my-flag-2` (because `my-flag` also existed) would replan to
+ * `my-flag` and silently overwrite a different flag's file. Persisting the
+ * complete map makes full and delta runs resolve identically — and freezes
+ * mappings across future sanitizer-rule changes. Lives next to
+ * import-state.json under `.qf/` (committed to the workspace repo, excluded
+ * from `qfg push`'s allow-listed mirror like the rest of the dotdir).
+ */
+interface KeyPlanFile {
+  keys: Record<string, string>
+  version: 1
+}
+
+function keyPlanPath(outputDir: string): string {
+  return path.join(outputDir, '.qf', 'key-plan.json')
+}
+
+export function writeKeyPlan(outputDir: string, keys: Record<string, string>): void {
+  const filePath = keyPlanPath(outputDir)
+  fs.mkdirSync(path.dirname(filePath), {recursive: true})
+  const sorted: Record<string, string> = {}
+  for (const source of Object.keys(keys).sort()) sorted[source] = keys[source]
+  const serialized: KeyPlanFile = {keys: sorted, version: 1}
+  fs.writeFileSync(filePath, JSON.stringify(serialized, null, 2) + '\n', 'utf8')
+}
+
+/** The persisted plan, or null when absent/unreadable (treat as first run). */
+export function readKeyPlan(outputDir: string): null | Record<string, string> {
+  const filePath = keyPlanPath(outputDir)
+  if (!fs.existsSync(filePath)) return null
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<KeyPlanFile>
+    if (typeof parsed?.keys !== 'object' || parsed.keys === null || Array.isArray(parsed.keys)) return null
+    const out: Record<string, string> = {}
+    for (const [source, final] of Object.entries(parsed.keys)) {
+      if (typeof final === 'string') out[source] = final
+    }
+
+    return out
+  } catch {
+    return null
+  }
+}
+
 export function assertSourceMatches(outputDir: string, requestedSource: string): void {
   const state = readImportState(outputDir)
   if (!state) return

@@ -820,5 +820,20 @@ describe('migrate/migration-report', () => {
         fs.rmSync(empty, {force: true, recursive: true})
       }
     })
+
+    it('removes a STALE key-map.json when a later run produces zero rewrites', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'keymap-'))
+      try {
+        writeMigrationReport(dir, baseData({keyRewrites: [rewrite], source: 'flagsmith'}))
+        expect(fs.existsSync(keyMapPath(dir))).to.equal(true)
+
+        // A later (e.g. delta) run with no rewrites must not leave the old
+        // map lying around implying those keys were rewritten by THIS run.
+        writeMigrationReport(dir, baseData({keyRewrites: []}))
+        expect(fs.existsSync(keyMapPath(dir))).to.equal(false)
+      } finally {
+        fs.rmSync(dir, {force: true, recursive: true})
+      }
+    })
   })
 })

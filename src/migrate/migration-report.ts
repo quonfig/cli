@@ -837,6 +837,11 @@ export const writeMigrationReport = (outputDir: string, data: MigrationReportDat
       ) + '\n',
       'utf8',
     )
+  } else {
+    // key-map.json describes ONE run's rewrites. A later run with zero
+    // rewrites must not leave a stale map from a previous run lying around
+    // implying those keys were rewritten by this run.
+    fs.rmSync(keyMapPath(outputDir), {force: true})
   }
 
   return filePath

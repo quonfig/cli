@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import {type ImportState, removeQfFromGitignore, writeImportState} from './import-state.js'
+import {type ImportState, readKeyPlan, removeQfFromGitignore, writeImportState, writeKeyPlan} from './import-state.js'
 import {
   type AuditAccumulator,
   buildAuditFinalCommit,
@@ -10,7 +10,7 @@ import {
   buildMigrationCounts,
   writeQuonfigFiles,
 } from './local-write.js'
-import {getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
+import {getFullKeyPlan, getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
 import {deriveFollowUpFromConversionNotes, type MigrationReportData, writeMigrationReport} from './migration-report.js'
 import {
   type CloneAndStackPushOptions,
@@ -128,8 +128,15 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
 
   // qfg-6na9.3: plan Policy A key rewrites over ALL changes up front (run-level,
   // not per-commit) so key-def and reference sites resolve identically, then
-  // enforce --strict-keys before any clone/commit/push.
-  preflightKeyRewrites(opts.changes, {strict: opts.strictKeys})
+  // enforce --strict-keys before any clone/commit/push. Mappings persisted by a
+  // previous run (.qf/key-plan.json in the reused clone) are authoritative so a
+  // delta run cannot replan a subset and land on different finals. (When the
+  // clone is fresh, the plan only comes down WITH the clone — the collapsed
+  // commit's apply() re-plans below once it can read the cloned .qf/.)
+  preflightKeyRewrites(opts.changes, {
+    persistedKeys: readKeyPlan(opts.localDir) ?? undefined,
+    strict: opts.strictKeys,
+  })
 
   const acc: AuditAccumulator = {
     coercedSentinels: null,
@@ -163,11 +170,21 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
         {
           message: () => computedCommitMessage,
           async apply(dir) {
+            // Re-plan now that the clone exists: a FRESH clone of a previously
+            // migrated workspace delivers .qf/key-plan.json only at this point
+            // (the pre-clone preflight above couldn't see it), and the
+            // persisted mappings must win before any file is written.
+            preflightKeyRewrites(opts.changes, {
+              persistedKeys: readKeyPlan(dir) ?? undefined,
+              strict: opts.strictKeys,
+            })
+
             mergeEnvsIfPresent(dir)
 
             const {livePaths, resolutions: resolutionEntries} = writeQuonfigFiles(dir, opts.changes, opts.source)
             removeQfFromGitignore(dir)
             writeImportState(dir, opts.importState)
+            writeKeyPlan(dir, getFullKeyPlan())
 
             acc.droppedOverrides = opts.source.getDroppedOverrides?.() ?? null
             acc.skippedConfigs = opts.source.getSkippedConfigs?.() ?? null
