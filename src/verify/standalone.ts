@@ -11,7 +11,7 @@
  *   1  Validation errors found
  */
 
-import {execSync} from 'node:child_process'
+import {execFileSync} from 'node:child_process'
 import * as readline from 'node:readline'
 import {formatResult, validateFileMap, validateWorkspace} from './validate.js'
 
@@ -102,44 +102,54 @@ async function runGitHook() {
 /**
  * Read all JSON config files from a git commit using `git show`.
  * Works in bare repos (no working tree needed).
+ *
+ * qfg-6na9.6: uses execFileSync (never a shell) and `ls-tree -z` (NUL-delimited,
+ * disables git's C-quoting of "unusual" paths). The old string-interpolated
+ * execSync + default ls-tree output silently SKIPPED any filename containing a
+ * space or non-ASCII char — exactly the Policy-A-violating keys the hook
+ * exists to catch (verified live on staging: a `configs/bad charset key.json`
+ * push was accepted unvalidated). A listed-but-unreadable file is now a hard
+ * failure (fail closed), not a silent skip.
  */
-function readFilesFromCommit(commitOid: string): Map<string, string> {
+export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string, string> {
   const files = new Map<string, string>()
   const dirs = ['configs', 'feature-flags', 'segments', 'log-levels', 'schemas', 'schemas-protected']
 
   for (const dir of dirs) {
-    // List files in this directory at the given commit
-    let listing: string
-    try {
-      listing = execSync(`git ls-tree --name-only ${commitOid} ${dir}/`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-    } catch {
-      // Directory doesn't exist in this commit
-      continue
-    }
+    // List files in this directory at the given commit. A directory that
+    // doesn't exist yields an empty listing (exit 0); a bad/unreadable OID
+    // throws — fail closed, the hook rejects the push.
+    const listing = execFileSync('git', ['ls-tree', '-z', '--name-only', commitOid, `${dir}/`], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
 
-    const filenames = listing.trim().split('\n').filter(Boolean)
+    const filenames = listing.split('\0').filter(Boolean)
     for (const filePath of filenames) {
       if (!filePath.endsWith('.json') || filePath.includes('/.')) continue
 
-      try {
-        const content = execSync(`git show ${commitOid}:${filePath}`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        files.set(filePath, content)
-      } catch {
-        // File can't be read, skip
-      }
+      // Fail closed: if a listed file can't be read, the push must not be
+      // accepted with that file unvalidated — let the error propagate to the
+      // hook's per-ref handler, which rejects the push.
+      const content = execFileSync('git', ['show', `${commitOid}:${filePath}`], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      files.set(filePath, content)
     }
   }
 
   return files
 }
 
-main().catch((error) => {
-  console.error(`qfg-verify: fatal: ${error.message}`)
-  process.exit(1)
-})
+// Only run as a program when compiled/executed as the entry point (Bun sets
+// import.meta.main; under node test imports it is undefined) — this lets tests
+// import readFilesFromCommit without triggering the CLI.
+if ((import.meta as ImportMeta & {main?: boolean}).main) {
+  main().catch((error) => {
+    console.error(`qfg-verify: fatal: ${error.message}`)
+    process.exit(1)
+  })
+}
