@@ -147,7 +147,7 @@ export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string
 // Only run as a program when compiled/executed as the entry point (Bun sets
 // import.meta.main; under node test imports it is undefined) — this lets tests
 // import readFilesFromCommit without triggering the CLI.
-if ((import.meta as ImportMeta & {main?: boolean}).main) {
+if ((import.meta as {main?: boolean} & ImportMeta).main) {
   main().catch((error) => {
     console.error(`qfg-verify: fatal: ${error.message}`)
     process.exit(1)

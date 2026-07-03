@@ -81,9 +81,9 @@ describe('standalone readFilesFromCommit', () => {
   it('fails closed: an unreadable listed file throws instead of being silently skipped', () => {
     const dir = createGitRepo()
     writeConfig(dir, 'configs/clean-key.json', 'clean-key')
-    const oid = commitAll(dir)
+    commitAll(dir)
 
-    // A bogus oid makes every git show fail — must throw, not return an empty map
+    // A bogus oid makes every git invocation fail — must throw, not return an empty map
     expect(() => readFilesFromCommit('0'.repeat(40), dir)).to.throw()
   })
 })
