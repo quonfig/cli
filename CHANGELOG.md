@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.68 - 2026-07-06
+
+- feat(cli): `-w` is now accepted as the short alias for `--workspace` on `qfg push`, `qfg pull`, `qfg init`, and `qfg migrate`. `-w` already worked on every other workspace-aware command (`qfg get`/`run`/`list`/`generate`/…), but these four declared their own `--workspace` flag without the short char, so `qfg push -w my-ws` errored with `Nonexistent flag: -w`. The alias is now uniform across the CLI. Purely additive and backward-compatible — passing `-w` to these commands previously only ever produced an error. (qfg-qdcb)
+
 ## 0.0.67 - 2026-07-03
 
 - feat(verify): the Policy A key charset (`^[A-Za-z0-9._-]+$`) is now a **hard error** in `qfg verify` (and the app-gitea `qfg-verify` pre-receive hook) — the final stage of the warn→error rollout begun in 0.0.66. A key outside the charset now fails verification and cannot be pushed. Flipped only after a full-corpus enumeration of every production workspace (2026-07-03) verified zero non-conforming stored keys, so no existing workspace is affected. Create (`qfg create`, app-quonfig API) and migrate already hard-enforce the same rule, so all boundaries now agree. (qfg-6na9.6)
