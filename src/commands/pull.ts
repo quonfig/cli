@@ -58,6 +58,7 @@ CLI shortcuts (no JSON editing needed for simple cases):
         'Replay local commits on top of origin/main when the two have diverged. Conflicts are surfaced via standard git markers; resolve with `git rebase --continue`.',
     }),
     workspace: Flags.string({
+      char: 'w',
       description: 'Workspace ID (defaults to active profile)',
     }),
   }

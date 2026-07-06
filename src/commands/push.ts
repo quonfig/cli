@@ -59,6 +59,7 @@ Enforces three guards before touching the remote:
         'Local directory to push (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR env var)',
     }),
     workspace: Flags.string({
+      char: 'w',
       description: 'Workspace slug or UUID (defaults to active profile)',
     }),
     yes: Flags.boolean({

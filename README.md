@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.0.67 darwin-arm64 node-v24.4.1
+@quonfig/cli/0.0.67 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -1087,16 +1087,16 @@ Initialize or update a Quonfig workspace
 
 ```
 USAGE
-  $ qfg init [DIRECTORY] [--json] [--interactive] [--no-color] [--verbose] [--dry-run] [--samples]
-    [--workspace <value>]
+  $ qfg init [DIRECTORY] [--json] [--interactive] [--no-color] [--verbose] [--dry-run] [--samples] [-w
+    <value>]
 
 ARGUMENTS
   DIRECTORY  [default: .] Target directory (default: current directory)
 
 FLAGS
-  --dry-run            Show what would be done without writing anything
-  --[no-]samples       Include sample configs (default: yes on first init, no on update)
-  --workspace=<value>  Workspace pin in <org-slug>/<workspace-slug> form (Guard 1). If omitted, no pin is written.
+  -w, --workspace=<value>  Workspace pin in <org-slug>/<workspace-slug> form (Guard 1). If omitted, no pin is written.
+      --dry-run            Show what would be done without writing anything
+      --[no-]samples       Include sample configs (default: yes on first init, no on update)
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -1337,33 +1337,33 @@ Migrate flags and configs from a legacy feature-flag system into a Quonfig works
 USAGE
   $ qfg migrate --from launch|launchdarkly|flagsmith [--json] [--interactive] [--no-color] [--verbose]
     [--api-key <value>] [--dir <value>] [--dry-run] [--full-summary] [--project <value>] [--push] [--recent <value>]
-    [--reset] [--since <value>] [--source-api-key <value>] [--staging] [--strict-keys] [--workspace <value>]
+    [--reset] [--since <value>] [--source-api-key <value>] [--staging] [--strict-keys] [-w <value>]
 
 FLAGS
-  --api-key=<value>         Deprecated alias for --source-api-key, kept for the `launch` source (or set LAUNCH_API_KEY).
-                            Prefer --source-api-key.
-  --dir=<value>             Target local workspace directory. Defaults to cwd if it looks like a Quonfig workspace,
-                            otherwise ./quonfig-repo.
-  --dry-run                 Fetch and summarize changes without writing anything
-  --from=<option>           (required) Legacy source to migrate from
-                            <options: launch|launchdarkly|flagsmith>
-  --full-summary            Reify the full source-side audit log into per-change git commits (author = original user,
-                            date = original timestamp, message = change summary). Only valid on first-run imports — pass
-                            --reset to re-import everything from scratch with this flag.
-  --project=<value>         Source-system project identifier. For --from launchdarkly this is the project KEY (default:
-                            "default"; env: LAUNCHDARKLY_PROJECT_KEY). For --from flagsmith this is the numeric project
-                            ID (env: FLAGSMITH_PROJECT_ID). Ignored by --from launch.
-  --push                    After migrating to a local dir, also push to the given --workspace on Quonfig cloud
-  --recent=<value>          Import only the last N changes (useful for tire-kicking)
-  --reset                   Ignore the delta cursor and re-import everything from scratch
-  --since=<value>           Override the delta cursor (epoch milliseconds or ISO-8601 timestamp)
-  --source-api-key=<value>  API key for the legacy source. Set this, QUONFIG_MIGRATE_API_KEY, or the per-provider env
-                            var (LAUNCHDARKLY_API_KEY, LAUNCH_API_KEY, FLAGSMITH_API_KEY).
-  --staging                 Hit the staging API for the source (dev-only)
-  --strict-keys             Refuse to migrate if any source key would need rewriting to satisfy Quonfig key rules
-                            (Policy A), instead of rewriting it. Use when you require byte-identical keys.
-  --workspace=<value>       Quonfig cloud workspace slug to push to. Requires `qfg login` and is typically combined with
-                            --push.
+  -w, --workspace=<value>       Quonfig cloud workspace slug to push to. Requires `qfg login` and is typically combined
+                                with --push.
+      --api-key=<value>         Deprecated alias for --source-api-key, kept for the `launch` source (or set
+                                LAUNCH_API_KEY). Prefer --source-api-key.
+      --dir=<value>             Target local workspace directory. Defaults to cwd if it looks like a Quonfig workspace,
+                                otherwise ./quonfig-repo.
+      --dry-run                 Fetch and summarize changes without writing anything
+      --from=<option>           (required) Legacy source to migrate from
+                                <options: launch|launchdarkly|flagsmith>
+      --full-summary            Reify the full source-side audit log into per-change git commits (author = original
+                                user, date = original timestamp, message = change summary). Only valid on first-run
+                                imports — pass --reset to re-import everything from scratch with this flag.
+      --project=<value>         Source-system project identifier. For --from launchdarkly this is the project KEY
+                                (default: "default"; env: LAUNCHDARKLY_PROJECT_KEY). For --from flagsmith this is the
+                                numeric project ID (env: FLAGSMITH_PROJECT_ID). Ignored by --from launch.
+      --push                    After migrating to a local dir, also push to the given --workspace on Quonfig cloud
+      --recent=<value>          Import only the last N changes (useful for tire-kicking)
+      --reset                   Ignore the delta cursor and re-import everything from scratch
+      --since=<value>           Override the delta cursor (epoch milliseconds or ISO-8601 timestamp)
+      --source-api-key=<value>  API key for the legacy source. Set this, QUONFIG_MIGRATE_API_KEY, or the per-provider
+                                env var (LAUNCHDARKLY_API_KEY, LAUNCH_API_KEY, FLAGSMITH_API_KEY).
+      --staging                 Hit the staging API for the source (dev-only)
+      --strict-keys             Refuse to migrate if any source key would need rewriting to satisfy Quonfig key rules
+                                (Policy A), instead of rewriting it. Use when you require byte-identical keys.
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -1556,15 +1556,14 @@ Clone or update a local copy of your workspace config files.
 
 ```
 USAGE
-  $ qfg pull [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [--rebase] [--workspace
-    <value>]
+  $ qfg pull [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [--rebase] [-w <value>]
 
 FLAGS
-  --dir=<value>        Local directory to clone/update (defaults to cwd / nearest ancestor with quonfig.json /
-                       QUONFIG_DIR env var)
-  --rebase             Replay local commits on top of origin/main when the two have diverged. Conflicts are surfaced via
-                       standard git markers; resolve with `git rebase --continue`.
-  --workspace=<value>  Workspace ID (defaults to active profile)
+  -w, --workspace=<value>  Workspace ID (defaults to active profile)
+      --dir=<value>        Local directory to clone/update (defaults to cwd / nearest ancestor with quonfig.json /
+                           QUONFIG_DIR env var)
+      --rebase             Replay local commits on top of origin/main when the two have diverged. Conflicts are surfaced
+                           via standard git markers; resolve with `git rebase --continue`.
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -1604,16 +1603,16 @@ Push local config changes up to your workspace on Quonfig cloud.
 
 ```
 USAGE
-  $ qfg push [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [--workspace <value>]
-    [--yes] [--skip-validate] [--no-pin-write] [-m <value>]
+  $ qfg push [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [-w <value>] [--yes]
+    [--skip-validate] [--no-pin-write] [-m <value>]
 
 FLAGS
   -m, --message=<value>    Commit message for bare-path pushes (ignored on clone-path; push what is already committed)
+  -w, --workspace=<value>  Workspace slug or UUID (defaults to active profile)
       --dir=<value>        Local directory to push (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR
                            env var)
       --no-pin-write       Do not offer to write workspace slug into quonfig.json on success
       --skip-validate      Skip `qfg validate` preflight
-      --workspace=<value>  Workspace slug or UUID (defaults to active profile)
       --yes                Skip the standard Y/N confirm. Never skips typed-slug prompts.
 
 GLOBAL FLAGS

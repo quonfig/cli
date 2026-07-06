@@ -123,6 +123,7 @@ export default class Migrate extends BaseCommand {
         '(Policy A), instead of rewriting it. Use when you require byte-identical keys.',
     }),
     workspace: Flags.string({
+      char: 'w',
       description:
         'Quonfig cloud workspace slug to push to. Requires `qfg login` and is typically combined with --push.',
     }),
