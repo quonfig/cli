@@ -13,10 +13,10 @@
 export const MAX_WEIGHT = 100_000
 
 export interface NormalizedWeights {
-  /** The predicate-satisfying replacement weights, same length as input. */
-  weights: number[]
   /** Human-readable report line naming the original ratio and the action. */
   detail: string
+  /** The predicate-satisfying replacement weights, same length as input. */
+  weights: number[]
 }
 
 /** Returns null when the weights already satisfy the predicate (import verbatim). */
