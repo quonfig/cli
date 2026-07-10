@@ -188,6 +188,60 @@ describe('migrate/sources/flagsmith/translate', () => {
       // Variants populated from mv options.
       expect(out.variants).to.have.length(2)
     })
+
+    it('normalizes mv allocations that violate the weight predicate (qfg-wis6.11)', () => {
+      const bundle: FlagsmithFeatureWithStates = {
+        feature: makeFeature({
+          multivariate_options: [
+            {
+              boolean_value: null,
+              default_percentage_allocation: 60,
+              id: 1,
+              integer_value: null,
+              string_value: 'control',
+              type: 'unicode',
+              uuid: 'mv1',
+            },
+            {
+              boolean_value: null,
+              default_percentage_allocation: 30,
+              id: 2,
+              integer_value: null,
+              string_value: 'treatment',
+              type: 'unicode',
+              uuid: 'mv2',
+            },
+          ],
+          name: 'fx-mv-short',
+          type: 'MULTIVARIATE',
+        }),
+        feature_segments_by_env: {'apk-dev': []},
+        featurestates_by_env: {
+          'apk-dev': {
+            default: {
+              enabled: true,
+              environment: 1,
+              feature: 1,
+              feature_segment: null,
+              feature_state_value: {boolean_value: null, integer_value: null, string_value: 'control', type: 'unicode'},
+              id: 9001,
+              multivariate_feature_state_values: [],
+              uuid: 'fs-uuid',
+            },
+            identity_overrides: [],
+            segment_overrides: [],
+          },
+        },
+      }
+      const report = new ConversionReport()
+      const out = translateFeature(bundle, report, {envNameByApiKey: projectEnvMap('apk-dev', 'Development')})
+      const rules = (out.environments as Array<{rules: Array<{value: {type: string; value: unknown}}>}>)[0].rules
+      const wv = rules[0].value.value as {weightedValues: Array<{weight: number}>}
+      // 60/30 (sum 90) — SDKs would serve 66.7/33.3; the stored weights now
+      // say so explicitly and satisfy the predicate.
+      expect(wv.weightedValues.map((entry) => entry.weight)).to.deep.equal([66_667, 33_333])
+      expect(report.byCategory('normalized-rollout-weights').length).to.be.greaterThan(0)
+    })
   })
 
   describe('translateFeature — segment override', () => {

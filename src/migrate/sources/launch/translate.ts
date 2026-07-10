@@ -1,3 +1,4 @@
+import {normalizeImportedWeights} from '../../quonfig-target/weights.js'
 import type {LaunchChangeEntry, LaunchChangeGroup, LaunchConfig} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema.js'
 import {resolveKey} from '../../key-rewriter.js'
@@ -290,11 +291,58 @@ function normalizeJsonValuesInConfig(out: Record<string, unknown>): void {
   }
 }
 
+// qfg-wis6.11: Launch's relative weights import verbatim when all weights
+// are equal (the intended even-split encoding, e.g. 1/1). Any other ratio is
+// normalized to sum 100000, and a zero total becomes an even split, so
+// imported data always satisfies the weight predicate the qfg-verify hook
+// errors on. Every change is surfaced through the callback.
+function normalizeWeightsInRules(rules: unknown, path: string, onNormalized?: (detail: string) => void): void {
+  if (!Array.isArray(rules)) return
+  for (const [i, rule] of rules.entries()) {
+    if (!rule || typeof rule !== 'object') continue
+    const v = (rule as {value?: unknown}).value as {type?: unknown; value?: unknown} | undefined
+    if (!v || typeof v !== 'object' || v.type !== 'weighted_values') continue
+    const inner = v.value as unknown
+    let entries: unknown[] | null = null
+    if (Array.isArray(inner)) {
+      entries = inner
+    } else if (inner && typeof inner === 'object') {
+      const wvs = (inner as {weightedValues?: unknown}).weightedValues
+      if (Array.isArray(wvs)) entries = wvs
+    }
+
+    if (!entries || entries.length === 0) continue
+    const weights = entries.map((e) => Number((e as {weight?: unknown})?.weight ?? 0))
+    const normalized = normalizeImportedWeights(weights)
+    if (!normalized) continue
+    for (const [j, entry] of entries.entries()) {
+      if (entry && typeof entry === 'object') (entry as {weight?: number}).weight = normalized.weights[j]
+    }
+
+    onNormalized?.(`${path}[${i}]: ${normalized.detail}`)
+  }
+}
+
+function normalizeWeightsInConfig(out: Record<string, unknown>, onNormalized?: (detail: string) => void): void {
+  const defaultSection = out.default as {rules?: unknown} | undefined
+  if (defaultSection) {
+    normalizeWeightsInRules(defaultSection.rules, 'default.rules', onNormalized)
+  }
+
+  if (Array.isArray(out.environments)) {
+    for (const [i, env] of (out.environments as Array<Record<string, unknown>>).entries()) {
+      const envId = typeof env.id === 'string' ? env.id : String(i)
+      normalizeWeightsInRules(env.rules, `environments[${envId}].rules`, onNormalized)
+    }
+  }
+}
+
 export function transformConfig(
   config: LaunchConfig,
   envIdMap: Record<string, string>,
   onDroppedEnv?: (envId: string) => void,
   onCoercedSentinel?: (envId: string, valueType: string) => void,
+  onNormalizedWeights?: (detail: string) => void,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = JSON.parse(JSON.stringify(config))
 
@@ -434,6 +482,8 @@ export function transformConfig(
   }
 
   normalizeJsonValuesInConfig(out)
+
+  normalizeWeightsInConfig(out, onNormalizedWeights)
 
   validateOperators(out)
 

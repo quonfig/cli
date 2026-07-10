@@ -8,6 +8,8 @@ import {
   type SkippedConfigEntry,
   type SkippedConfigSummary,
 } from '../source.js'
+import {ConversionReport} from '../quonfig-target/report.js'
+import type {ConversionNote} from '../quonfig-target/report.js'
 import {fetchAllChangeHistory, fetchEnvironments} from './launch/api.js'
 import {
   InvalidSourceConfigError,
@@ -23,6 +25,7 @@ const SOURCE_NAME = 'launch'
 interface LaunchState {
   apiKey: null | string
   coercedSentinels: Map<string, Map<string, number>>
+  conversionReport: ConversionReport
   droppedOverrides: Map<string, Map<string, number>>
   envIdMap: null | Record<string, string>
   skippedConfigs: SkippedConfigEntry[]
@@ -31,6 +34,7 @@ interface LaunchState {
 const state: LaunchState = {
   apiKey: null,
   coercedSentinels: new Map(),
+  conversionReport: new ConversionReport(),
   droppedOverrides: new Map(),
   envIdMap: null,
   skippedConfigs: [],
@@ -116,6 +120,9 @@ function translateImpl(change: LegacyChange): QuonfigFile[] {
 
         perFlag.set(outputPath, (perFlag.get(outputPath) ?? 0) + 1)
       },
+      (detail) => {
+        state.conversionReport.add('normalized-rollout-weights', raw.key, detail)
+      },
     )
   } catch (error) {
     if (error instanceof InvalidSourceConfigError) {
@@ -198,6 +205,11 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   state.droppedOverrides = new Map()
   state.skippedConfigs = []
   state.coercedSentinels = new Map()
+  state.conversionReport.reset()
+}
+
+function getConversionNotesImpl(): ConversionNote[] | null {
+  return state.conversionReport.isEmpty() ? null : state.conversionReport.all()
 }
 
 export const launchSource: MigrationSource = {
@@ -206,6 +218,7 @@ export const launchSource: MigrationSource = {
   },
   getCoercedSentinels: getCoercedSentinelsImpl,
   getCommitMeta: getCommitMetaImpl,
+  getConversionNotes: getConversionNotesImpl,
   getDroppedOverrides: getDroppedOverridesImpl,
   getSkippedConfigs: getSkippedConfigsImpl,
   listEnvironments: listEnvironmentsImpl,
@@ -220,4 +233,5 @@ export function __resetLaunchSourceForTests(): void {
   state.droppedOverrides = new Map()
   state.skippedConfigs = []
   state.coercedSentinels = new Map()
+  state.conversionReport.reset()
 }

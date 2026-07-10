@@ -13,6 +13,7 @@ import {resolveKey} from '../key-rewriter.js'
 import type {ConversionReport} from './report.js'
 import {type QuonfigOperator, mapLaunchDarklyOperator} from './operators.js'
 import {type QuonfigValue, type QuonfigValueType, toQuonfigValue} from './values.js'
+import {normalizeImportedWeights} from './weights.js'
 
 // ── Quonfig output shapes (subset of app-quonfig's config-schemas.ts) ──────
 
@@ -252,13 +253,22 @@ export function rolloutToWeightedValues(rollout: SourceRollout, ctx: RulesetCont
     `percentage rollout hashed on "${hashByPropertyName}" — LaunchDarkly and Quonfig bucket differently, so users will be re-bucketed`,
   )
 
+  // LD weights natively sum to 100000, but guard the predicate anyway
+  // (qfg-wis6.11) — the hook now errors on non-conforming imports.
+  let weights = rollout.variations.map((wv) => wv.weight)
+  const normalized = normalizeImportedWeights(weights)
+  if (normalized) {
+    ctx.report.add('normalized-rollout-weights', ctx.sourceKey, normalized.detail)
+    weights = normalized.weights
+  }
+
   return {
     type: 'weighted_values',
     value: {
       hashByPropertyName,
-      weightedValues: rollout.variations.map((wv) => ({
+      weightedValues: rollout.variations.map((wv, i) => ({
         value: variationValue(wv.variation, ctx),
-        weight: wv.weight,
+        weight: weights[i],
       })),
     },
   }

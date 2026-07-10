@@ -379,6 +379,66 @@ describe('migrate/sources/launch/translate', () => {
     })
   })
 
+  describe('rollout weight normalization (qfg-wis6.11)', () => {
+    const envMap = {148: 'production', 149: 'staging'}
+
+    function weightedFlag(weights: number[]): LaunchConfig {
+      return {
+        default: {
+          rules: [
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {
+                type: 'weighted_values',
+                value: {
+                  hashByPropertyName: 'user.key',
+                  weightedValues: weights.map((weight, i) => ({
+                    value: {type: 'bool', value: i === 0},
+                    weight,
+                  })),
+                },
+              },
+            },
+          ],
+        },
+        environments: [],
+        id: '1',
+        key: 'weighted',
+        projectId: 'p',
+        type: 'feature_flag',
+        valueType: 'bool',
+      } as unknown as LaunchConfig
+    }
+
+    function outputWeights(out: Record<string, unknown>): number[] {
+      const rules = (out.default as {rules: Array<{value: {value: {weightedValues: Array<{weight: number}>}}}>}).rules
+      return rules[0].value.value.weightedValues.map((entry) => entry.weight)
+    }
+
+    it('imports all-equal weights verbatim (Launch 1/1 is intended even-split data)', () => {
+      const details: string[] = []
+      const out = transformConfig(weightedFlag([1, 1]), envMap, undefined, undefined, (d) => details.push(d))
+      expect(outputWeights(out)).to.deep.equal([1, 1])
+      expect(details).to.be.empty
+    })
+
+    it('normalizes a non-equal relative ratio to sum 100000 and reports it', () => {
+      const details: string[] = []
+      const out = transformConfig(weightedFlag([3, 1]), envMap, undefined, undefined, (d) => details.push(d))
+      expect(outputWeights(out)).to.deep.equal([75_000, 25_000])
+      expect(details).to.have.length(1)
+      expect(details[0]).to.include('default.rules[0]')
+    })
+
+    it('turns a zero total into an even split of ones and reports it', () => {
+      const details: string[] = []
+      const out = transformConfig(weightedFlag([0, 0]), envMap, undefined, undefined, (d) => details.push(d))
+      expect(outputWeights(out)).to.deep.equal([1, 1])
+      expect(details).to.have.length(1)
+      expect(details[0]).to.include('zero total')
+    })
+  })
+
   describe('detectDuplicateKeys (qfg-0cz.4 + qfg-zfl.20)', () => {
     it('returns [] when all keys are unique across types', () => {
       expect(

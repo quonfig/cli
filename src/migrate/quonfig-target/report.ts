@@ -62,6 +62,12 @@ export type ConversionNoteCategory =
    * eval time. The `key` is the trait name; `detail` lists the segments referencing it.
    */
   | 'identity-traits-referenced'
+  /**
+   * Imported rollout weights violated the weight predicate (neither an even
+   * split nor a percent-scale sum of 100000) and were normalized to sum
+   * 100000 — or, at zero total, replaced with an even split (qfg-wis6.11).
+   */
+  | 'normalized-rollout-weights'
 
 export interface ConversionNote {
   category: ConversionNoteCategory

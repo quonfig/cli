@@ -21,6 +21,7 @@ import type {ConversionReport} from '../../quonfig-target/report.js'
 import type {QuonfigOperator} from '../../quonfig-target/operators.js'
 import type {QuonfigCriterion, QuonfigRule, QuonfigRuleValue} from '../../quonfig-target/ruleset.js'
 import {type QuonfigValue, type QuonfigValueType, inferValueType, toQuonfigValue} from '../../quonfig-target/values.js'
+import {normalizeImportedWeights} from '../../quonfig-target/weights.js'
 import type {
   FlagsmithEdgeIdentityOverride,
   FlagsmithFeature,
@@ -599,6 +600,14 @@ function multivariateWeightedValue(
       weight: Math.round(pct * 1000),
     }
   })
+
+  // Flagsmith allocations don't have to sum to 100 — enforce the weight
+  // predicate the qfg-verify hook now errors on (qfg-wis6.11).
+  const normalized = normalizeImportedWeights(weightedValues.map((wv) => wv.weight))
+  if (normalized) {
+    ctx.report.add('normalized-rollout-weights', ctx.feature.name, normalized.detail)
+    for (const [i, wv] of weightedValues.entries()) wv.weight = normalized.weights[i]
+  }
 
   return {
     type: 'weighted_values',

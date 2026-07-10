@@ -207,6 +207,22 @@ describe('migrate/quonfig-target', () => {
       expect(report.byCategory('dropped-experiment-metadata')).to.have.length(1)
       expect(report.byCategory('dropped-experiment-metadata')[0].detail).to.match(/seed 12345/)
     })
+
+    it('normalizes predicate-violating weights and reports it (qfg-wis6.11)', () => {
+      const report = new ConversionReport()
+      const wv = rolloutToWeightedValues(
+        {
+          variations: [
+            {variation: 0, weight: 60_000},
+            {variation: 1, weight: 50_000},
+          ],
+        },
+        ctx({report}),
+      )
+      expect(wv.value.weightedValues.map((entry) => entry.weight)).to.deep.equal([54_545, 45_455])
+      expect(report.byCategory('normalized-rollout-weights')).to.have.length(1)
+      expect(report.byCategory('normalized-rollout-weights')[0].detail).to.include('110000')
+    })
   })
 
   describe('ruleset.collapseEnvironment', () => {

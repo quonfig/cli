@@ -320,6 +320,7 @@ const CONVERSION_NOTE_HEADINGS: Record<
   'identity-override-as-rule': 'Identity overrides converted to leading rules',
   'identity-traits-referenced': 'Identity traits referenced by segment rules',
   'individual-target-as-rule': 'Individual targets converted to rules',
+  'normalized-rollout-weights': 'Normalized rollout weights',
   'skipped-rule': 'Skipped rules (unsupported operators)',
   'unexportable-segment-membership': 'Unexportable segment membership',
 }
