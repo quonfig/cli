@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.69 - 2026-07-10
+
+- feat(verify): `qfg verify` (and the app-gitea `qfg-verify` pre-receive hook, once redeployed) now **hard-errors** on a weighted rollout whose weights are neither an even split (all weights equal and > 0) nor percentages summing to 100000. Both valid forms are exactly what the app-quonfig editor writes ("Split evenly" stores all-equal weights; typed percentages store 1000 units per percent). Anything else was written by a broken client and silently mis-serves traffic: evaluators normalize by total weight, so stored `100000/80000` serves 55.6%/44.4% no matter what a display of the raw weights suggests (the Form Health incident, qfg-wis6). A fleet scan on 2026-07-10 verified every production workspace HEAD already satisfies the predicate, so no existing workspace is affected. (qfg-wis6.10)
+- feat(migrate): imported rollout weights are now normalized to satisfy the same predicate. All-equal weights import verbatim (Launch's `1/1` rollouts are the canonical even-split encoding, not a bug); any other non-conforming ratio is scaled to sum 100000 (largest remainder, ties to the earliest index) and a zero total becomes an even split of ones. Serving ratios are unchanged — SDKs already normalize by total — this only makes the stored form canonical. Every adjustment is listed in `MIGRATION_REPORT.md` under "Normalized rollout weights". Applies to all three sources (Launch, LaunchDarkly, Flagsmith). (qfg-wis6.11)
+
 ## 0.0.68 - 2026-07-06
 
 - feat(cli): `-w` is now accepted as the short alias for `--workspace` on `qfg push`, `qfg pull`, `qfg init`, and `qfg migrate`. `-w` already worked on every other workspace-aware command (`qfg get`/`run`/`list`/`generate`/…), but these four declared their own `--workspace` flag without the short char, so `qfg push -w my-ws` errored with `Nonexistent flag: -w`. The alias is now uniform across the CLI. Purely additive and backward-compatible — passing `-w` to these commands previously only ever produced an error. (qfg-qdcb)
