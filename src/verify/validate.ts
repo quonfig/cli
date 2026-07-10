@@ -1122,6 +1122,25 @@ function validateRules(
           }
         }
       }
+
+      // Weight predicate (qfg-wis6.10): stored weights must be either an
+      // even split (all weights equal and > 0) or percentages summing to
+      // MAX_WEIGHT. Anything else was written by a broken client: evaluators
+      // normalize by total, so it silently serves different percentages
+      // than any display of the raw weights suggests.
+      if (wv.weightedValues.length > 0) {
+        const weights = wv.weightedValues.map((entry) => entry.weight)
+        const total = weights.reduce((a, b) => a + b, 0)
+        const evenSplit = weights[0] > 0 && weights.every((w) => w === weights[0])
+        if (!evenSplit && total !== MAX_WEIGHT) {
+          issues.push({
+            file,
+            message: `${ruleCtx}: weighted values must either be an even split (all weights equal and > 0) or sum to ${MAX_WEIGHT}; got [${weights.join(', ')}] summing to ${total}`,
+            severity: 'error',
+            suggestion: `Use equal weights for an even split, or make the weights sum to ${MAX_WEIGHT} (1000 units per percent).`,
+          })
+        }
+      }
     }
 
     // Check criteria

@@ -1065,4 +1065,69 @@ describe('validate', () => {
       expect(propIssues, JSON.stringify(result.issues)).to.have.length(1)
     })
   })
+
+  describe('weight predicate (qfg-wis6.10)', () => {
+    // Valid stored weights are exactly two forms: all-equal>0 (even split)
+    // or a percent-scale sum of exactly 100000. Anything else was written
+    // by a broken client and silently mis-serves traffic.
+    function rolloutFlag(weights: number[]): Map<string, string> {
+      return new Map([
+        [
+          'feature-flags/weighted.json',
+          JSON.stringify({
+            key: 'weighted',
+            type: 'feature_flag',
+            valueType: 'bool',
+            default: {
+              rules: [
+                {
+                  criteria: [{operator: 'ALWAYS_TRUE'}],
+                  value: {
+                    type: 'weighted_values',
+                    value: {
+                      weightedValues: weights.map((weight, i) => ({
+                        value: {type: 'bool', value: i === 0},
+                        weight,
+                      })),
+                      hashByPropertyName: 'user.key',
+                    },
+                  },
+                },
+              ],
+            },
+            environments: [],
+            variants: [],
+          }),
+        ],
+      ])
+    }
+
+    function weightIssues(weights: number[]) {
+      return validateFileMap(rolloutFlag(weights)).issues.filter((i) => i.message.includes('even split'))
+    }
+
+    it('errors on the Form Health shape (100000/80000)', () => {
+      const issues = weightIssues([100_000, 80_000])
+      expect(issues).to.have.length(1)
+      expect(issues[0].severity).to.equal('error')
+      expect(issues[0].message).to.include('180000')
+      expect(validateFileMap(rolloutFlag([100_000, 80_000])).valid).to.be.false
+    })
+
+    it('errors on all-zero weights', () => {
+      const issues = weightIssues([0, 0])
+      expect(issues).to.have.length(1)
+      expect(issues[0].severity).to.equal('error')
+    })
+
+    it('accepts even-split ones (1/1 and 1/1/1)', () => {
+      expect(validateFileMap(rolloutFlag([1, 1])).valid, JSON.stringify(weightIssues([1, 1]))).to.be.true
+      expect(validateFileMap(rolloutFlag([1, 1, 1])).valid).to.be.true
+    })
+
+    it('accepts percent-scale sums (33333/33333/33334 and 100000/0)', () => {
+      expect(validateFileMap(rolloutFlag([33_333, 33_333, 33_334])).valid).to.be.true
+      expect(validateFileMap(rolloutFlag([100_000, 0])).valid).to.be.true
+    })
+  })
 })
