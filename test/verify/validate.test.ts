@@ -1055,10 +1055,10 @@ describe('validate', () => {
       it('does NOT flag legitimate non-config paths (.qf/, README.md, quonfig.json)', () => {
         const result = validateFileMap(
           new Map([
-            ['quonfig.json', JSON.stringify({environments: []})],
-            ['README.md', '# hi'],
             ['.qf/key-plan.json', JSON.stringify({})],
+            ['README.md', '# hi'],
             ['configs/clean-key.json', cleanConfig('clean-key')],
+            ['quonfig.json', JSON.stringify({environments: []})],
           ]),
         )
         expect(result.valid, JSON.stringify(result.issues)).to.be.true

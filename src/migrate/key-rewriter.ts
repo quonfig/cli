@@ -337,20 +337,21 @@ export function getKeyRewrites(): KeyRewrite[] {
   return [...state.bySource.values(), ...state.bySourceSegment.values()].filter((r) => r.final !== r.source)
 }
 
+/** Persisted map merged under this run's planned finals, sorted by source key. */
+function sortMerged(persisted: Map<string, string>, planned: Map<string, KeyRewrite>): Record<string, string> {
+  const merged = new Map(persisted)
+  for (const [source, rewrite] of planned) merged.set(source, rewrite.final)
+  const out: Record<string, string> = {}
+  for (const source of [...merged.keys()].sort()) out[source] = merged.get(source)!
+  return out
+}
+
 /**
  * The COMPLETE source->final maps to persist to `.qf/key-plan.json`: every key
  * planned this run (unchanged ones included) merged over everything persisted
  * by previous runs, sorted by source key for stable on-disk diffs.
  */
 export function getFullKeyPlan(): KeyPlanData {
-  const sortMerged = (persisted: Map<string, string>, planned: Map<string, KeyRewrite>): Record<string, string> => {
-    const merged = new Map(persisted)
-    for (const [source, rewrite] of planned) merged.set(source, rewrite.final)
-    const out: Record<string, string> = {}
-    for (const source of [...merged.keys()].sort()) out[source] = merged.get(source)!
-    return out
-  }
-
   return {
     keys: sortMerged(state.persisted, state.bySource),
     segmentKeys: sortMerged(state.persistedSegment, state.bySourceSegment),
