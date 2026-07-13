@@ -3,6 +3,15 @@ import type {ConversionNote} from './quonfig-target/report.js'
 export interface LegacyChange {
   changedAt?: number
   key?: string
+  /**
+   * qfg-hbuy.10: source-side key namespace. LaunchDarkly flags and segments
+   * are SEPARATE key namespaces, so a flag and a segment can legitimately
+   * share one source key. Sources that model segments as their own namespace
+   * tag segment changes `'segment'` so the key rewriter can disambiguate the
+   * collision (the flag keeps the clean name; the segment gets a
+   * deterministic `-segment` suffix). Absent = the default namespace.
+   */
+  keyNamespace?: 'segment'
   raw: unknown
   source: string
 }

@@ -242,7 +242,14 @@ async function* fetchChangesImpl(): AsyncIterable<LegacyChange> {
   }
 
   for (const segment of snapshot.segments) {
-    yield {key: segment.key, raw: {data: segment, kind: 'segment'} satisfies LaunchDarklyRaw, source: SOURCE_NAME}
+    // qfg-hbuy.10: LD segments are their own key namespace — tag them so the
+    // key rewriter can disambiguate a flag and a segment sharing one key.
+    yield {
+      key: segment.key,
+      keyNamespace: 'segment',
+      raw: {data: segment, kind: 'segment'} satisfies LaunchDarklyRaw,
+      source: SOURCE_NAME,
+    }
   }
 }
 
@@ -317,7 +324,13 @@ async function* fetchAuditHistory(apiKey: string): AsyncIterable<LegacyChange> {
   }
 
   for (const segment of segmentsByKey.values()) {
-    yield {key: segment.key, raw: {data: segment, kind: 'segment'} satisfies LaunchDarklyRaw, source: SOURCE_NAME}
+    // qfg-hbuy.10: see the matching tag in fetchChangesImpl.
+    yield {
+      key: segment.key,
+      keyNamespace: 'segment',
+      raw: {data: segment, kind: 'segment'} satisfies LaunchDarklyRaw,
+      source: SOURCE_NAME,
+    }
   }
 }
 

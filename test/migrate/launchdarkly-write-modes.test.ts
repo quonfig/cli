@@ -325,6 +325,100 @@ describe('migrate/sources/launchdarkly — both write modes + reporting (Epic 5)
     })
   })
 
+  // qfg-hbuy.10: LaunchDarkly flags and segments are separate key namespaces, so
+  // a project can legitimately have a flag AND a segment both keyed 'checkout'.
+  // The shared rewriter map used to resolve both to the same final key, writing
+  // feature-flags/checkout.json + segments/checkout.json — detectDuplicateKeys
+  // then threw ("no 'config' side to tiebreak on") and the whole migration
+  // aborted. The flag now keeps the clean name, the segment is deterministically
+  // suffixed '-segment', and every IN_SEG reference follows the rename.
+  describe('LD flag + segment sharing one source key (qfg-hbuy.10)', () => {
+    beforeEach(() => {
+      server.close()
+      server = setupServer(
+        http.get(`${TEST_BASE_URL}/projects/default/environments`, () =>
+          HttpResponse.json({items: [{key: 'production', name: 'Production'}]}),
+        ),
+        http.get(`${TEST_BASE_URL}/projects/default/context-kinds`, () => HttpResponse.json({items: [{key: 'user'}]})),
+        http.get(`${TEST_BASE_URL}/members`, () => HttpResponse.json({items: []})),
+        http.get(`${TEST_BASE_URL}/flags/default`, () =>
+          HttpResponse.json({
+            items: [
+              {
+                environments: {production: {fallthrough: {variation: 0}, on: true}},
+                key: 'checkout',
+                kind: 'boolean',
+                variations: [{value: true}, {value: false}],
+              },
+              {
+                environments: {
+                  production: {
+                    fallthrough: {variation: 1},
+                    on: true,
+                    rules: [
+                      {
+                        clauses: [{attribute: 'segmentMatch', op: 'segmentMatch', values: ['checkout']}],
+                        variation: 0,
+                      },
+                    ],
+                  },
+                },
+                key: 'checkout-gate',
+                kind: 'boolean',
+                variations: [{value: true}, {value: false}],
+              },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/segments/default/production`, () =>
+          HttpResponse.json({items: [{included: ['u1'], key: 'checkout', name: 'Checkout testers'}]}),
+        ),
+      )
+      server.listen({onUnhandledRequest: 'error'})
+      __resetLaunchDarklySourceForTests()
+    })
+
+    it('migrates both: flag keeps the clean key, segment is suffixed, IN_SEG references follow', async () => {
+      const localDir = path.join(rootTmp, 'flag-seg-workspace')
+      const {changes, environments} = await collectChanges()
+
+      const result = await applyLocalMigration({
+        changes,
+        environments,
+        importState: {source: 'launchdarkly'},
+        localDir,
+        reportData: emptyReport(),
+        source: launchdarklySource,
+      })
+
+      expect(result.committed).to.equal(true)
+      // The flag keeps the clean name; the segment gets the namespace suffix.
+      expect(fs.existsSync(path.join(localDir, 'feature-flags', 'checkout.json'))).to.equal(true)
+      expect(fs.existsSync(path.join(localDir, 'segments', 'checkout-segment.json'))).to.equal(true)
+      expect(fs.existsSync(path.join(localDir, 'segments', 'checkout.json'))).to.equal(false)
+
+      const segment = JSON.parse(fs.readFileSync(path.join(localDir, 'segments', 'checkout-segment.json'), 'utf8'))
+      expect(segment.key).to.equal('checkout-segment')
+
+      // The gate flag's IN_SEG reference resolves to the RENAMED segment key.
+      const gate = JSON.parse(fs.readFileSync(path.join(localDir, 'feature-flags', 'checkout-gate.json'), 'utf8'))
+      const prodEnv = gate.environments.find((e: {id: string}) => e.id === 'production')
+      const inSeg = JSON.stringify(prodEnv.rules)
+      expect(inSeg).to.include('IN_SEG')
+      expect(inSeg).to.include('checkout-segment')
+
+      // The rename is surfaced in the migration report.
+      const report = fs.readFileSync(path.join(localDir, '.qf', 'MIGRATION_REPORT.md'), 'utf8')
+      expect(report).to.include('checkout-segment')
+
+      // The namespaced mapping persists (version 2) so delta runs stay stable.
+      const plan = JSON.parse(fs.readFileSync(path.join(localDir, '.qf', 'key-plan.json'), 'utf8'))
+      expect(plan.version).to.equal(2)
+      expect(plan.segmentKeys).to.deep.equal({checkout: 'checkout-segment'})
+      expect(plan.keys.checkout).to.equal('checkout')
+    })
+  })
+
   describe('--push cloud mode (pushMigrationToCloud)', () => {
     it('pushes the converted workspace and the pushed MIGRATION_REPORT.md carries the re-bucketed section', async () => {
       // Bare remote seeded with an initial commit, mirroring push-to-cloud.test.ts.

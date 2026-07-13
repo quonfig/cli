@@ -147,7 +147,10 @@ function valueToMatchFor(operator: QuonfigOperator, clause: SourceClause, ctx: R
     // qfg-6na9.3: this value is a referenced segment KEY — resolve it through
     // the per-run rewriter so a sanitized/disambiguated segment key stays in
     // sync with the IN_SEG rules pointing at it (no dangling targeting).
-    return {type: 'string', value: resolveKey(String(clause.values[0] ?? ''))}
+    // qfg-hbuy.10: resolve in the SEGMENT namespace, so a segment renamed to
+    // dodge a same-keyed flag keeps its references (falls back to the default
+    // namespace for non-colliding segments).
+    return {type: 'string', value: resolveKey(String(clause.values[0] ?? ''), 'segment')}
   }
 
   if (operator === 'PROP_MATCHES' || operator === 'PROP_DOES_NOT_MATCH') {

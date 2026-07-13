@@ -1,8 +1,10 @@
 import {expect} from 'chai'
 
 import {
+  getFullKeyPlan,
   getKeyRewrites,
   planKeyRewrites,
+  planKeyRewritesForChanges,
   preflightKeyRewrites,
   resetKeyRewriter,
   resolveKey,
@@ -132,6 +134,76 @@ describe('key-rewriter (qfg-6na9.3)', () => {
     planKeyRewrites(['foo-bar', 'foo bar'])
     const second = new Map(getKeyRewrites().map((r) => [r.source, r.final]))
     expect([...second.entries()]).to.deep.equal([...first.entries()])
+  })
+
+  // qfg-hbuy.10: LaunchDarkly allows a flag and a segment to share one source
+  // key (separate namespaces). One shared rewriter map made both resolve to the
+  // same final key, so the migrator wrote feature-flags/<k>.json AND
+  // segments/<k>.json and detectDuplicateKeys aborted the whole run. Segment
+  // keys now plan in their own namespace: on a collision the flag keeps the
+  // clean name and the segment gets a deterministic `-segment` suffix.
+  describe('segment namespace (qfg-hbuy.10)', () => {
+    it('a flag and a segment sharing one source key get distinct finals — flag keeps the clean name', () => {
+      planKeyRewritesForChanges([{key: 'checkout'}, {key: 'checkout', keyNamespace: 'segment'}])
+      expect(resolveKey('checkout')).to.equal('checkout')
+      expect(resolveKey('checkout', 'segment')).to.equal('checkout-segment')
+      // The rename is surfaced in the rewrites report; the flag is untouched.
+      expect(getKeyRewrites().map((r) => `${r.source}=>${r.final}`)).to.deep.equal(['checkout=>checkout-segment'])
+    })
+
+    it('a lone segment keeps its clean name (no suffix without a collision)', () => {
+      planKeyRewritesForChanges([{key: 'other-flag'}, {key: 'beta-users', keyNamespace: 'segment'}])
+      expect(resolveKey('beta-users', 'segment')).to.equal('beta-users')
+      expect(getKeyRewrites()).to.deep.equal([])
+    })
+
+    it("a suffixed segment never steals a DIFFERENT valid key's name", () => {
+      planKeyRewritesForChanges([
+        {key: 'checkout'},
+        // A valid flag that already owns the name the segment would take.
+        {key: 'checkout-segment'},
+        {key: 'checkout', keyNamespace: 'segment'},
+      ])
+      expect(resolveKey('checkout')).to.equal('checkout')
+      expect(resolveKey('checkout-segment')).to.equal('checkout-segment')
+      expect(resolveKey('checkout', 'segment')).to.equal('checkout-segment-2')
+    })
+
+    it('a colliding segment key is still sanitized before suffixing', () => {
+      planKeyRewritesForChanges([{key: 'beta users'}, {key: 'beta users', keyNamespace: 'segment'}])
+      expect(resolveKey('beta users')).to.equal('beta-users')
+      expect(resolveKey('beta users', 'segment')).to.equal('beta-users-segment')
+    })
+
+    it('persisted segment mappings are authoritative on delta runs', () => {
+      planKeyRewritesForChanges([{key: 'checkout'}, {key: 'checkout', keyNamespace: 'segment'}])
+      const plan = getFullKeyPlan()
+      expect(plan).to.deep.equal({keys: {checkout: 'checkout'}, segmentKeys: {checkout: 'checkout-segment'}})
+
+      // Delta run: only the segment is in the change set. Without the scoped
+      // persisted mapping it would replan to the clean name.
+      planKeyRewritesForChanges([{key: 'checkout', keyNamespace: 'segment'}], plan)
+      expect(resolveKey('checkout', 'segment')).to.equal('checkout-segment')
+    })
+
+    it('segment-namespace resolution falls back to the default map for non-colliding keys', () => {
+      // An IN_SEG reference resolves via the segment namespace even when the
+      // segment itself planned in the default flow (no flag shares its key).
+      planKeyRewritesForChanges([{key: 'Beta Users', keyNamespace: 'segment'}])
+      expect(resolveKey('Beta Users', 'segment')).to.equal('Beta-Users')
+    })
+
+    it('a previously-migrated lone segment keeps its bare persisted mapping (v1 plan compat)', () => {
+      // Plans written before qfg-hbuy.10 recorded segments as bare keys. A
+      // re-run with the namespace-aware planner must keep resolving them to
+      // the same finals.
+      planKeyRewritesForChanges([{key: 'Beta Users', keyNamespace: 'segment'}], {
+        keys: {'Beta Users': 'Beta-Users'},
+        segmentKeys: {},
+      })
+      expect(resolveKey('Beta Users', 'segment')).to.equal('Beta-Users')
+      expect(getFullKeyPlan()).to.deep.equal({keys: {'Beta Users': 'Beta-Users'}, segmentKeys: {}})
+    })
   })
 
   describe('preflightKeyRewrites (--strict-keys)', () => {

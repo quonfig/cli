@@ -138,7 +138,10 @@ describe('persisted key plan (delta-run consistency)', () => {
   describe('key-rewriter persisted-plan semantics', () => {
     it('getFullKeyPlan returns source->final for EVERY planned key, including unchanged ones', () => {
       planKeyRewritesForChanges([{key: 'my flag'}, {key: 'my-flag'}])
-      expect(getFullKeyPlan()).to.deep.equal({'my flag': 'my-flag-2', 'my-flag': 'my-flag'})
+      expect(getFullKeyPlan()).to.deep.equal({
+        keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'},
+        segmentKeys: {},
+      })
     })
 
     it('a delta run seeded with the persisted plan resolves previously-mapped keys identically', () => {
@@ -152,7 +155,7 @@ describe('persisted key plan (delta-run consistency)', () => {
     })
 
     it('seeds takenLower with ALL persisted finals so new keys cannot claim them', () => {
-      const plan = {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}
+      const plan = {keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}, segmentKeys: {}}
       // 'my+flag' is brand new and sanitizes to 'my-flag' — both that and
       // 'my-flag-2' are owned by persisted keys, so it must skip to -3.
       planKeyRewritesForChanges([{key: 'my+flag'}], plan)
@@ -163,7 +166,7 @@ describe('persisted key plan (delta-run consistency)', () => {
       // The full run mapped 'my flag' -> 'my-flag' (no conflict existed then).
       // A later delta introduces the VALID source key 'my-flag'; the persisted
       // owner keeps the name — otherwise the new key overwrites its file.
-      const plan = {'my flag': 'my-flag'}
+      const plan = {keys: {'my flag': 'my-flag'}, segmentKeys: {}}
       planKeyRewritesForChanges([{key: 'my flag'}, {key: 'my-flag'}], plan)
       expect(resolveKey('my flag')).to.equal('my-flag')
       expect(resolveKey('my-flag')).to.equal('my-flag-2')
@@ -173,18 +176,21 @@ describe('persisted key plan (delta-run consistency)', () => {
       // A delta run's flag may reference a segment that was migrated in the
       // full run but is absent from the delta's change set. The reference must
       // still resolve to the persisted final, not a fresh sanitize.
-      const plan = {'Beta Users': 'Beta-Users-2', 'Beta-Users': 'Beta-Users'}
+      const plan = {keys: {'Beta Users': 'Beta-Users-2', 'Beta-Users': 'Beta-Users'}, segmentKeys: {}}
       planKeyRewritesForChanges([{key: 'some.flag'}], plan)
       expect(resolveKey('Beta Users')).to.equal('Beta-Users-2')
     })
 
     it('getFullKeyPlan merges persisted entries with newly planned ones', () => {
-      const plan = {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}
+      const plan = {keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}, segmentKeys: {}}
       planKeyRewritesForChanges([{key: 'other key'}], plan)
       expect(getFullKeyPlan()).to.deep.equal({
-        'my flag': 'my-flag-2',
-        'my-flag': 'my-flag',
-        'other key': 'other-key',
+        keys: {
+          'my flag': 'my-flag-2',
+          'my-flag': 'my-flag',
+          'other key': 'other-key',
+        },
+        segmentKeys: {},
       })
     })
   })
@@ -200,11 +206,36 @@ describe('persisted key plan (delta-run consistency)', () => {
       fs.rmSync(tmpdir, {force: true, recursive: true})
     })
 
-    it('round-trips the complete mapping', () => {
-      writeKeyPlan(tmpdir, {'my flag': 'my-flag-2', 'my-flag': 'my-flag'})
-      expect(readKeyPlan(tmpdir)).to.deep.equal({'my flag': 'my-flag-2', 'my-flag': 'my-flag'})
+    it('round-trips the complete mapping (version 1 when no segment namespacing is needed)', () => {
+      writeKeyPlan(tmpdir, {keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}, segmentKeys: {}})
+      expect(readKeyPlan(tmpdir)).to.deep.equal({
+        keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'},
+        segmentKeys: {},
+      })
       const raw = JSON.parse(fs.readFileSync(path.join(tmpdir, '.qf', 'key-plan.json'), 'utf8'))
+      // No segment mappings -> the byte-stable version-1 format, unchanged.
       expect(raw.version).to.equal(1)
+      expect(raw).to.not.have.property('segmentKeys')
+    })
+
+    it('round-trips segment-namespace mappings as version 2 (qfg-hbuy.10)', () => {
+      writeKeyPlan(tmpdir, {keys: {checkout: 'checkout'}, segmentKeys: {checkout: 'checkout-segment'}})
+      expect(readKeyPlan(tmpdir)).to.deep.equal({
+        keys: {checkout: 'checkout'},
+        segmentKeys: {checkout: 'checkout-segment'},
+      })
+      const raw = JSON.parse(fs.readFileSync(path.join(tmpdir, '.qf', 'key-plan.json'), 'utf8'))
+      expect(raw.version).to.equal(2)
+    })
+
+    it('reads a pre-qfg-hbuy.10 version-1 file as an empty segment map (backward compat)', () => {
+      fs.mkdirSync(path.join(tmpdir, '.qf'), {recursive: true})
+      fs.writeFileSync(
+        path.join(tmpdir, '.qf', 'key-plan.json'),
+        JSON.stringify({keys: {'my flag': 'my-flag'}, version: 1}, null, 2) + '\n',
+        'utf8',
+      )
+      expect(readKeyPlan(tmpdir)).to.deep.equal({keys: {'my flag': 'my-flag'}, segmentKeys: {}})
     })
 
     it('returns null when the file is missing or malformed', () => {
@@ -246,7 +277,7 @@ describe('persisted key plan (delta-run consistency)', () => {
       expect(readFlagMarker(dir, 'my-flag')).to.deep.equal({key: 'my-flag', marker: 'B1'})
       expect(readFlagMarker(dir, 'my-flag-2')).to.deep.equal({key: 'my-flag-2', marker: 'A1'})
       // The COMPLETE plan (unchanged keys included) is persisted.
-      expect(readKeyPlan(dir)).to.deep.equal({'my flag': 'my-flag-2', 'my-flag': 'my-flag'})
+      expect(readKeyPlan(dir)).to.deep.equal({keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}, segmentKeys: {}})
 
       // Delta run: only 'my flag' changed since the cursor. It must still
       // resolve to 'my-flag-2' — NEVER 'my-flag' (someone else's file).
@@ -262,7 +293,7 @@ describe('persisted key plan (delta-run consistency)', () => {
       expect(readFlagMarker(dir, 'my-flag-2')).to.deep.equal({key: 'my-flag-2', marker: 'A2'})
       // The other flag's file is untouched.
       expect(readFlagMarker(dir, 'my-flag')).to.deep.equal({key: 'my-flag', marker: 'B1'})
-      expect(readKeyPlan(dir)).to.deep.equal({'my flag': 'my-flag-2', 'my-flag': 'my-flag'})
+      expect(readKeyPlan(dir)).to.deep.equal({keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}, segmentKeys: {}})
     })
   })
 
@@ -309,7 +340,7 @@ describe('persisted key plan (delta-run consistency)', () => {
       const reader = cloneForRead(remote, root)
       expect(readFlagMarker(reader, 'my-flag-2')).to.deep.equal({key: 'my-flag-2', marker: 'A2'})
       expect(readFlagMarker(reader, 'my-flag')).to.deep.equal({key: 'my-flag', marker: 'B1'})
-      expect(readKeyPlan(reader)).to.deep.equal({'my flag': 'my-flag-2', 'my-flag': 'my-flag'})
+      expect(readKeyPlan(reader)).to.deep.equal({keys: {'my flag': 'my-flag-2', 'my-flag': 'my-flag'}, segmentKeys: {}})
     })
   })
 })

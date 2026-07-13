@@ -34,6 +34,17 @@ function normalizeKey(key: string): string {
   return resolveKey(key)
 }
 
+/**
+ * qfg-hbuy.10: LD segments are their OWN key namespace — a project can carry a
+ * flag and a segment both keyed `checkout`. Segment key definitions (and the
+ * IN_SEG references in `ruleset.ts`) resolve through the segment namespace so
+ * the collision case gets the deterministic `-segment` suffix while the flag
+ * keeps the clean name. Non-colliding segments resolve exactly as before.
+ */
+function normalizeSegmentKey(key: string): string {
+  return resolveKey(key, 'segment')
+}
+
 /** Environment keys are LD slugs already; lowercase + hyphenate to be safe. */
 function slugifyEnvKey(key: string): string {
   return key
@@ -68,7 +79,7 @@ export function flagOutputPath(key: string): string {
 }
 
 export function segmentOutputPath(key: string): string {
-  return `segments/${normalizeKey(key)}.json`
+  return `segments/${normalizeSegmentKey(key)}.json`
 }
 
 /**
@@ -244,7 +255,7 @@ export function translateSegment(segment: LDSegment, report: ConversionReport): 
   rules.push({criteria: [ALWAYS_TRUE], value: {type: 'bool', value: false}})
 
   const out: Record<string, unknown> = {
-    key: normalizeKey(segment.key),
+    key: normalizeSegmentKey(segment.key),
     type: 'segment',
     valueType: 'bool',
     default: {rules},

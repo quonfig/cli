@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import type {KeyPlanData} from './key-rewriter.js'
+
 export interface ImportState {
   lastProcessedAt?: number | string
   source: string
@@ -59,35 +61,59 @@ export function readImportState(outputDir: string): ImportState | null {
  * mappings across future sanitizer-rule changes. Lives next to
  * import-state.json under `.qf/` (committed to the workspace repo, excluded
  * from `qfg push`'s allow-listed mirror like the rest of the dotdir).
+ *
+ * Versions (qfg-hbuy.10): version 1 carries a single `keys` map. Version 2
+ * adds `segmentKeys` — segment-namespace mappings for segments that collided
+ * with a same-keyed flag and were suffixed. Version 2 is written ONLY when
+ * `segmentKeys` is non-empty, so workspaces without the collision keep their
+ * byte-stable version-1 file (and stay fully readable by older CLIs; an older
+ * CLI reading a version-2 file still gets the complete default-namespace map —
+ * it merely can't resolve the segment mappings it also can't produce).
  */
 interface KeyPlanFile {
   keys: Record<string, string>
-  version: 1
+  segmentKeys?: Record<string, string>
+  version: 1 | 2
 }
 
 function keyPlanPath(outputDir: string): string {
   return path.join(outputDir, '.qf', 'key-plan.json')
 }
 
-export function writeKeyPlan(outputDir: string, keys: Record<string, string>): void {
+function sortRecord(record: Record<string, string>): Record<string, string> {
+  const sorted: Record<string, string> = {}
+  for (const source of Object.keys(record).sort()) sorted[source] = record[source]
+  return sorted
+}
+
+export function writeKeyPlan(outputDir: string, plan: KeyPlanData): void {
   const filePath = keyPlanPath(outputDir)
   fs.mkdirSync(path.dirname(filePath), {recursive: true})
-  const sorted: Record<string, string> = {}
-  for (const source of Object.keys(keys).sort()) sorted[source] = keys[source]
-  const serialized: KeyPlanFile = {keys: sorted, version: 1}
+  const keys = sortRecord(plan.keys)
+  const serialized: KeyPlanFile =
+    Object.keys(plan.segmentKeys).length > 0
+      ? {keys, segmentKeys: sortRecord(plan.segmentKeys), version: 2}
+      : {keys, version: 1}
   fs.writeFileSync(filePath, JSON.stringify(serialized, null, 2) + '\n', 'utf8')
 }
 
 /** The persisted plan, or null when absent/unreadable (treat as first run). */
-export function readKeyPlan(outputDir: string): null | Record<string, string> {
+export function readKeyPlan(outputDir: string): KeyPlanData | null {
   const filePath = keyPlanPath(outputDir)
   if (!fs.existsSync(filePath)) return null
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<KeyPlanFile>
     if (typeof parsed?.keys !== 'object' || parsed.keys === null || Array.isArray(parsed.keys)) return null
-    const out: Record<string, string> = {}
+    const out: KeyPlanData = {keys: {}, segmentKeys: {}}
     for (const [source, final] of Object.entries(parsed.keys)) {
-      if (typeof final === 'string') out[source] = final
+      if (typeof final === 'string') out.keys[source] = final
+    }
+
+    // Version-1 files have no segmentKeys — read as empty (backward compat).
+    if (typeof parsed.segmentKeys === 'object' && parsed.segmentKeys !== null && !Array.isArray(parsed.segmentKeys)) {
+      for (const [source, final] of Object.entries(parsed.segmentKeys)) {
+        if (typeof final === 'string') out.segmentKeys[source] = final
+      }
     }
 
     return out
