@@ -1010,6 +1010,139 @@ describe('validate', () => {
     })
   })
 
+  // qfg-hbuy.4: within the validated content dirs, an entry that is a
+  // dotfile, a nested path, or a file not ending in lowercase ".json" used to
+  // be silently SKIPPED by the enumeration filters — a "ghost" file that
+  // pushes fine but is invisible to the hook and to every loader (and a
+  // FOO.JSON can collide with foo.json on a case-insensitive customer clone).
+  // All three are now hard errors at the committed-tree boundary.
+  describe('ghost-file prevention (qfg-hbuy.4)', () => {
+    const cleanConfig = (key: string) =>
+      JSON.stringify({
+        key,
+        type: 'config',
+        valueType: 'string',
+        default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'a'}}]},
+        environments: [],
+        variants: [],
+      })
+
+    describe('validateFileMap (committed tree / hook boundary)', () => {
+      it('errors on a dotfile inside a validated dir', () => {
+        const result = validateFileMap(new Map([['configs/.evil.json', cleanConfig('.evil')]]))
+        expect(result.valid, JSON.stringify(result.issues)).to.be.false
+        expect(result.issues.some((i) => i.severity === 'error' && /dotfile/i.test(i.message))).to.be.true
+      })
+
+      it('errors on a nested path inside a validated dir', () => {
+        const result = validateFileMap(new Map([['configs/sub/x.json', cleanConfig('x')]]))
+        expect(result.valid, JSON.stringify(result.issues)).to.be.false
+        expect(result.issues.some((i) => i.severity === 'error' && /subdirector/i.test(i.message))).to.be.true
+      })
+
+      it('errors on an uppercase .JSON extension inside a validated dir', () => {
+        const result = validateFileMap(new Map([['configs/FOO.JSON', cleanConfig('FOO')]]))
+        expect(result.valid, JSON.stringify(result.issues)).to.be.false
+        expect(result.issues.some((i) => i.severity === 'error' && /lowercase "\.json"/i.test(i.message))).to.be.true
+      })
+
+      it('errors on a non-JSON file inside a validated dir', () => {
+        const result = validateFileMap(new Map([['feature-flags/notes.txt', 'hello']]))
+        expect(result.valid, JSON.stringify(result.issues)).to.be.false
+        expect(result.issues.some((i) => i.severity === 'error' && /only "\.json" files/i.test(i.message))).to.be.true
+      })
+
+      it('does NOT flag legitimate non-config paths (.qf/, README.md, quonfig.json)', () => {
+        const result = validateFileMap(
+          new Map([
+            ['quonfig.json', JSON.stringify({environments: []})],
+            ['README.md', '# hi'],
+            ['.qf/key-plan.json', JSON.stringify({})],
+            ['configs/clean-key.json', cleanConfig('clean-key')],
+          ]),
+        )
+        expect(result.valid, JSON.stringify(result.issues)).to.be.true
+        expect(result.issues).to.be.empty
+      })
+    })
+
+    describe('validateWorkspace (local disk walk)', () => {
+      function ghostWorkspace(): string {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-ghost-'))
+        fs.mkdirSync(path.join(dir, 'configs'), {recursive: true})
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), JSON.stringify({environments: []}, null, 2))
+        fs.writeFileSync(path.join(dir, 'configs', 'clean-key.json'), cleanConfig('clean-key'))
+        return dir
+      }
+
+      it('errors on a subdirectory inside a validated dir', () => {
+        const dir = ghostWorkspace()
+        try {
+          fs.mkdirSync(path.join(dir, 'configs', 'sub'))
+          fs.writeFileSync(path.join(dir, 'configs', 'sub', 'x.json'), cleanConfig('x'))
+          const result = validateWorkspace(dir)
+          expect(result.valid, JSON.stringify(result.issues)).to.be.false
+          expect(result.issues.some((i) => i.severity === 'error' && /subdirector/i.test(i.message))).to.be.true
+        } finally {
+          fs.rmSync(dir, {recursive: true, force: true})
+        }
+      })
+
+      it('errors on an uppercase .JSON extension', () => {
+        const dir = ghostWorkspace()
+        try {
+          fs.writeFileSync(path.join(dir, 'configs', 'FOO.JSON'), cleanConfig('FOO'))
+          const result = validateWorkspace(dir)
+          expect(result.valid, JSON.stringify(result.issues)).to.be.false
+          expect(result.issues.some((i) => i.severity === 'error' && /lowercase "\.json"/i.test(i.message))).to.be.true
+        } finally {
+          fs.rmSync(dir, {recursive: true, force: true})
+        }
+      })
+
+      it('errors on a non-JSON file', () => {
+        const dir = ghostWorkspace()
+        try {
+          fs.writeFileSync(path.join(dir, 'configs', 'notes.txt'), 'hello')
+          const result = validateWorkspace(dir)
+          expect(result.valid, JSON.stringify(result.issues)).to.be.false
+          expect(result.issues.some((i) => i.severity === 'error' && /only "\.json" files/i.test(i.message))).to.be.true
+        } finally {
+          fs.rmSync(dir, {recursive: true, force: true})
+        }
+      })
+
+      it('WARNS (not errors) on a .json-looking dotfile — inert on disk, never pushed', () => {
+        // `qfg push` skips dotfiles entirely (collectFiles), so a local
+        // configs/.evil.json can never reach the server from here — but it is
+        // almost certainly a mistake, so surface it without blocking.
+        const dir = ghostWorkspace()
+        try {
+          fs.writeFileSync(path.join(dir, 'configs', '.evil.json'), cleanConfig('.evil'))
+          const result = validateWorkspace(dir)
+          expect(result.valid, JSON.stringify(result.issues)).to.be.true
+          expect(result.issues.some((i) => i.severity === 'warning' && /dotfile/i.test(i.message))).to.be.true
+        } finally {
+          fs.rmSync(dir, {recursive: true, force: true})
+        }
+      })
+
+      it('silently ignores OS junk dotfiles (.DS_Store) and the .qf/ bookkeeping dir', () => {
+        const dir = ghostWorkspace()
+        try {
+          fs.writeFileSync(path.join(dir, 'configs', '.DS_Store'), 'binaryish')
+          fs.mkdirSync(path.join(dir, '.qf'))
+          fs.writeFileSync(path.join(dir, '.qf', 'key-plan.json'), JSON.stringify({}))
+          const result = validateWorkspace(dir)
+          expect(result.valid, JSON.stringify(result.issues)).to.be.true
+          expect(result.issues).to.be.empty
+        } finally {
+          fs.rmSync(dir, {recursive: true, force: true})
+        }
+      })
+    })
+  })
+
   // qfg-7jnb.8: IS_PRESENT / IS_NOT_PRESENT take only `propertyName` and
   // intentionally have no `valueToMatch`. Verify must accept both shapes.
   describe('presence operators (IS_PRESENT / IS_NOT_PRESENT)', () => {

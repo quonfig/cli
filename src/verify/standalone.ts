@@ -110,16 +110,23 @@ async function runGitHook() {
  * exists to catch (verified live on staging: a `configs/bad charset key.json`
  * push was accepted unvalidated). A listed-but-unreadable file is now a hard
  * failure (fail closed), not a silent skip.
+ *
+ * qfg-hbuy.4: enumerates RECURSIVELY (`-r`) and with NO name filtering. The
+ * old non-recursive listing plus `endsWith('.json') && !includes('/.')` filter
+ * meant dotfiles, nested paths (configs/sub/x.json), and case-variant
+ * extensions (FOO.JSON) never reached validation at all — ghost files that
+ * push fine but no loader reads. The hook must see EVERYTHING under the
+ * validated dirs; validateFileMap is the layer that decides what is an error.
  */
 export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string, string> {
   const files = new Map<string, string>()
   const dirs = ['configs', 'feature-flags', 'segments', 'log-levels', 'schemas', 'schemas-protected']
 
   for (const dir of dirs) {
-    // List files in this directory at the given commit. A directory that
-    // doesn't exist yields an empty listing (exit 0); a bad/unreadable OID
-    // throws — fail closed, the hook rejects the push.
-    const listing = execFileSync('git', ['ls-tree', '-z', '--name-only', commitOid, `${dir}/`], {
+    // List every leaf entry under this directory at the given commit. A
+    // directory that doesn't exist yields an empty listing (exit 0); a
+    // bad/unreadable OID throws — fail closed, the hook rejects the push.
+    const listing = execFileSync('git', ['ls-tree', '-z', '-r', '--name-only', commitOid, `${dir}/`], {
       cwd,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -127,11 +134,10 @@ export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string
 
     const filenames = listing.split('\0').filter(Boolean)
     for (const filePath of filenames) {
-      if (!filePath.endsWith('.json') || filePath.includes('/.')) continue
-
-      // Fail closed: if a listed file can't be read, the push must not be
-      // accepted with that file unvalidated — let the error propagate to the
-      // hook's per-ref handler, which rejects the push.
+      // Fail closed: if a listed entry can't be read (bad object, submodule
+      // gitlink, ...), the push must not be accepted with that entry
+      // unvalidated — let the error propagate to the hook's per-ref handler,
+      // which rejects the push.
       const content = execFileSync('git', ['show', `${commitOid}:${filePath}`], {
         cwd,
         encoding: 'utf8',

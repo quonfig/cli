@@ -218,6 +218,96 @@ const CONFIG_DIRS = new Set(Object.keys(DIR_TO_TYPE))
 const SCHEMA_DIRS = new Set(['schemas', 'schemas-protected'])
 const KNOWN_DIRS = new Set([...CONFIG_DIRS, ...SCHEMA_DIRS])
 
+// ── Ghost-file prevention (qfg-hbuy.4) ──────────────────────────────────
+// Within the validated content dirs (KNOWN_DIRS), every entry must be a
+// top-level, non-dot, lowercase-`.json` file. Anything else used to be
+// silently SKIPPED by the enumeration filters — a "ghost" file that pushes
+// fine but is invisible to the hook and to every loader, and a mixed-case
+// FOO.JSON can collide with foo.json on a case-insensitive customer clone
+// (the exact clonability failure Policy A exists to prevent). A skipped
+// entry is a bypass; an error is a rejected push. Paths OUTSIDE the
+// validated dirs (quonfig.json, README.md, .qf/, ...) are not this rule's
+// business and stay untouched.
+function ghostEntryIssue(dir: string, relPath: string, name: string, nested: boolean): null | ValidationIssue {
+  if (nested) {
+    return {
+      file: relPath,
+      message: `Subdirectories are not allowed inside "${dir}/" — nested files are never loaded (ghost file)`,
+      severity: 'error',
+      suggestion: `Move config files to the top level: "${dir}/<key>.json"`,
+    }
+  }
+
+  if (name.startsWith('.')) {
+    return {
+      file: relPath,
+      message: `Dotfile "${name}" is not allowed inside "${dir}/" — hidden files are never loaded (ghost file)`,
+      severity: 'error',
+      suggestion: `Remove the file or rename it without the leading dot`,
+    }
+  }
+
+  if (!name.endsWith('.json')) {
+    if (name.toLowerCase().endsWith('.json')) {
+      return {
+        file: relPath,
+        message: `File extension must be lowercase ".json" (found "${name}") — a case-variant extension is never loaded and can collide with another file on a case-insensitive filesystem`,
+        severity: 'error',
+        suggestion: `Rename to "${name.slice(0, -5)}.json"`,
+      }
+    }
+
+    return {
+      file: relPath,
+      message: `Only ".json" files are allowed inside "${dir}/" (found "${name}")`,
+      severity: 'error',
+      suggestion: `Remove the file or rename it to "<key>.json"`,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Disk-walk variant of the ghost rule (validateWorkspace). Returns the list
+ * of names that should proceed to content validation, pushing an issue for
+ * every ghost entry.
+ *
+ * Dotfiles are the one place the disk rule is softer than the committed-tree
+ * rule: `qfg push` never sends dotfiles (collectFiles skips them), so a local
+ * `configs/.DS_Store` is inert OS junk — erroring on it would break every
+ * macOS user. A `.json`-looking dotfile is almost certainly a mistake, so it
+ * gets a WARNING; other dotfiles are skipped silently.
+ */
+function listValidatedDirEntries(dirPath: string, dir: string, issues: ValidationIssue[]): string[] {
+  const names: string[] = []
+  for (const entry of fs.readdirSync(dirPath, {withFileTypes: true})) {
+    const relPath = `${dir}/${entry.name}`
+    if (entry.name.startsWith('.')) {
+      if (entry.name.toLowerCase().endsWith('.json')) {
+        issues.push({
+          file: relPath,
+          message: `Dotfile "${entry.name}" in "${dir}/" is ignored — it is never validated, pushed, or loaded`,
+          severity: 'warning',
+          suggestion: `Remove the file or rename it without the leading dot`,
+        })
+      }
+
+      continue
+    }
+
+    const ghost = ghostEntryIssue(dir, relPath, entry.name, entry.isDirectory())
+    if (ghost) {
+      issues.push(ghost)
+      continue
+    }
+
+    names.push(entry.name)
+  }
+
+  return names
+}
+
 // Operators that reference segments
 const SEGMENT_OPERATORS = new Set(['IN_SEG', 'NOT_IN_SEG'])
 
@@ -390,12 +480,13 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     })
   }
 
-  // First pass: parse all files and collect keys
+  // First pass: parse all files and collect keys. Ghost entries (dotfiles,
+  // subdirectories, non-lowercase-.json names) are reported here (qfg-hbuy.4).
   for (const dir of KNOWN_DIRS) {
     const dirPath = path.join(workspaceDir, dir)
     if (!fs.existsSync(dirPath)) continue
 
-    const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.json') && !f.startsWith('.'))
+    const files = listValidatedDirEntries(dirPath, dir, issues)
     for (const file of files) {
       const filePath = path.join(dirPath, file)
       const relPath = `${dir}/${file}`
@@ -570,7 +661,8 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
     }
   }
 
-  // Second pass: referential integrity
+  // Second pass: referential integrity. Keep the plain skip-filter here —
+  // ghost entries were already reported (once) by the first pass.
   for (const dir of KNOWN_DIRS) {
     const dirPath = path.join(workspaceDir, dir)
     if (!fs.existsSync(dirPath)) continue
@@ -729,7 +821,15 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
     const file = parts.at(-1)
 
     if (!KNOWN_DIRS.has(dir)) continue
-    if (!file || !file.endsWith('.json') || file.startsWith('.')) continue
+    if (!file) continue
+
+    // qfg-hbuy.4: a dotfile, nested path, or non-lowercase-.json entry inside
+    // a validated dir is a hard error (rejected push), not a silent skip.
+    const ghost = ghostEntryIssue(dir, relPath, file, parts.length > 2)
+    if (ghost) {
+      issues.push(ghost)
+      continue
+    }
 
     filesChecked++
 
