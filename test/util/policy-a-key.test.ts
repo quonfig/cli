@@ -1,6 +1,6 @@
 import {expect} from 'chai'
 
-import {POLICY_A_KEY_RE, policyAKeyError} from '../../src/util/policy-a-key.js'
+import {POLICY_A_KEY_RE, WINDOWS_RESERVED_DEVICE_NAME_RE, policyAKeyError} from '../../src/util/policy-a-key.js'
 
 // qfg-6na9.2: the create-time HARD Policy A charset check, mirroring
 // app-quonfig src/lib/domain/config-schemas.ts PolicyAKeySchema. The two must
@@ -30,5 +30,36 @@ describe('policyAKeyError (qfg-6na9.2)', () => {
   it('exposes the same charset regex used by app-quonfig', () => {
     expect(POLICY_A_KEY_RE.test('a.b-c_d')).to.equal(true)
     expect(POLICY_A_KEY_RE.test('a b')).to.equal(false)
+  })
+
+  // qfg-hbuy.6 (cli half): FS-safety floor parity with app-quonfig
+  // PolicyAKeySchema — the two floor refinements the charset alone permits.
+  it('rejects keys ending with a trailing dot (trailing-floor)', () => {
+    // A trailing dot is charset-legal, so it reaches the trailing-floor refine.
+    for (const bad of ['foo.', 'my.flag.', 'a..']) {
+      expect(policyAKeyError(bad), bad).to.match(/end with a dot or space/)
+    }
+    // A trailing SPACE fails the charset refine first — same ordering as
+    // app-quonfig PolicyAKeySchema (charset refine precedes the trailing refine).
+    expect(policyAKeyError('foo ')).to.match(/letters, numbers, dots, dashes/)
+  })
+
+  it('rejects Windows reserved device names before the first dot', () => {
+    for (const bad of ['con', 'CON', 'prn', 'aux', 'nul', 'com1', 'com9', 'lpt3', 'com3.foo', 'CON.json.bak']) {
+      expect(policyAKeyError(bad), bad).to.match(/Windows reserved device name/)
+    }
+  })
+
+  it('accepts near-miss device names that are NOT reserved', () => {
+    for (const ok of ['com0', 'com10', 'console', 'foo.con', 'lpt0', 'context', 'aux-service']) {
+      expect(policyAKeyError(ok), ok).to.equal(null)
+    }
+  })
+
+  it('exposes the same reserved-device regex used by app-quonfig', () => {
+    expect(WINDOWS_RESERVED_DEVICE_NAME_RE.test('con')).to.equal(true)
+    expect(WINDOWS_RESERVED_DEVICE_NAME_RE.test('COM3')).to.equal(true)
+    expect(WINDOWS_RESERVED_DEVICE_NAME_RE.test('com10')).to.equal(false)
+    expect(WINDOWS_RESERVED_DEVICE_NAME_RE.test('console')).to.equal(false)
   })
 })
