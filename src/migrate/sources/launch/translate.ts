@@ -1,7 +1,7 @@
 import {normalizeImportedWeights} from '../../quonfig-target/weights.js'
 import type {LaunchChangeEntry, LaunchChangeGroup, LaunchConfig} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema.js'
-import {resolveKey} from '../../key-rewriter.js'
+import {resolveKey, resolveMappedKey} from '../../key-rewriter.js'
 
 /**
  * Thrown by transformConfig when the source config is structurally invalid
@@ -53,6 +53,72 @@ function resolveSegmentRef(valueToMatch: unknown): void {
   const v = valueToMatch as {value?: unknown}
   if (typeof v.value === 'string') v.value = resolveKey(v.value)
   else if (Array.isArray(v.value)) v.value = v.value.map((x) => (typeof x === 'string' ? resolveKey(x) : x))
+}
+
+/**
+ * qfg-hbuy.11: a value's `decryptWith` names the CONFIG KEY holding its
+ * AES-GCM key — a by-key reference, exactly like an IN_SEG segment ref. When
+ * the referenced config was renamed by the key rewriter the reference must
+ * follow, or the config can never decrypt. A key absent from the map points
+ * at a pre-existing workspace config the import does not own — left
+ * untouched. Recurses into weighted_values so encrypted variant splits are
+ * covered too.
+ */
+function rewriteValueKeyRefs(value: unknown): void {
+  if (!value || typeof value !== 'object') return
+  const v = value as {decryptWith?: unknown; type?: unknown; value?: unknown}
+  if (typeof v.decryptWith === 'string') {
+    const mapped = resolveMappedKey(v.decryptWith)
+    if (mapped !== null) v.decryptWith = mapped
+  }
+
+  if (v.type === 'weighted_values') {
+    const inner = v.value as unknown
+    let entries: unknown[] = []
+    if (Array.isArray(inner)) {
+      entries = inner
+    } else if (inner && typeof inner === 'object') {
+      const wvs = (inner as {weightedValues?: unknown}).weightedValues
+      if (Array.isArray(wvs)) entries = wvs
+    }
+
+    for (const entry of entries) {
+      if (entry && typeof entry === 'object' && (entry as {value?: unknown}).value) {
+        rewriteValueKeyRefs((entry as {value?: unknown}).value)
+      }
+    }
+  }
+}
+
+/**
+ * qfg-hbuy.11: walk every value position that can carry `decryptWith`
+ * (default rules, per-environment rules, variants) and rewrite the reference
+ * through the final key map. Mirrors normalizeJsonValuesInConfig's traversal.
+ */
+function rewriteKeyReferencesInConfig(out: Record<string, unknown>): void {
+  const walkRules = (rules: unknown): void => {
+    if (!Array.isArray(rules)) return
+    for (const rule of rules) {
+      if (!rule || typeof rule !== 'object') continue
+      const r = rule as {value?: unknown}
+      if (r.value) rewriteValueKeyRefs(r.value)
+    }
+  }
+
+  const defaultSection = out.default as {rules?: unknown} | undefined
+  if (defaultSection) walkRules(defaultSection.rules)
+
+  if (Array.isArray(out.environments)) {
+    for (const env of out.environments as Array<Record<string, unknown>>) {
+      walkRules(env.rules)
+    }
+  }
+
+  if (Array.isArray(out.variants)) {
+    for (const variant of out.variants as Array<Record<string, unknown>>) {
+      if (variant && variant.value) rewriteValueKeyRefs(variant.value)
+    }
+  }
 }
 
 /**
@@ -352,6 +418,15 @@ export function transformConfig(
     out.key = normalizeKey(out.key)
   }
 
+  // qfg-hbuy.11: `schemaKey` references ANOTHER config's key (the schema this
+  // config validates against). If that schema was renamed by the key rewriter
+  // the reference must follow; a schemaKey absent from the map references a
+  // pre-existing workspace schema and is left untouched.
+  if (typeof out.schemaKey === 'string') {
+    const mapped = resolveMappedKey(out.schemaKey)
+    if (mapped !== null) out.schemaKey = mapped
+  }
+
   delete out.changedBy
   delete out.modifiedAt
   delete out.createdAt
@@ -482,6 +557,10 @@ export function transformConfig(
   }
 
   normalizeJsonValuesInConfig(out)
+
+  // qfg-hbuy.11: rewrite `decryptWith` references AFTER json-normalization so
+  // the walker sees the final value shapes.
+  rewriteKeyReferencesInConfig(out)
 
   normalizeWeightsInConfig(out, onNormalizedWeights)
 

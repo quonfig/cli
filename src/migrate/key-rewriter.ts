@@ -263,6 +263,21 @@ export function resolveKey(sourceKey: string, namespace: KeyNamespace = 'default
   return sanitizePolicyAKey(sourceKey).key
 }
 
+/**
+ * qfg-hbuy.11: the final key for `sourceKey` ONLY when this run (or a
+ * persisted plan) actually mapped it, else null. For rewriting by-key
+ * REFERENCES whose target may legitimately live outside the import — a
+ * config's `schemaKey` or a value's `decryptWith` can point at a pre-existing
+ * workspace key the migrator does not own; those must be left untouched
+ * rather than speculatively sanitized (default namespace only — both fields
+ * reference configs/schemas, never segments).
+ */
+export function resolveMappedKey(sourceKey: string): null | string {
+  const planned = state.bySource.get(sourceKey)
+  if (planned) return planned.final
+  return state.persisted.get(sourceKey) ?? null
+}
+
 /** Every key that was actually rewritten (conforming keys are omitted). */
 export function getKeyRewrites(): KeyRewrite[] {
   return [...state.bySource.values(), ...state.bySourceSegment.values()].filter((r) => r.final !== r.source)

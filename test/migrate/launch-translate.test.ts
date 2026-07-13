@@ -1,5 +1,6 @@
 import {expect} from 'chai'
 
+import {planKeyRewritesForChanges, resetKeyRewriter} from '../../src/migrate/key-rewriter.js'
 import {
   detectDuplicateKeys,
   getOutputPath,
@@ -376,6 +377,126 @@ describe('migrate/sources/launch/translate', () => {
         variants: [{value: {type: 'string', value: 'a'}}, {value: {type: 'string', value: 'b'}}],
       } as unknown as LaunchConfig
       expect(() => transformConfig(input, envMap)).to.not.throw()
+    })
+  })
+
+  // qfg-hbuy.11: configs can reference OTHER keys in two fields — `schemaKey`
+  // (a config pointing at its schema) and `decryptWith` (a value naming the
+  // config that holds its AES-GCM key). transformConfig's deep-copy passed
+  // both through verbatim, so when the referenced key was itself
+  // sanitized/renamed by the key rewriter the reference dangled (a dangling
+  // decryptWith = a config that can no longer decrypt). Both must be rewritten
+  // through the final key map; a reference that is NOT in the map points at a
+  // pre-existing workspace key and must be left untouched.
+  describe('schemaKey + decryptWith reference rewriting (qfg-hbuy.11)', () => {
+    const envMap = {148: 'production'}
+
+    afterEach(() => resetKeyRewriter())
+
+    function configWithSchemaKey(schemaKey: string): LaunchConfig {
+      return {
+        default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'x'}}]},
+        environments: [],
+        id: '1',
+        key: 'my-config',
+        projectId: 'p',
+        schemaKey,
+        type: 'config',
+        valueType: 'string',
+      }
+    }
+
+    it('rewrites schemaKey when the referenced schema key was renamed', () => {
+      // 'my schema' is in the import set and sanitizes to 'my-schema'.
+      planKeyRewritesForChanges([{key: 'my-config'}, {key: 'my schema'}])
+      const out = transformConfig(configWithSchemaKey('my schema'), envMap)
+      expect(out.schemaKey).to.equal('my-schema')
+    })
+
+    it('rewrites schemaKey through the PERSISTED map on delta runs', () => {
+      planKeyRewritesForChanges([{key: 'my-config'}], {
+        keys: {'my schema': 'my-schema-2'},
+        segmentKeys: {},
+      })
+      const out = transformConfig(configWithSchemaKey('my schema'), envMap)
+      expect(out.schemaKey).to.equal('my-schema-2')
+    })
+
+    it('leaves schemaKey untouched when the referenced key is absent from the map (pre-existing workspace key)', () => {
+      planKeyRewritesForChanges([{key: 'my-config'}])
+      const out = transformConfig(configWithSchemaKey('Pre Existing Schema'), envMap)
+      // NOT sanitized, NOT invented — it references a key the import does not own.
+      expect(out.schemaKey).to.equal('Pre Existing Schema')
+    })
+
+    it('rewrites decryptWith on default rules, env rules, nested weighted values, and variants', () => {
+      // 'secret keys.master' is in the import set and sanitizes to 'secret-keys.master'.
+      planKeyRewritesForChanges([{key: 'my-config'}, {key: 'secret keys.master'}])
+      const enc = (v: string): unknown => ({decryptWith: 'secret keys.master', type: 'string', value: v})
+      const input = {
+        default: {
+          rules: [
+            {criteria: [{operator: 'ALWAYS_TRUE'}], value: enc('ENC[a]')},
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {
+                type: 'weighted_values',
+                value: {
+                  hashByPropertyName: 'user.key',
+                  weightedValues: [
+                    {value: enc('ENC[b]'), weight: 1},
+                    {value: enc('ENC[c]'), weight: 1},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        environments: [{id: '148', rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: enc('ENC[d]')}]}],
+        id: '1',
+        key: 'my-config',
+        projectId: 'p',
+        type: 'config',
+        valueType: 'string',
+        variants: [{value: enc('ENC[e]')}],
+      } as unknown as LaunchConfig
+
+      const out = transformConfig(input, envMap)
+      const collect = JSON.stringify(out)
+      expect(collect).to.not.include('secret keys.master')
+      const defaultRules = (out.default as {rules: Array<{value: {decryptWith?: string; value: unknown}}>}).rules
+      expect(defaultRules[0].value.decryptWith).to.equal('secret-keys.master')
+      const weighted = defaultRules[1].value.value as {weightedValues: Array<{value: {decryptWith?: string}}>}
+      expect(weighted.weightedValues[0].value.decryptWith).to.equal('secret-keys.master')
+      expect(weighted.weightedValues[1].value.decryptWith).to.equal('secret-keys.master')
+      const envs = out.environments as Array<{rules: Array<{value: {decryptWith?: string}}>}>
+      expect(envs[0].rules[0].value.decryptWith).to.equal('secret-keys.master')
+      const variants = out.variants as Array<{value: {decryptWith?: string}}>
+      expect(variants[0].value.decryptWith).to.equal('secret-keys.master')
+    })
+
+    it('leaves decryptWith untouched when the referenced key is absent from the map', () => {
+      planKeyRewritesForChanges([{key: 'my-config'}])
+      const input = {
+        default: {
+          rules: [
+            {
+              criteria: [{operator: 'ALWAYS_TRUE'}],
+              value: {decryptWith: 'Existing Master Key', type: 'string', value: 'ENC[a]'},
+            },
+          ],
+        },
+        environments: [],
+        id: '1',
+        key: 'my-config',
+        projectId: 'p',
+        type: 'config',
+        valueType: 'string',
+      } as unknown as LaunchConfig
+
+      const out = transformConfig(input, envMap)
+      const rules = (out.default as {rules: Array<{value: {decryptWith?: string}}>}).rules
+      expect(rules[0].value.decryptWith).to.equal('Existing Master Key')
     })
   })
 
