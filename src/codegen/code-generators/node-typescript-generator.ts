@@ -1,5 +1,4 @@
 import {stripIndent} from 'common-tags'
-import camelCase from 'lodash.camelcase'
 
 import {ZodToTypescriptMapper, type ZodToTypescriptMapperTarget} from '../language-mappers/zod-to-typescript-mapper.js'
 import {ZodToTypescriptReturnValueMapper} from '../language-mappers/zod-to-typescript-return-value-mapper.js'
@@ -67,22 +66,14 @@ export class NodeTypeScriptGenerator extends BaseTypescriptGenerator {
   }
 
   private generateAccessorMethods(): string[] {
-    const uniqueMethods: Record<string, string> = {}
-    const schemaTypes = this.configurations().map((config) => {
-      let methodName = camelCase(config.key)
+    const configs = this.configurations()
+    // qfg-hbuy.8: colliding camelCased identifiers get deterministic numeric
+    // suffixes (with a warning) instead of throwing — see the base class.
+    const {collisions, methodNameByKey} = this.assignAccessorMethodNames(configs.map((c) => c.key))
+    this.warnOnAccessorNameCollisions(collisions)
 
-      // If the method name starts with a digit, prefix it with an underscore to ensure method name is valid
-      if (/^\d/.test(methodName)) {
-        methodName = `_${methodName}`
-      }
-
-      if (uniqueMethods[methodName]) {
-        throw new Error(
-          `Method '${methodName}' is already registered. Quonfig key ${config.key} conflicts with '${uniqueMethods[methodName]}'!`,
-        )
-      }
-
-      uniqueMethods[methodName] = config.key
+    const schemaTypes = configs.map((config) => {
+      const methodName = methodNameByKey.get(config.key)!
 
       if (config.hasFunction) {
         const returnValue = new ZodToTypescriptReturnValueMapper().resolveType(config.schema)

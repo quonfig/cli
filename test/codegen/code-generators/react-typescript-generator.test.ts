@@ -820,7 +820,57 @@ describe('ReactTypeScriptGenerator', () => {
       )
     })
 
-    it('should throw an error when method names conflict', () => {
+    // qfg-hbuy.8: same deterministic dedup-instead-of-throw as the node
+    // generator — see node-typescript-generator.test.ts for the full matrix.
+    it('dedups colliding identifiers deterministically instead of throwing (qfg-hbuy.8)', () => {
+      const warnings: string[] = []
+      const mockConfigFile: ConfigFile = {
+        configs: [
+          {
+            configType: 'FEATURE_FLAG',
+            key: 'my-flag',
+            rows: [{values: [{value: {bool: true}}]}],
+            valueType: 'BOOL',
+          },
+          {
+            configType: 'FEATURE_FLAG',
+            key: 'my_flag',
+            rows: [{values: [{value: {bool: true}}]}],
+            valueType: 'BOOL',
+          },
+          {
+            configType: 'FEATURE_FLAG',
+            key: 'my.flag',
+            rows: [{values: [{value: {bool: true}}]}],
+            valueType: 'BOOL',
+          },
+        ],
+      }
+
+      const generator = new ReactTypeScriptGenerator({
+        configFile: mockConfigFile,
+        log: mockLog,
+        warn: (message) => warnings.push(message),
+      })
+
+      const result = generator.generate()
+
+      // Lexicographic by source key: my-flag keeps the base identifier.
+      expect(result).to.include("get myFlag(): TypedFrontEndConfigurationAccessor['my-flag']")
+      expect(result).to.include("get myFlag2(): TypedFrontEndConfigurationAccessor['my.flag']")
+      expect(result).to.include("get myFlag3(): TypedFrontEndConfigurationAccessor['my_flag']")
+
+      expect(warnings).to.have.length(1)
+      expect(warnings[0]).to.include("'myFlag'")
+      expect(warnings[0]).to.include('"my-flag" -> myFlag()')
+      expect(warnings[0]).to.include('"my.flag" -> myFlag2()')
+      expect(warnings[0]).to.include('"my_flag" -> myFlag3()')
+    })
+
+    it('only warns about collisions among configs that survive the client-side filter (qfg-hbuy.8)', () => {
+      // key/with/slashes is NOT sent to the client, so there is no collision in
+      // the react output even though the node output would collide.
+      const warnings: string[] = []
       const mockConfigFile: ConfigFile = {
         configs: [
           {
@@ -834,7 +884,7 @@ describe('ReactTypeScriptGenerator', () => {
             configType: 'CONFIG',
             key: 'key/with/slashes',
             rows: [{values: [{value: {string: 'Some value'}}]}],
-            sendToClientSdk: true,
+            sendToClientSdk: false,
             valueType: 'STRING',
           },
         ],
@@ -843,11 +893,14 @@ describe('ReactTypeScriptGenerator', () => {
       const generator = new ReactTypeScriptGenerator({
         configFile: mockConfigFile,
         log: mockLog,
+        warn: (message) => warnings.push(message),
       })
 
-      expect(() => generator.generate()).to.throw(
-        "Method 'keyWithSlashes' is already registered. Quonfig key keyWithSlashes conflicts with 'key/with/slashes'!",
-      )
+      const result = generator.generate()
+
+      expect(result).to.include("TypedFrontEndConfigurationAccessor['keyWithSlashes']")
+      expect(result).to.not.include('keyWithSlashes2')
+      expect(warnings).to.have.length(0)
     })
   })
 })

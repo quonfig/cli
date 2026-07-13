@@ -694,32 +694,145 @@ describe('NodeTypeScriptGenerator', () => {
       )
     })
 
-    it('should throw an error when method names conflict', () => {
-      const mockConfigFile: ConfigFile = {
+    // qfg-hbuy.8: separator-distinct keys (my-flag / my_flag / my.flag) legally
+    // coexist under Policy A but all camelCase to the same identifier. The
+    // generator used to throw and write NOTHING; it now dedups deterministically
+    // (lexicographic by source key: first keeps the base identifier, the rest
+    // get numeric suffixes) and warns, so codegen keeps working.
+    describe('identifier collisions (qfg-hbuy.8)', () => {
+      const collidingTrio: ConfigFile = {
         configs: [
           {
-            configType: 'CONFIG',
-            key: 'keyWithSlashes',
-            rows: [{values: [{value: {string: 'Some value'}}]}],
-            valueType: 'STRING',
+            configType: 'FEATURE_FLAG',
+            key: 'my-flag',
+            rows: [{values: [{value: {bool: true}}]}],
+            valueType: 'BOOL',
           },
           {
-            configType: 'CONFIG',
-            key: 'key/with/slashes',
-            rows: [{values: [{value: {string: 'Some value'}}]}],
-            valueType: 'STRING',
+            configType: 'FEATURE_FLAG',
+            key: 'my_flag',
+            rows: [{values: [{value: {bool: true}}]}],
+            valueType: 'BOOL',
+          },
+          {
+            configType: 'FEATURE_FLAG',
+            key: 'my.flag',
+            rows: [{values: [{value: {bool: true}}]}],
+            valueType: 'BOOL',
           },
         ],
       }
 
-      const generator = new NodeTypeScriptGenerator({
-        configFile: mockConfigFile,
-        log: mockLog,
+      it('dedups colliding identifiers deterministically instead of throwing', () => {
+        const warnings: string[] = []
+        const generator = new NodeTypeScriptGenerator({
+          configFile: collidingTrio,
+          log: mockLog,
+          warn: (message) => warnings.push(message),
+        })
+
+        const result = generator.generate()
+
+        // Lexicographic by source key: my-flag < my.flag < my_flag, so my-flag
+        // keeps the base identifier and the others get numeric suffixes.
+        expect(result).to.include(
+          "myFlag(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['my-flag']",
+        )
+        expect(result).to.include("return this.get('my-flag', contexts)")
+        expect(result).to.include(
+          "myFlag2(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['my.flag']",
+        )
+        expect(result).to.include("return this.get('my.flag', contexts)")
+        expect(result).to.include(
+          "myFlag3(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['my_flag']",
+        )
+        expect(result).to.include("return this.get('my_flag', contexts)")
+
+        expect(warnings).to.have.length(1)
+        expect(warnings[0]).to.include("'myFlag'")
+        expect(warnings[0]).to.include('"my-flag" -> myFlag()')
+        expect(warnings[0]).to.include('"my.flag" -> myFlag2()')
+        expect(warnings[0]).to.include('"my_flag" -> myFlag3()')
       })
 
-      expect(() => generator.generate()).to.throw(
-        "Method 'keyWithSlashes' is already registered. Quonfig key keyWithSlashes conflicts with 'key/with/slashes'!",
-      )
+      it('suffix assignment skips identifiers already claimed by non-colliding keys', () => {
+        const warnings: string[] = []
+        const generator = new NodeTypeScriptGenerator({
+          configFile: {
+            configs: [
+              ...collidingTrio.configs,
+              {
+                configType: 'FEATURE_FLAG',
+                key: 'myFlag2',
+                rows: [{values: [{value: {bool: true}}]}],
+                valueType: 'BOOL',
+              },
+            ],
+          },
+          log: mockLog,
+          warn: (message) => warnings.push(message),
+        })
+
+        const result = generator.generate()
+
+        // The literal key myFlag2 owns the myFlag2 identifier, so the colliding
+        // group's suffixes skip over it.
+        expect(result).to.include(
+          "myFlag2(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['myFlag2']",
+        )
+        expect(result).to.include(
+          "myFlag3(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['my.flag']",
+        )
+        expect(result).to.include(
+          "myFlag4(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['my_flag']",
+        )
+        expect(warnings).to.have.length(1)
+        expect(warnings[0]).to.include('"my.flag" -> myFlag3()')
+        expect(warnings[0]).to.include('"my_flag" -> myFlag4()')
+      })
+
+      it('emits no warning and byte-identical output when no identifiers collide', () => {
+        const warnings: string[] = []
+        const mockConfigFile: ConfigFile = {
+          configs: [
+            {
+              configType: 'CONFIG',
+              key: 'config1',
+              rows: [{values: [{value: {string: 'Some value'}}]}],
+              valueType: 'STRING',
+            },
+            {
+              configType: 'FEATURE_FLAG',
+              key: 'flag1',
+              rows: [{values: [{value: {bool: true}}]}],
+              valueType: 'BOOL',
+            },
+          ],
+        }
+
+        const withWarn = new NodeTypeScriptGenerator({
+          configFile: mockConfigFile,
+          log: mockLog,
+          warn: (message) => warnings.push(message),
+        })
+        // Same shape a pre-dedup caller used (no warn arg) — output must match.
+        const withoutWarn = new NodeTypeScriptGenerator({
+          configFile: mockConfigFile,
+          log: mockLog,
+        })
+
+        const result = withWarn.generate()
+
+        expect(warnings).to.have.length(0)
+        expect(result).to.equal(withoutWarn.generate())
+        expect(result).to.include(
+          "config1(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['config1']",
+        )
+        expect(result).to.include(
+          "flag1(contexts?: Contexts | ContextObj): TypedNodeServerConfigurationAccessor['flag1']",
+        )
+        expect(result).to.not.include('myFlag')
+      })
     })
   })
 })

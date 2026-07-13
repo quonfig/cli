@@ -319,11 +319,13 @@ Example quonfig.config.json:
   }
 
   private resolveGenerator(language: SupportedLanguage, configFile: ConfigFile): BaseGenerator {
+    // warn (unlike verboseLog) is always visible — identifier-collision dedup
+    // notices (qfg-hbuy.8) must reach the user without --verbose.
     switch (language) {
       case SupportedLanguage.Node:
-        return new NodeTypeScriptGenerator({configFile, log: this.verboseLog})
+        return new NodeTypeScriptGenerator({configFile, log: this.verboseLog, warn: (m: string) => this.warn(m)})
       case SupportedLanguage.React:
-        return new ReactTypeScriptGenerator({configFile, log: this.verboseLog})
+        return new ReactTypeScriptGenerator({configFile, log: this.verboseLog, warn: (m: string) => this.warn(m)})
     }
   }
 
