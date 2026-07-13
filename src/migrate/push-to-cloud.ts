@@ -8,6 +8,7 @@ import {
   buildAuditPerChangeCommits,
   buildMigrationCommitMessage,
   buildMigrationCounts,
+  collectExistingWorkspaceKeys,
   writeQuonfigFiles,
 } from './local-write.js'
 import {getFullKeyPlan, getKeyRewrites, preflightKeyRewrites} from './key-rewriter.js'
@@ -130,10 +131,14 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
   // not per-commit) so key-def and reference sites resolve identically, then
   // enforce --strict-keys before any clone/commit/push. Mappings persisted by a
   // previous run (.qf/key-plan.json in the reused clone) are authoritative so a
-  // delta run cannot replan a subset and land on different finals. (When the
-  // clone is fresh, the plan only comes down WITH the clone — the collapsed
-  // commit's apply() re-plans below once it can read the cloned .qf/.)
+  // delta run cannot replan a subset and land on different finals. qfg-hbuy.12:
+  // keys already in the workspace seed the rewriter so a case-variant collision
+  // (incoming `Foo`, existing `foo`) renames instead of aborting, while a
+  // byte-equal match keeps the silent-overwrite re-migration path. (When the
+  // clone is fresh, both the plan and the existing keys only come down WITH the
+  // clone — the post-clone re-plan below repeats this once it can read them.)
   preflightKeyRewrites(opts.changes, {
+    existingKeys: collectExistingWorkspaceKeys(opts.localDir),
     persistedKeys: readKeyPlan(opts.localDir) ?? undefined,
     strict: opts.strictKeys,
   })
@@ -152,8 +157,24 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
     }
   }
 
+  // Re-plan once the clone exists: a FRESH clone of a live workspace delivers
+  // .qf/key-plan.json AND the existing key files only at this point (the
+  // pre-clone preflight above couldn't see either), and both must win before
+  // any file is written. The collapsed path runs this at the top of its single
+  // commit; audit-log mode prepends it as a no-op commit spec (its apply()
+  // stages nothing, so stackCommits silently skips the commit) so it runs
+  // BEFORE the first per-change commit writes files (qfg-hbuy.12).
+  const replanAgainstClone = (dir: string): void => {
+    preflightKeyRewrites(opts.changes, {
+      existingKeys: collectExistingWorkspaceKeys(dir),
+      persistedKeys: readKeyPlan(dir) ?? undefined,
+      strict: opts.strictKeys,
+    })
+  }
+
   const commits: CommitSpec[] = opts.fullHistory
     ? [
+        {apply: replanAgainstClone, message: 'migrator: replan keys against the cloned workspace (no-op)'},
         ...buildAuditPerChangeCommits(opts.changes, opts.source),
         buildAuditFinalCommit({
           changes: opts.changes,
@@ -170,14 +191,7 @@ export const pushMigrationToCloud = async (opts: PushMigrationToCloudOptions): P
         {
           message: () => computedCommitMessage,
           async apply(dir) {
-            // Re-plan now that the clone exists: a FRESH clone of a previously
-            // migrated workspace delivers .qf/key-plan.json only at this point
-            // (the pre-clone preflight above couldn't see it), and the
-            // persisted mappings must win before any file is written.
-            preflightKeyRewrites(opts.changes, {
-              persistedKeys: readKeyPlan(dir) ?? undefined,
-              strict: opts.strictKeys,
-            })
+            replanAgainstClone(dir)
 
             mergeEnvsIfPresent(dir)
 

@@ -60,6 +60,17 @@ interface RewriterState {
   /** sourceKey -> resolved rewrite for namespace-suffixed SEGMENTS (qfg-hbuy.10). */
   bySourceSegment: Map<string, KeyRewrite>
   /**
+   * qfg-hbuy.12: key.toLowerCase() -> original-cased key already present in
+   * the TARGET workspace (files on disk in the clone / reuse dir). Unlike
+   * `takenLower`, an entry here does NOT block a byte-equal claim — importing
+   * `foo` into a workspace that already has `foo` is the intentional
+   * re-migration/overwrite path. It DOES block (a) a case-variant claim
+   * (`Foo` vs existing `foo` — the FS-floor hard-rejects that collision) and
+   * (b) every disambiguation candidate, so a RENAMED key can never clobber an
+   * unrelated existing key.
+   */
+  existingLower: Map<string, string>
+  /**
    * sourceKey -> final persisted by a PREVIOUS run (.qf/key-plan.json). These
    * are authoritative: a delta run replans over only the subset of changes it
    * fetched, so previously-mapped keys must keep their persisted finals and
@@ -77,6 +88,7 @@ interface RewriterState {
 const state: RewriterState = {
   bySource: new Map(),
   bySourceSegment: new Map(),
+  existingLower: new Map(),
   persisted: new Map(),
   persistedSegment: new Map(),
   takenLower: new Map(),
@@ -85,6 +97,7 @@ const state: RewriterState = {
 export function resetKeyRewriter(): void {
   state.bySource = new Map()
   state.bySourceSegment = new Map()
+  state.existingLower = new Map()
   state.persisted = new Map()
   state.persistedSegment = new Map()
   state.takenLower = new Map()
@@ -109,18 +122,48 @@ export function seedPersistedKeyPlan(plan: Readonly<KeyPlanData>): void {
   }
 }
 
+/**
+ * qfg-hbuy.12: seed the rewriter with keys that ALREADY EXIST in the target
+ * workspace (push mode clones it; local mode may reuse a pulled dir). Call
+ * after `seedPersistedKeyPlan()` — persisted mappings stay authoritative,
+ * workspace seeding only fills in what the plan doesn't cover. See
+ * `existingLower` for the exact/case-variant semantics.
+ */
+export function seedExistingWorkspaceKeys(keys: Iterable<string>): void {
+  for (const key of keys) {
+    const lower = key.toLowerCase()
+    if (!state.existingLower.has(lower)) state.existingLower.set(lower, key)
+  }
+}
+
 /** Append `suffix` to `base`, truncating `base` so the result stays <= 200 chars. */
 function withSuffix(base: string, suffix: string): string {
   const room = 200 - suffix.length
   return (base.length > room ? base.slice(0, room) : base) + suffix
 }
 
-/** Find the first case-insensitively-free variant of `base` (base, base-2, ...). */
+/**
+ * Is `candidate` unavailable? Keys claimed this run / by the persisted plan
+ * (`takenLower`) always block. Keys that merely EXIST in the target workspace
+ * block case-variants and — when `allowExactExistingMatch` is false — even
+ * byte-equal candidates: a key claiming its OWN name may overwrite its
+ * existing file (re-migration), but a disambiguation suffix must never land
+ * on an unrelated existing key (qfg-hbuy.12).
+ */
+function isTaken(candidate: string, allowExactExistingMatch: boolean): boolean {
+  const lower = candidate.toLowerCase()
+  if (state.takenLower.has(lower)) return true
+  const existing = state.existingLower.get(lower)
+  if (existing === undefined) return false
+  return allowExactExistingMatch ? existing !== candidate : true
+}
+
+/** Find the first free variant of `base` (base, base-2, ...). */
 function disambiguate(base: string): string {
-  if (!state.takenLower.has(base.toLowerCase())) return base
+  if (!isTaken(base, true)) return base
   for (let n = 2; ; n++) {
     const candidate = withSuffix(base, `-${n}`)
-    if (!state.takenLower.has(candidate.toLowerCase())) return candidate
+    if (!isTaken(candidate, false)) return candidate
   }
 }
 
@@ -128,7 +171,18 @@ function disambiguate(base: string): string {
 function assignFinal(map: Map<string, KeyRewrite>, sourceKey: string, base: string, sanitizeReasons: string[]): void {
   const final = disambiguate(base)
   const reasons = [...sanitizeReasons]
-  if (final !== base) reasons.push('appended a numeric suffix to keep the key unique')
+  if (final !== base) {
+    // Name the blocker when it was a case-variant key already in the target
+    // workspace (qfg-hbuy.12) — that report line is the customer's cue that
+    // the import collided with something they created outside the migration.
+    const existing = state.existingLower.get(base.toLowerCase())
+    reasons.push(
+      existing !== undefined && existing !== base && !state.takenLower.has(base.toLowerCase())
+        ? `renamed: the target workspace already has "${existing}", which differs only by case`
+        : 'appended a numeric suffix to keep the key unique',
+    )
+  }
+
   map.set(sourceKey, {final, reasons, source: sourceKey})
   state.takenLower.set(final.toLowerCase(), sourceKey)
 }
@@ -313,9 +367,11 @@ export function getFullKeyPlan(): KeyPlanData {
 export function planKeyRewritesForChanges(
   changes: ReadonlyArray<{key?: string; keyNamespace?: string}>,
   persistedKeys?: Readonly<KeyPlanData>,
+  existingKeys?: Iterable<string>,
 ): void {
   resetKeyRewriter()
   if (persistedKeys) seedPersistedKeyPlan(persistedKeys)
+  if (existingKeys) seedExistingWorkspaceKeys(existingKeys)
   const defaultKeys: string[] = []
   const segmentKeys: string[] = []
   for (const change of changes) {
@@ -347,13 +403,16 @@ export class StrictKeysError extends Error {
  * Plan the rewrites for a run and, when `strict`, throw `StrictKeysError` if any
  * key would be rewritten. Call once at the top of each migrate orchestrator
  * before translating. `persistedKeys` (from `readKeyPlan`) makes previously
- * mapped keys resolve exactly as they did on the run that mapped them.
+ * mapped keys resolve exactly as they did on the run that mapped them;
+ * `existingKeys` (qfg-hbuy.12: the keys already on disk in the target
+ * workspace) makes case-variant collisions rename deterministically instead
+ * of aborting at the verify gate, while byte-equal matches keep overwriting.
  */
 export function preflightKeyRewrites(
   changes: ReadonlyArray<{key?: string; keyNamespace?: string}>,
-  opts?: {persistedKeys?: Readonly<KeyPlanData>; strict?: boolean},
+  opts?: {existingKeys?: Iterable<string>; persistedKeys?: Readonly<KeyPlanData>; strict?: boolean},
 ): void {
-  planKeyRewritesForChanges(changes, opts?.persistedKeys)
+  planKeyRewritesForChanges(changes, opts?.persistedKeys, opts?.existingKeys)
   if (opts?.strict) {
     const rewrites = getKeyRewrites()
     if (rewrites.length > 0) throw new StrictKeysError(rewrites)

@@ -264,8 +264,11 @@ export const applyLocalMigration = async (opts: ApplyLocalMigrationOptions): Pro
   // not per-commit) so key-def and reference sites resolve identically, then
   // enforce --strict-keys before writing anything. Mappings persisted by a
   // previous run (.qf/key-plan.json) are authoritative so a delta run cannot
-  // replan a subset and land on different finals.
+  // replan a subset and land on different finals. qfg-hbuy.12: keys already
+  // on disk (a reused/pulled workspace dir) seed the rewriter so case-variant
+  // collisions rename instead of producing an unpushable workspace.
   preflightKeyRewrites(opts.changes, {
+    existingKeys: collectExistingWorkspaceKeys(opts.localDir),
     persistedKeys: readKeyPlan(opts.localDir) ?? undefined,
     strict: opts.strictKeys,
   })
@@ -533,6 +536,29 @@ export const collectLivePathsOnDisk = (dir: string): string[] => {
     if (!fs.existsSync(typeDir)) continue
     for (const entry of fs.readdirSync(typeDir)) {
       if (entry.endsWith('.json')) out.push(`${prefix}/${entry}`)
+    }
+  }
+
+  return out
+}
+
+/**
+ * qfg-hbuy.12: every key ALREADY present in the target workspace on disk —
+ * used to seed the key rewriter so an import that case-collides with an
+ * existing key (incoming `Foo`, workspace `foo`) renames deterministically
+ * instead of aborting at the verify gate, while a byte-equal match keeps
+ * today's silent-overwrite re-migration behavior. Scans every validated
+ * content dir (uniqueness is pooled per workspace, so schemas-protected/
+ * counts too, even though the migrator never writes there).
+ */
+export const collectExistingWorkspaceKeys = (dir: string): string[] => {
+  const prefixes = ['feature-flags', 'configs', 'segments', 'schemas', 'schemas-protected', 'log-levels']
+  const out: string[] = []
+  for (const prefix of prefixes) {
+    const typeDir = path.join(dir, prefix)
+    if (!fs.existsSync(typeDir)) continue
+    for (const entry of fs.readdirSync(typeDir)) {
+      if (entry.endsWith('.json') && !entry.startsWith('.')) out.push(entry.slice(0, -'.json'.length))
     }
   }
 
