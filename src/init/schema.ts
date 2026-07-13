@@ -265,9 +265,18 @@ export function storedConfigJsonSchema(): object {
       key: {
         type: 'string',
         minLength: 1,
-        maxLength: 512,
+        // Policy A key rule (qfg-hbuy.9): tightened from the old loose
+        // maxLength:512 + `^[^/\\]+$` to match what the prod qfg-verify hook
+        // (and app-quonfig PolicyAKeySchema) actually enforce, so a file that
+        // validates green against this published schema in a customer's editor
+        // is no longer hard-rejected at push time. Charset `^[A-Za-z0-9._-]+$`,
+        // 200-char cap. (The hook additionally enforces the FS-safety floor —
+        // no leading/trailing dot, no Windows reserved device names — which
+        // JSON Schema's pattern can't express cleanly; the charset + cap are
+        // the parts that fit here.)
+        maxLength: 200,
         not: {const: 'new'},
-        pattern: '^[^/\\\\]+$',
+        pattern: '^[A-Za-z0-9._-]+$',
         description: 'Unique identifier. Must match the filename (without .json).',
       },
       type: {
