@@ -36,7 +36,6 @@ export const POLICY_A_KEY_RE = /^[A-Za-z0-9._-]+$/
  * (project/plans/26-07-policy-a-audit-findings.md) specifically wants these
  * checks byte-identical across enforcement points — keep the regex in sync.
  */
-// eslint-disable-next-line unicorn/better-regex
 export const WINDOWS_RESERVED_DEVICE_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 
 /**
