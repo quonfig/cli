@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- fix(verify): `qfg verify --json` on an invalid workspace now emits the JSON result before exiting non-zero. The command called `this.exit(1)` — which throws — _before_ the JSON return/print path, so a failing `--json` run exited with code 1 but **empty stdout**, making `--json` useless exactly when there were findings to report. The result (`valid: false` plus the `issues`/`stats`) is now written to stdout first and exit code 1 is preserved, matching the `migrate doctor` emit-then-exit idiom. Human (non-`--json`) output was already correct and is unchanged. (qfg-ez47)
+
 ## 0.0.70 - 2026-07-14
 
 - fix(generate): `qfg generate` no longer aborts (writing NOTHING) when two Policy-A-legal keys camelCase to the same accessor identifier — `my-flag`, `my_flag`, and `my.flag` legally coexist but all mangle to `myFlag()`, and the generator threw on the collision. Colliding identifiers are now deduplicated deterministically: within a colliding group, keys sort lexicographically, the first keeps the plain identifier, and the rest get numeric suffixes (`myFlag2()`, `myFlag3()`), skipping any identifier already claimed by another key (including a literal `myFlag2` key). A warning lists each colliding group's `key -> identifier` mapping. String lookups (`get('my_flag')`) are unaffected, and workspaces without collisions produce byte-identical output to before. Applies to both generators (node and react); the react generator dedups its client-side-filtered set, so a collision among server-only keys never affects or warns in react output. (qfg-hbuy.8)

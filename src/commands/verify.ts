@@ -45,6 +45,10 @@ export default class Verify extends BaseCommand {
 
     if (this.jsonEnabled()) {
       if (!result.valid) {
+        // Print the JSON findings BEFORE exiting non-zero. `this.exit()` throws,
+        // so exiting first would swallow the very output `--json` exists to
+        // produce (qfg-ez47). Same order as `migrate doctor`: emit, then exit.
+        this.logJson(result)
         this.exit(1)
       }
 
