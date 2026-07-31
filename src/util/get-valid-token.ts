@@ -44,9 +44,11 @@ export async function getValidAccessTokenForOrgSlug(orgSlug: string, log: Logger
 export async function getValidAccessToken(workosOrgId: string, log: Logger = noopLog): Promise<string> {
   const envKey = process.env.QUONFIG_API_KEY
   if (envKey && envKey.length > 0) {
-    if (!envKey.startsWith('qf_uk_')) {
+    // qf_uk_ = user key, qf_sa_ = service-account key. Both are workspace-scoped
+    // bearer tokens; the server tells them apart, the CLI treats them identically.
+    if (!envKey.startsWith('qf_uk_') && !envKey.startsWith('qf_sa_')) {
       throw new Error(
-        `QUONFIG_API_KEY must start with "qf_uk_" (got "${envKey.slice(0, 8)}..."). Generate one from the web UI under Settings → API Keys.`,
+        `QUONFIG_API_KEY must start with "qf_uk_" or "qf_sa_" (got "${envKey.slice(0, 8)}..."). Generate one from the web UI under Settings → API Keys.`,
       )
     }
 

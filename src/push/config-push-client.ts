@@ -11,8 +11,9 @@
  *   - 400 → `{kind: 'bad-request', message}`
  *   - anything else → throws so runPush surfaces a generic PushFatalError.
  *
- * The auth header is a WorkOS access token (or a `qf_uk_*` API key when
- * `QUONFIG_API_KEY` is set in the environment); see `getValidAccessToken`.
+ * The auth header is a WorkOS access token (or a `qf_uk_*` user key /
+ * `qf_sa_*` service-account key when `QUONFIG_API_KEY` is set in the
+ * environment); see `getValidAccessToken`.
  */
 
 import type {

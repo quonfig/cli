@@ -65,6 +65,14 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
     expect(token).to.equal('qf_uk_abcdef')
   })
 
+  it('returns the env key directly when QUONFIG_API_KEY starts with qf_sa_ (service account)', async () => {
+    process.env.QUONFIG_API_KEY = 'qf_sa_abcdef'
+
+    const token = await getValidAccessToken('org_unused')
+
+    expect(token).to.equal('qf_sa_abcdef')
+  })
+
   it('does not read or write the tokens file when QUONFIG_API_KEY is set', async () => {
     process.env.QUONFIG_API_KEY = 'qf_uk_abcdef0123456789'
 
@@ -110,7 +118,9 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
     }
 
     expect(caught, 'expected getValidAccessToken to throw').to.be.instanceOf(Error)
+    // Both accepted prefixes must be named so the user knows what a valid key looks like.
     expect(caught!.message).to.include('qf_uk_')
+    expect(caught!.message).to.include('qf_sa_')
     expect(caught!.message).to.include('Settings')
     // Error must not leak the full key — only the first 8 chars.
     expect(caught!.message).to.not.include('this_full_secret_should_not_leak')
