@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.0.71 - 2026-07-31
 
+- feat(auth): `QUONFIG_API_KEY` now accepts service-account keys (`qf_sa_` prefix) alongside user keys (`qf_uk_`). Service accounts are machine principals whose keys carry the new prefix (server side lands in app-quonfig, plan 2026-07-claude-tag-mcp-service-accounts Part 1); the headless-auth prefix check accepts either prefix, names both in its rejection message, and every other key path treats the two identically. (qfg-qw5i.6)
 - fix(verify): `qfg verify --json` on an invalid workspace now emits the JSON result before exiting non-zero. The command called `this.exit(1)` — which throws — _before_ the JSON return/print path, so a failing `--json` run exited with code 1 but **empty stdout**, making `--json` useless exactly when there were findings to report. The result (`valid: false` plus the `issues`/`stats`) is now written to stdout first and exit code 1 is preserved, matching the `migrate doctor` emit-then-exit idiom. Human (non-`--json`) output was already correct and is unchanged. (qfg-ez47)
 
 ## 0.0.70 - 2026-07-14
