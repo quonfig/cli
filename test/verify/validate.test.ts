@@ -1263,4 +1263,56 @@ describe('validate', () => {
       expect(validateFileMap(rolloutFlag([100_000, 0])).valid).to.be.true
     })
   })
+
+  // qfg-6sf7.10: a `default` block present but carrying no rules array is
+  // the shape that 500'd GET /v1/segments and GET /v1/flags for a whole
+  // workspace. app-quonfig's readers now degrade the row instead of dying,
+  // but THIS is the gate that keeps the shape out of a repo in the first
+  // place — pin it so the pre-receive hook can never be weakened into
+  // accepting it.
+  describe('default block must carry a rules array', () => {
+    const withDefault = (path: string, type: string, defaultBlock: unknown) =>
+      new Map<string, string>([
+        [
+          path,
+          JSON.stringify({
+            key: path.split('/')[1].replace('.json', ''),
+            type,
+            valueType: type === 'segment' ? 'bool' : 'string',
+            default: defaultBlock,
+            environments: [],
+            variants: [],
+          }),
+        ],
+      ])
+
+    const rulesIssues = (files: Map<string, string>): ValidationIssue[] =>
+      validateFileMap(files).issues.filter((i) => i.message.includes('default.rules'))
+
+    it('rejects a segment whose default block is empty', () => {
+      const files = withDefault('segments/broken.json', 'segment', {})
+
+      expect(validateFileMap(files).valid).to.be.false
+
+      const issues = rulesIssues(files)
+      expect(issues).to.have.length(1)
+      expect(issues[0].severity).to.equal('error')
+    })
+
+    it('rejects a segment whose default.rules is not an array', () => {
+      const files = withDefault('segments/broken.json', 'segment', {rules: null})
+
+      expect(validateFileMap(files).valid).to.be.false
+      expect(rulesIssues(files)).to.have.length(1)
+    })
+
+    it('rejects a config and a flag with the same empty default block', () => {
+      expect(validateFileMap(withDefault('configs/broken.json', 'config', {})).valid).to.be.false
+      expect(validateFileMap(withDefault('feature-flags/broken.json', 'feature_flag', {})).valid).to.be.false
+    })
+
+    it('accepts an empty rules array — no rules is legitimate, no rules KEY is not', () => {
+      expect(validateFileMap(withDefault('segments/fine.json', 'segment', {rules: []})).valid).to.be.true
+    })
+  })
 })
