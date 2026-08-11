@@ -16,6 +16,16 @@ type WorkspaceEntry = {
   organizationName?: string
 }
 
+type OrgTokens = {org_name?: string; org_slug?: string}
+
+/**
+ * One org whose workspaces could not be listed. `auth` distinguishes a dead
+ * session (recoverable with `qfg login`) from a transport/server failure.
+ */
+type OrgFailure = {auth: boolean; detail: string; orgId: string; orgSlug: string}
+
+type WorkspaceListResult = {auth: boolean; detail: string; kind: 'failed'} | {entries: WorkspaceEntry[]; kind: 'ok'}
+
 export default class Workspace extends BaseCommand {
   static description = 'Show the active workspace, all org tokens, and every (org, workspace) the user can reach'
 
@@ -39,7 +49,38 @@ export default class Workspace extends BaseCommand {
     // /userWorkspaces/list is per-token-org-scoped — a single org's JWT
     // only sees that org's workspaces. Iterate every cached org so the
     // listing is comprehensive in multi-org accounts.
-    const allWorkspaces = await this.fetchAllOrgsWorkspaces(orgEntries)
+    const {failures, workspaces: allWorkspaces} = await this.fetchAllOrgsWorkspaces(orgEntries)
+
+    // qfg-t15h: an empty listing used to be indistinguishable from "your
+    // session is dead", so an expired login rendered as "(no workspaces
+    // yet)" and nudged the user toward creating a duplicate workspace.
+    // When NOTHING could be listed and the cause is auth, fail the way
+    // `qfg pull`/`qfg get` do (get-client.ts:141) instead of printing a
+    // listing we know is a lie.
+    const authFailures = failures.filter((f) => f.auth)
+    if (failures.length === orgEntries.length && authFailures.length > 0) {
+      const label =
+        authFailures.length === 1
+          ? `org ${authFailures[0].orgSlug}`
+          : `orgs ${authFailures.map((f) => f.orgSlug).join(', ')}`
+      const detail =
+        authFailures.length === 1
+          ? authFailures[0].detail
+          : authFailures.map((f) => `${f.orgSlug}: ${f.detail}`).join('; ')
+      this.error(`Session expired for ${label}: ${detail}. Run \`qfg login\` to re-authenticate.`, {exit: 401})
+    }
+
+    // Partial failure keeps the deliberate multi-org isolation above: the
+    // healthy orgs still list, the dead ones say so instead of looking empty.
+    for (const f of failures) {
+      this.logToStderr(
+        f.auth
+          ? `Warning: could not list workspaces for org ${f.orgSlug} — ${f.detail}. Run \`qfg login\` to re-authenticate.`
+          : `Warning: could not list workspaces for org ${f.orgSlug} — ${f.detail}.`,
+      )
+    }
+
+    const failedOrgIds = new Set(failures.map((f) => f.orgId))
 
     const defaultProfilePin = this.profilePin(authConfig, allWorkspaces)
     const activePin = this.activePin(store, authConfig, allWorkspaces, defaultProfilePin)
@@ -57,7 +98,12 @@ export default class Workspace extends BaseCommand {
       for (const group of grouped) {
         this.log(`  ${group.orgSlug}:`)
         if (group.workspaces.length === 0) {
-          this.log('    (no workspaces yet — `qfg workspace create` to add one)')
+          // qfg-t15h: "yet" is only true if we actually got an answer.
+          this.log(
+            failedOrgIds.has(group.workosOrgId)
+              ? '    (could not list workspaces — see warning above)'
+              : '    (no workspaces yet — `qfg workspace create` to add one)',
+          )
           continue
         }
 
@@ -79,6 +125,10 @@ export default class Workspace extends BaseCommand {
       activeWorkspace: activePin,
       defaultProfile: defaultProfilePin,
       orgsWithTokens: orgSlugsWithTokens,
+      // qfg-t15h: --json suppresses the stderr warnings, so the failures
+      // have to be in the payload or a script cannot tell an org that
+      // returned nothing from one that could not be asked.
+      failedOrgs: failures.map((f) => ({orgSlug: f.orgSlug, authFailure: f.auth, reason: f.detail})),
       orgs: grouped.map((g) => ({
         orgSlug: g.orgSlug,
         workosOrgId: g.workosOrgId,
@@ -120,31 +170,53 @@ export default class Workspace extends BaseCommand {
 
   /**
    * Fan out across every cached org's token and merge the results. One org's
-   * stale token doesn't block the others — we verbose-log and continue.
+   * stale token doesn't block the others — that isolation is deliberate for
+   * multi-org accounts. What is NOT ok (qfg-t15h) is losing the fact that an
+   * org failed: each failure is returned so the caller can decide between a
+   * hard session-expired error (nothing listed) and a per-org warning
+   * alongside the orgs that did answer.
    */
-  private async fetchAllOrgsWorkspaces(orgEntries: [string, unknown][]): Promise<WorkspaceEntry[]> {
+  private async fetchAllOrgsWorkspaces(
+    orgEntries: [string, OrgTokens][],
+  ): Promise<{failures: OrgFailure[]; workspaces: WorkspaceEntry[]}> {
     const merged = new Map<string, WorkspaceEntry>()
-    for (const [orgId] of orgEntries) {
+    const failures: OrgFailure[] = []
+    for (const [orgId, tokens] of orgEntries) {
+      const orgSlug = tokens.org_slug ?? orgId
       let jwt: string
       try {
         // eslint-disable-next-line no-await-in-loop
         jwt = await getValidAccessToken(orgId, this.verboseLog)
       } catch (error) {
-        this.verboseLog('workspace: token refresh failed for org', {orgId, error: String(error)})
+        const detail = error instanceof Error ? error.message : String(error)
+        this.verboseLog('workspace: token refresh failed for org', {orgId, error: detail})
+        // A refresh that fails is always an auth failure — the stored
+        // grant is dead (invalid_grant) or there is no refresh token.
+        failures.push({auth: true, detail, orgId, orgSlug})
         continue
       }
 
       // eslint-disable-next-line no-await-in-loop
-      const list = await this.fetchWorkspaces(jwt)
-      for (const w of list) {
+      const listed = await this.fetchWorkspaces(jwt)
+      if (listed.kind === 'failed') {
+        failures.push({auth: listed.auth, detail: listed.detail, orgId, orgSlug})
+        continue
+      }
+
+      for (const w of listed.entries) {
         merged.set(w.workspaceId, w)
       }
     }
 
-    return [...merged.values()]
+    return {failures, workspaces: [...merged.values()]}
   }
 
-  private async fetchWorkspaces(jwt: string): Promise<WorkspaceEntry[]> {
+  /**
+   * qfg-t15h: returns a tagged result rather than a bare array, so a 401 or a
+   * dead connection is distinguishable from an org that genuinely has no
+   * workspaces yet.
+   */
+  private async fetchWorkspaces(jwt: string): Promise<WorkspaceListResult> {
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/userWorkspaces/list`, {
         method: 'POST',
@@ -153,15 +225,20 @@ export default class Workspace extends BaseCommand {
       })
       if (!res.ok) {
         this.verboseLog('workspace: userWorkspaces/list non-OK', {status: res.status})
-        return []
+        return {
+          auth: res.status === 401 || res.status === 403,
+          detail: `workspace listing failed (HTTP ${res.status})`,
+          kind: 'failed',
+        }
       }
 
       const body = (await res.json()) as {json?: WorkspaceEntry[]}
       const list = (body.json ?? body) as unknown as WorkspaceEntry[]
-      return Array.isArray(list) ? list : []
+      return {entries: Array.isArray(list) ? list : [], kind: 'ok'}
     } catch (error) {
-      this.verboseLog('workspace: userWorkspaces/list failed', {error: String(error)})
-      return []
+      const detail = error instanceof Error ? error.message : String(error)
+      this.verboseLog('workspace: userWorkspaces/list failed', {error: detail})
+      return {auth: false, detail, kind: 'failed'}
     }
   }
 
@@ -202,7 +279,12 @@ export default class Workspace extends BaseCommand {
       return this.err(error instanceof Error ? error.message : String(error))
     }
 
-    const entries = await this.fetchWorkspaces(jwt)
+    const listed = await this.fetchWorkspaces(jwt)
+    if (listed.kind === 'failed') {
+      return this.err(`Failed to resolve workspace "${override}" — ${listed.detail}.`)
+    }
+
+    const {entries} = listed
     if (entries.length === 0) {
       return this.err(`Failed to resolve workspace "${override}" — no entries returned.`)
     }

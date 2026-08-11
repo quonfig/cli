@@ -16,17 +16,41 @@ import {getApiBase} from '../test-domain-helper.js'
 const tokensPath = testTokensPath
 const configPath = testConfigPath
 
-const buildJwt = () => {
+/**
+ * `orgId` is stamped into the payload so the mock list endpoint can scope
+ * its answer the way the real one does (a given org's JWT only ever sees
+ * that org's workspaces). `expired` flips `exp` into the past, which is
+ * what sends getValidAccessToken down the WorkOS refresh path (qfg-t15h).
+ */
+const buildJwt = (opts: {expired?: boolean; orgId?: string} = {}) => {
+  const now = Math.floor(Date.now() / 1000)
   const payload = Buffer.from(
     JSON.stringify({
       email: 'multi@example.com',
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000),
+      exp: opts.expired ? now - 3600 : now + 3600,
+      iat: now - 7200,
+      org_id: opts.orgId,
       sub: 'user_test',
     }),
   ).toString('base64url')
   return `eyJhbGciOiJSUzI1NiJ9.${payload}.sig`
 }
+
+const orgIdFromJwt = (jwt: string): string | undefined => {
+  try {
+    return JSON.parse(Buffer.from(jwt.split('.')[1], 'base64').toString('utf8')).org_id
+  } catch {
+    return undefined
+  }
+}
+
+/** WorkOS refresh endpoint — the org-scoped refresh in oauth-client.ts. */
+const WORKOS_AUTHENTICATE = 'https://api.workos.com/user_management/authenticate'
+
+/** The exact failure from the qfg-t15h repro: a server-terminated session. */
+const invalidGrantHandler = http.post(WORKOS_AUTHENTICATE, () =>
+  HttpResponse.json({error: 'invalid_grant', error_description: 'Session has already ended'}, {status: 400}),
+)
 
 const workspacesResponse = {
   json: [
@@ -54,7 +78,15 @@ const workspacesResponse = {
   ],
 }
 
-const wsHandler = http.post(`${getApiBase()}/api/v1/userWorkspaces/list`, () => HttpResponse.json(workspacesResponse))
+// Scope the answer to the presenting token's org, like the real endpoint —
+// otherwise one healthy org's response would paper over another org's dead
+// session and the mixed-failure case below could not be observed.
+const wsHandler = http.post(`${getApiBase()}/api/v1/userWorkspaces/list`, ({request}) => {
+  const jwt = (request.headers.get('authorization') ?? '').replace(/^bearer\s+/i, '')
+  const orgId = orgIdFromJwt(jwt)
+  const list = orgId ? workspacesResponse.json.filter((w) => w.workosOrgId === orgId) : workspacesResponse.json
+  return HttpResponse.json({json: list})
+})
 const server = setupServer(wsHandler)
 
 describe('workspace — kr7.8 multi-org status', () => {
@@ -90,14 +122,14 @@ describe('workspace — kr7.8 multi-org status', () => {
         defaultOrgId: 'org_acme',
         tokensByOrg: {
           org_acme: {
-            access_token: buildJwt(),
+            access_token: buildJwt({orgId: 'org_acme'}),
             expires_at: Date.now() + 3_600_000,
             refresh_token: 'r_a',
             org_slug: 'acme',
             org_name: 'Acme',
           },
           org_beta: {
-            access_token: buildJwt(),
+            access_token: buildJwt({orgId: 'org_beta'}),
             expires_at: Date.now() + 3_600_000,
             refresh_token: 'r_b',
             org_slug: 'beta',
@@ -143,14 +175,14 @@ organization_name = Acme
         defaultOrgId: 'org_acme',
         tokensByOrg: {
           org_acme: {
-            access_token: buildJwt(),
+            access_token: buildJwt({orgId: 'org_acme'}),
             expires_at: Date.now() + 3_600_000,
             refresh_token: 'r_a',
             org_slug: 'acme',
             org_name: 'Acme',
           },
           org_beta: {
-            access_token: buildJwt(),
+            access_token: buildJwt({orgId: 'org_beta'}),
             expires_at: Date.now() + 3_600_000,
             refresh_token: 'r_b',
             org_slug: 'beta',
@@ -178,6 +210,92 @@ organization_name = Acme
       // Specific mechanism: env var changes ACTIVE only; default stays put.
       expect(ctx.stdout).to.contain('Active workspace: beta/main')
       expect(ctx.stdout).to.contain('Default profile:  acme/production')
+    })
+
+  /**
+   * qfg-t15h: with a dead session, `qfg workspace` used to swallow the
+   * refresh failure per org and render the resulting empty list as
+   * "(no workspaces yet — `qfg workspace create` to add one)" — telling a
+   * user with a valid account that they have nothing and nudging them to
+   * create a duplicate workspace. `qfg pull`/`qfg get` get this right; this
+   * command must too.
+   */
+  test
+    .stdout()
+    .stderr()
+    .do(() => {
+      server.use(invalidGrantHandler)
+      const store = {
+        defaultOrgId: 'org_acme',
+        tokensByOrg: {
+          org_acme: {
+            access_token: buildJwt({expired: true, orgId: 'org_acme'}),
+            expires_at: Date.now() - 3_600_000,
+            refresh_token: 'r_a',
+            org_slug: 'acme',
+            org_name: 'Acme',
+          },
+          org_beta: {
+            access_token: buildJwt({expired: true, orgId: 'org_beta'}),
+            expires_at: Date.now() - 3_600_000,
+            refresh_token: 'r_b',
+            org_slug: 'beta',
+            org_name: 'Beta',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+    })
+    .command(['workspace'])
+    .catch((error: {oclif?: {exit?: number}} & Error) => {
+      expect(error.message).to.contain('Session expired')
+      expect(error.message).to.contain('qfg login')
+      expect(error.oclif?.exit).to.equal(401)
+    })
+    .it('errors with the session-expired message when every org fails auth (qfg-t15h)', (ctx) => {
+      // The whole point of the bead: no "you have no workspaces" lie, and
+      // no nudge toward creating a duplicate one.
+      expect(ctx.stdout).to.not.contain('no workspaces yet')
+      expect(ctx.stdout).to.not.contain('workspace create')
+    })
+
+  test
+    .stdout()
+    .stderr()
+    .do(() => {
+      // Only acme's session is dead; beta still refreshes/lists fine.
+      server.use(invalidGrantHandler)
+      const store = {
+        defaultOrgId: 'org_beta',
+        tokensByOrg: {
+          org_acme: {
+            access_token: buildJwt({expired: true, orgId: 'org_acme'}),
+            expires_at: Date.now() - 3_600_000,
+            refresh_token: 'r_a',
+            org_slug: 'acme',
+            org_name: 'Acme',
+          },
+          org_beta: {
+            access_token: buildJwt({orgId: 'org_beta'}),
+            expires_at: Date.now() + 3_600_000,
+            refresh_token: 'r_b',
+            org_slug: 'beta',
+            org_name: 'Beta',
+          },
+        },
+      }
+      fs.writeFileSync(tokensPath(), JSON.stringify(store, null, 2))
+      fs.writeFileSync(configPath(), 'default_profile = default\n\n[profile default]\nworkspace = ws-beta-main\n\n')
+    })
+    .command(['workspace'])
+    .it('lists healthy orgs and warns per failed org when only some fail auth (qfg-t15h)', (ctx) => {
+      // Multi-org isolation is deliberate (workspace.ts:121-124): one dead
+      // org must not blank out the others...
+      expect(ctx.stdout).to.contain('    - beta/main')
+      // ...but the dead one must not masquerade as an empty org either.
+      expect(ctx.stdout).to.not.contain('no workspaces yet')
+      expect(ctx.stderr).to.contain('acme')
+      expect(ctx.stderr).to.contain('qfg login')
     })
 
   test
