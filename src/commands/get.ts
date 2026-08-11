@@ -138,7 +138,9 @@ export default class Get extends APICommand {
 
     if (providedByDep) {
       const envVarName = providedByDep.source
-      this.log(`This config is provided by env var '${envVarName}'`)
+      // qfg-zvef: diagnostics go to stderr so stdout stays a bare value —
+      // `qfg get` is commonly used in `$(...)` substitutions.
+      this.logToStderr(`This config is provided by env var '${envVarName}'`)
 
       const envValue = process.env[envVarName]
 
@@ -151,7 +153,7 @@ export default class Get extends APICommand {
       }
 
       value = envValue
-      this.log(`Successfully resolved config '${key}' from env var`)
+      this.logToStderr(`Successfully resolved config '${key}' from env var`)
     }
 
     const decryptWithDep = config.dependencies?.find((dep) => dep.dependencyType === 'decryptWith')
@@ -162,7 +164,7 @@ export default class Get extends APICommand {
 
       if (keyProvidedByDep) {
         const envVarName = keyProvidedByDep.source
-        this.log(
+        this.logToStderr(
           `This config is encrypted by key '${encryptionKeyConfig.key}' that should be found in env var '${envVarName}'`,
         )
 
@@ -185,7 +187,7 @@ export default class Get extends APICommand {
 
         try {
           value = decrypt(value, encryptionKey)
-          this.log(`Successfully decrypted config '${key}'`)
+          this.logToStderr(`Successfully decrypted config '${key}'`)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error)
           return this.err(`Failed to decrypt config '${key}': ${errorMessage}`, {

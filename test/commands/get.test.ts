@@ -48,14 +48,22 @@ describe('get', () => {
 
   // providedBy: the server returns the dependency pointer only; the CLI reads
   // the env var from the CLI host and returns the resolved value.
+  //
+  // qfg-zvef: stdout must be the bare value and NOTHING else — `qfg get` is
+  // routinely used inside a shell command substitution, and diagnostics on
+  // stdout get captured into the value (that is how a decrypted prod secret
+  // ended up in a Bearer header). Diagnostics belong on stderr.
   test
     .do(() => {
       process.env.TEST_CLI_PROVIDED_VAR = 'cli-host-env-value'
     })
     .stdout()
+    .stderr()
     .command(['get', 'provided.config', '--environment=[default]'])
     .it('resolves a providedBy config from the CLI host process.env', (ctx) => {
-      expect(ctx.stdout).to.contain('cli-host-env-value')
+      expect(ctx.stdout).to.eql('cli-host-env-value\n')
+      expect(ctx.stderr).to.contain("This config is provided by env var 'TEST_CLI_PROVIDED_VAR'")
+      expect(ctx.stderr).to.contain("Successfully resolved config 'provided.config' from env var")
     })
 
   test
@@ -68,14 +76,34 @@ describe('get', () => {
 
   // decryptWith: the server returns ciphertext + dependency chain; the CLI
   // reads the encryption key from its own process.env and decrypts locally.
+  // qfg-zvef: the decrypted plaintext must be the ONLY thing on stdout.
   test
     .do(() => {
       process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
     })
     .stdout()
+    .stderr()
     .command(['get', 'encrypted.config', '--environment=[default]'])
     .it('decrypts an encrypted config locally using the CLI host env key', (ctx) => {
-      expect(ctx.stdout).to.contain('test-secret')
+      expect(ctx.stdout).to.eql('test-secret\n')
+      expect(ctx.stderr).to.contain(
+        "This config is encrypted by key 'quonfig.encryption.key' that should be found in env var 'TEST_CLI_ENCRYPTION_KEY'",
+      )
+      expect(ctx.stderr).to.contain("Successfully decrypted config 'encrypted.config'")
+    })
+
+  // --json output must stay on stdout and stay parseable: the diagnostics are
+  // suppressed entirely under --json (oclif's jsonEnabled() guard).
+  test
+    .do(() => {
+      process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
+    })
+    .stdout()
+    .stderr()
+    .command(['get', 'encrypted.config', '--json', '--environment=[default]'])
+    .it('emits only JSON on stdout and no diagnostics for --json', (ctx) => {
+      expect(JSON.parse(ctx.stdout)).to.eql({'encrypted.config': 'test-secret'})
+      expect(ctx.stderr).to.eql('')
     })
 
   test
