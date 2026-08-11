@@ -46,6 +46,11 @@ function tmpDir(): string {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-push-cp-')))
 }
 
+/** Non-overlapping substring count — used to pin "named exactly once". */
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1
+}
+
 function makeIo(input?: string) {
   const io = {input: new PassThrough(), output: new PassThrough()}
   io.output.on('data', () => {})
@@ -251,6 +256,16 @@ describe('runPush → configs.push (qfg-azk.13)', () => {
         expect(joined).to.include('config.edit.protected-all-envs')
         expect(joined).to.include('configs/b.json')
         expect(joined).to.include('config.edit.protected-prod')
+
+        // qfg-szte: the bare-path engine used to print only the slug and
+        // throw away the server's `reason` entirely. Keep the reason, and
+        // name the path + slug exactly once each.
+        const denialLines = errs.filter((l) => l.includes('Missing required permission'))
+        expect(denialLines).to.have.length(2)
+        expect(countOccurrences(denialLines[0], 'configs/a.json')).to.equal(1)
+        expect(countOccurrences(denialLines[0], 'config.edit.protected-all-envs')).to.equal(1)
+        expect(countOccurrences(denialLines[1], 'configs/b.json')).to.equal(1)
+        expect(countOccurrences(denialLines[1], 'config.edit.protected-prod')).to.equal(1)
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }

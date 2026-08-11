@@ -343,6 +343,28 @@ const sameRepo = (a: string, b: string): boolean => normalizeForCompare(a) === n
  */
 export const withPushedViaTrailer = (message: string): string => message
 
+/**
+ * Render the detail half of one push-denial line (qfg-szte).
+ *
+ * The server's `reason` is already a complete sentence: every family in
+ * app-quonfig `authorize-push-files.ts` renders
+ * `Missing required permission to edit <path>: …<requiredPermission>`, so it
+ * names both the path and the slug. The clone path used to append
+ * `, requires <requiredPermission>` on top of that (slug and path twice), and
+ * the bare path used to print the slug alone and throw the reason away — so
+ * the "why" (which environment is protected, which rule reaches the default)
+ * never reached the user.
+ *
+ * Both now render the reason, and add back only the field it does not
+ * already carry. That keeps the line honest against a server that sends a
+ * terser reason than today's without ever duplicating anything.
+ */
+export function formatDenialDetail(d: {path: string; reason: string; requiredPermission: string}): string {
+  const reason = d.reason.trim() || `missing permission ${d.requiredPermission}`
+  const withPath = reason.includes(d.path) ? reason : `${d.path}: ${reason}`
+  return withPath.includes(d.requiredPermission) ? withPath : `${withPath} (requires ${d.requiredPermission})`
+}
+
 export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<RunPushResult> {
   const log = deps.log ?? ((s: string) => console.log(s))
   const errLog = deps.errLog ?? ((s: string) => console.error(s))
@@ -579,8 +601,8 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     if (packResult.kind === 'denied') {
       errLog(`Push denied for ${packResult.denials.length} commit(s):`)
       for (const d of packResult.denials) {
-        // qfg-7429.5 denial line: `<short-sha>  <path>  -- <reason>, requires <requiredPermission>`
-        errLog(`  ${d.commitSha.slice(0, 8)}  ${d.path}  -- ${d.reason}, requires ${d.requiredPermission}`)
+        // qfg-7429.5 denial line, qfg-szte detail: `<short-sha>  <reason>`
+        errLog(`  ${d.commitSha.slice(0, 8)}  ${formatDenialDetail(d)}`)
       }
       if (packResult.suggestedRecovery) {
         errLog('')
@@ -691,7 +713,9 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     if (result.kind === 'denied') {
       errLog(`Push denied for ${result.denials.length} file(s):`)
       for (const d of result.denials) {
-        errLog(`  ${d.path}: missing permission ${d.requiredPermission}`)
+        // qfg-szte: was `<path>: missing permission <perm>`, which dropped the
+        // server's reason (the "why") entirely.
+        errLog(`  ${formatDenialDetail(d)}`)
       }
 
       throw new PushFatalError(`Push denied for ${result.denials.length} file(s). See errors above.`, 'PUSH_DENIED')

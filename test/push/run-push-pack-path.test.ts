@@ -55,6 +55,11 @@ function tmpDir(): string {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-push-pack-')))
 }
 
+/** Non-overlapping substring count — used to pin "named exactly once". */
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1
+}
+
 function makeIo(input?: string) {
   const io = {input: new PassThrough(), output: new PassThrough()}
   io.output.on('data', () => {})
@@ -341,12 +346,66 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
         expect(caught).to.be.instanceOf(PushFatalError)
         expect((caught as PushFatalError).code).to.equal('PUSH_DENIED')
         const joined = captured.errs.join('\n')
-        // qfg-7429.5 format: `<short-sha>  <path>  -- <reason>, requires <requiredPermission>`
+        // qfg-szte: a terse reason that names neither the path nor the slug
+        // still gets both added back, each exactly once.
         expect(joined).to.include('configs/secret.json')
         expect(joined).to.include('config.edit.protected-all-envs')
         expect(joined).to.include('deadbeef') // short SHA
         expect(joined).to.include('missing-permission') // reason
         expect(joined).to.match(/requires\s+config\.edit\.protected-all-envs/)
+        expect(countOccurrences(joined, 'config.edit.protected-all-envs')).to.equal(1)
+        expect(countOccurrences(joined, 'configs/secret.json')).to.equal(1)
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    // qfg-szte: with the REAL server reason shape (app-quonfig
+    // `authorize-push-files.ts` — every family renders
+    // `Missing required permission to edit <path>: …<slug>`), the CLI's old
+    // `, requires <perm>` suffix printed both the path and the slug twice.
+    it('names the path and the required permission exactly once per denial line (qfg-szte)', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({
+          packResult: {
+            kind: 'denied',
+            denials: [
+              {
+                commitSha: 'deadbeefcafebabe0000000000000000abcdef00',
+                path: 'flags/checkout.json',
+                reason:
+                  'Missing required permission to edit flags/checkout.json: Environment "production" is protected; editing its rules requires config.edit.protected.',
+                requiredPermission: 'config.edit.protected',
+              },
+              {
+                commitSha: 'cafed00d1111111111111111111111111111beef',
+                path: 'configs/auth.json',
+                reason: 'Missing required permission to edit configs/auth.json: config.edit.protected-all-envs',
+                requiredPermission: 'config.edit.protected-all-envs',
+              },
+            ],
+          },
+        })
+        let caught: unknown
+        try {
+          await runPush(baseInput(dir), deps)
+        } catch (error) {
+          caught = error
+        }
+        expect(caught).to.be.instanceOf(PushFatalError)
+
+        const denialLines = captured.errs.filter((l) => l.includes('Missing required permission'))
+        expect(denialLines).to.have.length(2)
+
+        expect(countOccurrences(denialLines[0], 'config.edit.protected')).to.equal(1)
+        expect(countOccurrences(denialLines[0], 'flags/checkout.json')).to.equal(1)
+        expect(denialLines[0]).to.include('deadbeef')
+        expect(denialLines[0]).to.include('Environment "production" is protected')
+
+        expect(countOccurrences(denialLines[1], 'config.edit.protected-all-envs')).to.equal(1)
+        expect(countOccurrences(denialLines[1], 'configs/auth.json')).to.equal(1)
+        expect(denialLines[1]).to.include('cafed00d')
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
