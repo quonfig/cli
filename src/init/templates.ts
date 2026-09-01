@@ -202,6 +202,46 @@ This is a Quonfig workspace repository. See \`CLAUDE.md\` for the complete schem
 4. Filename must match the \`key\` field (e.g. \`my.flag.json\` has \`"key": "my.flag"\`).
 5. Files must be in the correct directory for their \`type\`.
 6. See \`CLAUDE.md\` for the full list of value types, operators, and constraints.
+
+## \`qfg\` or the Quonfig MCP?
+
+Only relevant if this workspace is *also* hosted on a Quonfig account. On the
+fully-local path, editing the JSON in this repo is the whole story.
+
+- **This repo is checked out and you have a shell** -> use \`qfg\`. The files are
+  already on disk, so reading them costs nothing.
+- **Slack, claude.ai, or anywhere without a checkout** -> use the Quonfig MCP
+  server. It reads and writes the hosted workspace directly. Do not try to shell
+  out to \`qfg\` from a surface that has no repo.
+
+Both surfaces cover the same everyday loop — create a flag or config, change what
+an environment serves, set a log level. (\`qfg\` has all of it today; the MCP's
+create/config/log-level verbs land with its v2 write surface.)
+
+## Setting a value REPLACES that environment's rules
+
+This is the one place the two surfaces will surprise you, so learn it once:
+
+\`qfg set-default\` (alias \`toggle\`), \`qfg set-rollout\`, and the MCP
+\`set_flag\`/\`set_config\` verbs all write a **single unconditional rule** into the
+environment you name. Every targeting rule already in that environment is
+dropped — and because the new rule matches everyone, rules in the \`default\`
+block stop applying to that environment too.
+
+The outcome is the same on both surfaces. Only the guard differs:
+
+| Surface | When the environment already has targeting rules |
+|---------|--------------------------------------------------|
+| MCP \`set_flag\` / \`set_config\` | Refuses with \`409 TARGETING_RULES_PRESENT\`. You must opt in with \`replaceTargeting\`, and the response returns a \`previousCommitSha\` to restore from. |
+| \`qfg set-default\` / \`qfg set-rollout\` | No guard. It replaces the rules and reports success. (Their own help text claims otherwise — it is wrong.) |
+
+**So read before you write.** Run \`qfg info <key>\` (or MCP \`get_flag\`) and look
+at the rules first. If the environment has targeting worth keeping, edit the JSON
+directly — or use MCP \`set_document\` — instead of setting a default.
+
+\`qfg log-level --target ...\` and MCP \`set_log_level\` are the exception: both are
+**surgical**. They upsert the level for the loggers you name and leave every
+other rule in place.
 `
 }
 

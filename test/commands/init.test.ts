@@ -385,6 +385,53 @@ describe('qfg init', () => {
     })
   })
 
+  // ── AGENTS.md surface steering (qfg-k4m6.4) ────────────────────────
+  //
+  // Asserted against the file `qfg init` actually renders to disk, not the
+  // template string, so a regression in either one is caught.
+
+  describe('AGENTS.md: qfg vs MCP steering', () => {
+    let rendered = ''
+
+    before(() => {
+      const dir = tmpDir()
+      try {
+        initFresh(dir)
+        rendered = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('routes in-repo work to qfg and checkout-less surfaces to the MCP', () => {
+      expect(rendered).to.include('MCP')
+      expect(rendered).to.match(/checked out/i)
+      expect(rendered).to.include('Slack')
+      expect(rendered).to.include('claude.ai')
+    })
+
+    it('warns that setting a value replaces the environment rules on BOTH surfaces', () => {
+      expect(rendered).to.include('qfg set-default')
+      expect(rendered).to.include('qfg set-rollout')
+      expect(rendered).to.include('set_flag')
+      expect(rendered).to.match(/single unconditional rule/i)
+      // The MCP has the guard; the CLI does not — that asymmetry is the point.
+      expect(rendered).to.include('TARGETING_RULES_PRESENT')
+      expect(rendered).to.match(/no such guard|no guard/i)
+    })
+
+    it('tells the agent to read the rules before writing a value', () => {
+      expect(rendered).to.include('qfg info')
+      expect(rendered).to.include('get_flag')
+    })
+
+    it('records that log-level writes are surgical on both surfaces', () => {
+      expect(rendered).to.include('qfg log-level')
+      expect(rendered).to.include('set_log_level')
+      expect(rendered).to.match(/surgical/i)
+    })
+  })
+
   // ── Validation ─────────────────────────────────────────────────────
 
   describe('validation', () => {
