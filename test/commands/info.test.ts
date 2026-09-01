@@ -292,26 +292,23 @@ No evaluations found for the past 24 hours
         // Error assertion done in catch block
       })
 
+    // Regression (qfg-hzmb): BaseCommand.catch() used to call `this.log()`,
+    // which oclif documents as a no-op whenever jsonEnabled(). A failing
+    // `--json` run therefore printed NOTHING on stdout — for an agent, a write
+    // failure was indistinguishable from an empty success. The structured
+    // envelope must land on stdout, with the real message in it.
     test
       .stdout()
       .stderr()
       .command(['info', keyDoesNotExist, '--json'])
       .catch(/.*/)
-      .it('returns a JSON error', (ctx) => {
-        // Try stdout first, then stderr
-        let output = ctx.stdout.trim()
-        if (!output) {
-          // If stderr has multiple lines (e.g., warnings), find lines that look like JSON
-          const stderrLines = ctx.stderr.trim().split('\n')
-          const jsonLines = stderrLines.filter((line) => line.trim().startsWith('{') && line.trim().endsWith('}'))
-          output = jsonLines.at(-1) || '' // Get the last JSON line
-        }
+      .it('prints a structured JSON error on stdout', (ctx) => {
+        expect(ctx.stdout.trim(), 'stdout must not be empty on a --json failure').to.not.equal('')
 
-        if (output) {
-          expect(JSON.parse(output)).to.eql({
-            error: `Key ${keyDoesNotExist} not found`,
-          })
-        }
+        const output = JSON.parse(ctx.stdout) as {error: {code: string; exitCode: number; message: string}}
+        expect(output.error.message).to.equal(`Key ${keyDoesNotExist} not found`)
+        expect(output.error.code).to.equal('ERR')
+        expect(output.error.exitCode).to.equal(1)
       })
   })
 })

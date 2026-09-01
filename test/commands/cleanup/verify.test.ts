@@ -80,6 +80,13 @@ describe('cleanup verify', () => {
       expect(json.evals).to.equal(67)
       expect(json.lastEval).to.be.a('string')
       expect(json.safe).to.equal(false)
+
+      // qfg-hzmb regression: `cleanup verify` shadows --json with its own flag
+      // and deliberately succeeds on a dirty window so agents can read `safe`.
+      // The new JSON error path in BaseCommand.catch() must not turn that into
+      // an error envelope.
+      expect(ctx.stdout).to.not.include('"error"')
+      expect(json).to.not.have.property('error')
     })
 
   test

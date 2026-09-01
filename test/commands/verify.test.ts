@@ -29,13 +29,31 @@ describe('verify', () => {
       .command(['verify', '.', '--json'])
       .catch((error) => {
         // Exit code 1 must be preserved — scripts depend on it.
-        expect((error as {exitCode?: number}).exitCode ?? 1).to.equal(1)
+        expect((error as {oclif?: {exit?: number}}).oclif?.exit ?? 1).to.equal(1)
       })
       .it('still emits the JSON result on stdout before exiting non-zero', (ctx) => {
         const output = JSON.parse(ctx.stdout)
         expect(output).to.have.property('valid', false)
         expect(output).to.have.property('issues').that.is.an('array')
         expect(output.issues.length).to.be.greaterThan(0)
+      })
+
+    // qfg-hzmb: the fix teaches catch() to print a JSON error envelope under
+    // --json. `this.exit(1)` throws an ExitError, which is control flow, not a
+    // failure — reporting it too would append a SECOND JSON document here and
+    // break every consumer that pipes this into a parser.
+    test
+      .stdout()
+      .command(['verify', '.', '--json'])
+      .catch(/.*/)
+      .it('emits exactly one JSON document — the ExitError is not reported too', (ctx) => {
+        expect(ctx.stdout).to.not.include('EEXIT')
+        // A second, appended document would make this throw.
+        expect(() => JSON.parse(ctx.stdout)).to.not.throw()
+        // ...and the one document is the verify payload, not an error envelope.
+        const output = JSON.parse(ctx.stdout) as Record<string, unknown>
+        expect(output).to.have.property('valid', false)
+        expect(output).to.not.have.property('error')
       })
   })
 

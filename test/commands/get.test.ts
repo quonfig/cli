@@ -74,6 +74,21 @@ describe('get', () => {
     })
     .it('errors with missingEnvVar when the providedBy env var is unset')
 
+  // qfg-hzmb: the caller's structured payload (the second argument to
+  // `this.err`) has to survive onto stdout, not just onto the thrown object —
+  // an agent reading `--json` output can only see stdout.
+  test
+    .stdout()
+    .command(['get', 'provided.config', '--json', '--environment=[default]'])
+    .catch(/.*/)
+    .it('carries the err() payload into the JSON error envelope on stdout', (ctx) => {
+      expect(ctx.stdout.trim(), 'stdout must not be empty on a --json failure').to.not.equal('')
+
+      const output = JSON.parse(ctx.stdout) as {error: {message: string; missingEnvVar?: string}}
+      expect(output.error.missingEnvVar).to.equal('TEST_CLI_PROVIDED_VAR')
+      expect(output.error.message).to.be.a('string').and.to.have.length.greaterThan(0)
+    })
+
   // decryptWith: the server returns ciphertext + dependency chain; the CLI
   // reads the encryption key from its own process.env and decrypts locally.
   // qfg-zvef: the decrypted plaintext must be the ONLY thing on stdout.
