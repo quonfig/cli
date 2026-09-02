@@ -360,8 +360,11 @@ To see all current values and rules for a flag:
       default: {rules: unknown[]}
     }
 
-    // Build a single catch-all rule (empty criteria = matches everything).
-    const newRule = {criteria: [], value: configValue}
+    // Build a single catch-all rule — one that matches everything. An empty
+    // `criteria` array means the same thing and is still accepted on read,
+    // but ALWAYS_TRUE is the spelling we WRITE (qfg-gv54), so every surface
+    // reading this back sees the same shape the UI and API emit.
+    const newRule = {criteria: [{operator: 'ALWAYS_TRUE'}], value: configValue}
 
     // For [Default] (environment.id === ''), update default.rules.
     // For a specific environment, update the environments array.

@@ -239,9 +239,14 @@ const configsUpdateHandler = http.post(`${getApiBase()}/api/v1/configs/update`, 
   return HttpResponse.json({json: {success: true, key: body.json.configKey}})
 })
 
+// Same idea for /api/v1/flags/update — `set-rollout` writes feature flags
+// through this endpoint, and its tests assert on the rule it emitted.
+export const flagsUpdateCapture: {body: any} = {body: null}
+
 // POST /api/v1/flags/update — update a flag via oRPC
 const flagsUpdateHandler = http.post(`${getApiBase()}/api/v1/flags/update`, async ({request}) => {
   const body = (await request.json()) as any
+  flagsUpdateCapture.body = body
   if (!body?.json?.flagKey) {
     return HttpResponse.json({json: {error: 'Missing flagKey'}}, {status: 400})
   }

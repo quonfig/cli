@@ -1,6 +1,11 @@
-import {expect} from 'chai'
+import {expect, test} from '@oclif/test'
 
 import {synthesizeVariants} from '../../src/commands/set-rollout.js'
+import {resetClientCache} from '../../src/util/get-client.js'
+// Shares the set-default mock server: `set-rollout` talks to the same
+// metadata/environments/update endpoints.
+import {flagsUpdateCapture, server} from '../responses/set-default.js'
+import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 
 describe('set-rollout', () => {
   describe('synthesizeVariants', () => {
@@ -50,5 +55,36 @@ describe('set-rollout', () => {
       expect(variants).to.have.length(1)
       expect(variants[0].value).to.deep.equal({type: 'json', value: {foo: 'bar'}})
     })
+  })
+
+  describe('written rule shape', () => {
+    before(() => {
+      setupTestAuth()
+      server.listen()
+    })
+    afterEach(() => {
+      server.resetHandlers()
+      resetClientCache()
+      flagsUpdateCapture.body = null
+    })
+    after(() => {
+      server.close()
+      cleanupTestAuth()
+    })
+
+    // qfg-gv54: the rollout catch-all must use the ALWAYS_TRUE spelling.
+    // `criteria: []` means the same thing to every evaluator, but only one
+    // spelling gets written going forward so readers stop needing to guess.
+    test
+      .stdout()
+      .command(['set-rollout', 'feature-flag.simple', '--environment=Development', '--true-percent=25', '--confirm'])
+      .it('writes the rollout catch-all with the ALWAYS_TRUE spelling', () => {
+        const body = flagsUpdateCapture.body
+        expect(body, 'flags/update was never called').to.not.be.null
+        const environments = body.json.flag.environments as Array<{id: string; rules: Array<{criteria: unknown[]}>}>
+        const devEnv = environments.find((e) => e.id === 'Development')
+        expect(devEnv, 'development env missing from update payload').to.exist
+        expect(devEnv!.rules[0].criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+      })
   })
 })

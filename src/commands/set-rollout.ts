@@ -207,7 +207,10 @@ To inspect the current rollout:
       variants?: Array<{name?: string; value: {type: string; value: unknown}; description?: string}>
     }
 
-    const newRule = {criteria: [], value: rolloutValue}
+    // A catch-all rule — one that matches everyone, then splits them by
+    // weight. An empty `criteria` array means the same thing and is still
+    // accepted on read, but ALWAYS_TRUE is the spelling we WRITE (qfg-gv54).
+    const newRule = {criteria: [{operator: 'ALWAYS_TRUE'}], value: rolloutValue}
     const envKey = environment.name
     const existingEnvs = currentConfig.environments ?? []
     const hasEnv = existingEnvs.some((e) => e.id === envKey)

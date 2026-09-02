@@ -91,6 +91,31 @@ describe('set-default', () => {
         })
       })
 
+    // qfg-gv54: the catch-all we write must use the ALWAYS_TRUE spelling.
+    // `criteria: []` means the same thing to every evaluator, but only one
+    // spelling gets written going forward so readers stop needing to guess.
+    test
+      .stdout()
+      .command(['set-default', 'jeffreys.test.key.reforge', '--environment=Staging', '--value=hi', '--confirm'])
+      .it('writes an environment catch-all with the ALWAYS_TRUE spelling', () => {
+        const body = configsUpdateCapture.body
+        expect(body, 'configs/update was never called').to.not.be.null
+        const environments = body.json.config.environments as Array<{id: string; rules: Array<{criteria: unknown[]}>}>
+        const stagingEnv = environments.find((e) => e.id === 'Staging')
+        expect(stagingEnv, 'staging env missing from update payload').to.exist
+        expect(stagingEnv!.rules[0].criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+      })
+
+    test
+      .stdout()
+      .command(['set-default', 'jeffreys.test.key.reforge', '--environment=[default]', '--value=hi', '--confirm'])
+      .it('writes a default-block catch-all with the ALWAYS_TRUE spelling', () => {
+        const body = configsUpdateCapture.body
+        expect(body, 'configs/update was never called').to.not.be.null
+        const defaultBlock = body.json.config.default as {rules: Array<{criteria: unknown[]}>}
+        expect(defaultBlock.rules[0].criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+      })
+
     test
       .stdout()
       .command(['set-default', 'jeffreys.test.key.reforge', '--environment=Staging', '--confirm', '--env-var=GREETING'])

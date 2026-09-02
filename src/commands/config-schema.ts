@@ -20,8 +20,13 @@ RULE EVALUATION
 ────────────────────────────────────────────────────────────
 Rules are evaluated in ORDER — the FIRST matching rule wins.
 Put specific rules (user lists, segments) BEFORE catch-all rules.
-  criteria: []   means "match everyone" (unconditional / catch-all)
+  criteria: [{"operator": "ALWAYS_TRUE"}]
+                 means "match everyone" (unconditional / catch-all).
+                 This is the canonical spelling — write this one.
+  criteria: []   also accepted, and treated as unconditional. Older
+                 "qfg set-default" / "qfg set-rollout" writes use it.
   criteria: [..] multiple entries in one rule are ANDed together
+  criteria       is REQUIRED on every rule — omitting the key is invalid.
 
 ────────────────────────────────────────────────────────────
 EXAMPLE: complex targeting + rollout in production
@@ -37,7 +42,7 @@ Four rules in order:
     "type": "feature_flag",
     "valueType": "bool",
     "default": {
-      "rules": [{ "criteria": [], "value": { "type": "bool", "value": false } }]
+      "rules": [{ "criteria": [{ "operator": "ALWAYS_TRUE" }], "value": { "type": "bool", "value": false } }]
     },
     "environments": [{
       "id": "production",
@@ -65,7 +70,7 @@ Four rules in order:
           "value": { "type": "bool", "value": false }
         },
         {
-          "criteria": [],
+          "criteria": [{ "operator": "ALWAYS_TRUE" }],
           "value": {
             "type": "weighted_values",
             "value": {
