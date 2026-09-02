@@ -126,6 +126,26 @@ describe('set-rollout', () => {
         expect(ctx.stdout).to.contain('Kept 1 targeting rule')
       })
 
+    // The [Default] scope writes the document's `default` block. Before
+    // qfg-qjdm this created an environment literally named "[Default]", which
+    // no SDK would ever match.
+    test
+      .stdout()
+      .command(['set-rollout', 'targeted.flag', '--environment=[default]', '--true-percent=25', '--confirm'])
+      .it('rolls out the [Default] scope into default.rules, keeping its targeting', (ctx) => {
+        const body = flagsUpdateCapture.body
+        expect(body, 'flags/update was never called').to.not.be.null
+        expect(body.json.flag.environments, 'no environments key on a [Default] write').to.equal(undefined)
+        const rules = (body.json.flag.default as {rules: any[]}).rules
+        expect(rules).to.have.length(2)
+        expect(rules[0].criteria[0].operator, 'default targeting rule kept').to.equal('PROP_IS_ONE_OF')
+        expect(rules[0].value).to.deep.equal({type: 'bool', value: true})
+        expect(rules[1].criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+        expect(rules[1].value.type).to.equal('weighted_values')
+        expect(ctx.stdout).to.contain('in the default')
+        expect(ctx.stdout).to.contain('Kept 1 targeting rule')
+      })
+
     test
       .stdout()
       .command([

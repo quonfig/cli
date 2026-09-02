@@ -70,7 +70,8 @@ To inspect the current rollout:
     '<%= config.bin %> <%= command.id %> my.feature.flag --environment production --true-percent 20',
     '<%= config.bin %> <%= command.id %> my.feature.flag --environment staging --true-percent 50',
     '<%= config.bin %> <%= command.id %> my.feature.flag --environment production --true-percent 100  # full rollout',
-    '<%= config.bin %> <%= command.id %> my.feature.flag --environment production --true-percent 0    # kill switch (all false)',
+    '# For a kill switch — false for EVERYONE, including targeted users — use set-default:',
+    '<%= config.bin %> set-default my.feature.flag --value=false --environment=production --replace-targeting',
     '<%= config.bin %> <%= command.id %> my.variant.flag --environment production --weights "control:50,treatment:50"',
     '<%= config.bin %> <%= command.id %> my.variant.flag --environment production --weights "a:33,b:33,c:34" --hash-by user.id',
   ]

@@ -166,7 +166,12 @@ const targetedFlagResponse = {
       ],
     },
   ],
-  default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}]},
+  default: {
+    rules: [
+      emailRule('vip@example.test', {type: 'bool', value: true}),
+      {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+    ],
+  },
 }
 
 const targetingOnlyFlagResponse = {

@@ -2063,7 +2063,9 @@ EXAMPLES
 
   $ qfg set-rollout my.feature.flag --environment production --true-percent 100  # full rollout
 
-  $ qfg set-rollout my.feature.flag --environment production --true-percent 0    # kill switch (all false)
+  # For a kill switch — false for EVERYONE, including targeted users — use set-default:
+
+  $ qfg set-default my.feature.flag --value=false --environment=production --replace-targeting
 
   $ qfg set-rollout my.variant.flag --environment production --weights "control:50,treatment:50"
 
