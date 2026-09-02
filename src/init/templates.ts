@@ -218,30 +218,33 @@ Both surfaces cover the same everyday loop — create a flag or config, change w
 an environment serves, set a log level. (\`qfg\` has all of it today; the MCP's
 create/config/log-level verbs land with its v2 write surface.)
 
-## Setting a value REPLACES that environment's rules
+## Setting a value KEEPS that environment's targeting rules
 
-This is the one place the two surfaces will surprise you, so learn it once:
+Both surfaces write the same way, so learn it once:
 
 \`qfg set-default\` (alias \`toggle\`), \`qfg set-rollout\`, and the MCP
-\`set_flag\`/\`set_config\` verbs all write a **single unconditional rule** into the
-environment you name. Every targeting rule already in that environment is
-dropped — and because the new rule matches everyone, rules in the \`default\`
-block stop applying to that environment too.
+\`set_flag\`/\`set_config\` verbs replace exactly ONE rule — the environment's
+**fallback**, the unconditional rule at the end of its rule list that decides
+what users receive when no targeting rule matches. Every targeting rule above
+it is kept, and both surfaces report how many. An environment with no rules of
+its own has them copied from default first, so inherited targeting is kept too.
 
-The outcome is the same on both surfaces. Only the guard differs:
+| Surface | By default | To set the value for EVERYONE |
+|---------|------------|-------------------------------|
+| \`qfg set-default\` / \`qfg set-rollout\` | Keeps targeting; reports "Kept N targeting rule(s)" | add \`--replace-targeting\` |
+| MCP \`set_flag\` / \`set_config\` | Keeps targeting; reports the kept count in its result | send \`replaceTargeting: true\` |
 
-| Surface | When the environment already has targeting rules |
-|---------|--------------------------------------------------|
-| MCP \`set_flag\` / \`set_config\` | Refuses with \`409 TARGETING_RULES_PRESENT\`. You must opt in with \`replaceTargeting\`, and the response returns a \`previousCommitSha\` to restore from. |
-| \`qfg set-default\` / \`qfg set-rollout\` | No guard. It replaces the rules and reports success. (Their own help text claims otherwise — it is wrong.) |
+Setting the value for everyone DELETES that environment's targeting rules. They
+stay in git history, and the write returns a \`previousCommitSha\` to restore from.
 
-**So read before you write.** Run \`qfg info <key>\` (or MCP \`get_flag\`) and look
-at the rules first. If the environment has targeting worth keeping, edit the JSON
-directly — or use MCP \`set_document\` — instead of setting a default.
+**Still read before you write.** \`qfg info <key>\` (or MCP \`get_flag\`) shows the
+rules your value is about to sit next to. For anything a fallback cannot express —
+multi-rule targeting, reordering, editing one targeting rule — edit the JSON
+directly or use MCP \`set_document\`.
 
-\`qfg log-level --target ...\` and MCP \`set_log_level\` are the exception: both are
-**surgical**. They upsert the level for the loggers you name and leave every
-other rule in place.
+\`qfg log-level --target ...\` and MCP \`set_log_level\` are **surgical** in the same
+way: they upsert the level for the loggers you name and leave every other rule in
+place.
 `
 }
 

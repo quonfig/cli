@@ -410,14 +410,24 @@ describe('qfg init', () => {
       expect(rendered).to.include('claude.ai')
     })
 
-    it('warns that setting a value replaces the environment rules on BOTH surfaces', () => {
+    // qfg-qjdm: both surfaces are SURGICAL now — they replace the fallback
+    // rule and keep targeting — and `--replace-targeting` / `replaceTargeting`
+    // is the explicit opt-in to the destructive everyone-gets-this write.
+    it('records that setting a value KEEPS targeting on BOTH surfaces', () => {
       expect(rendered).to.include('qfg set-default')
       expect(rendered).to.include('qfg set-rollout')
       expect(rendered).to.include('set_flag')
-      expect(rendered).to.match(/single unconditional rule/i)
-      // The MCP has the guard; the CLI does not — that asymmetry is the point.
-      expect(rendered).to.include('TARGETING_RULES_PRESENT')
-      expect(rendered).to.match(/no such guard|no guard/i)
+      expect(rendered).to.match(/keeps? targeting/i)
+      expect(rendered).to.match(/fallback/i)
+      // The environment that inherits everything is copied, not blanked.
+      expect(rendered).to.match(/copied from (the )?default/i)
+    })
+
+    it('names the explicit opt-in to a destructive everyone write', () => {
+      expect(rendered).to.include('--replace-targeting')
+      expect(rendered).to.include('replaceTargeting')
+      expect(rendered).to.include('previousCommitSha')
+      expect(rendered).to.match(/git history/i)
     })
 
     it('tells the agent to read the rules before writing a value', () => {
