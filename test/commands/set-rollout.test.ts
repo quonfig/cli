@@ -72,19 +72,79 @@ describe('set-rollout', () => {
       cleanupTestAuth()
     })
 
-    // qfg-gv54: the rollout catch-all must use the ALWAYS_TRUE spelling.
-    // `criteria: []` means the same thing to every evaluator, but only one
-    // spelling gets written going forward so readers stop needing to guess.
+    // qfg-gv54: a rollout catch-all we CREATE must use the ALWAYS_TRUE
+    // spelling. `criteria: []` means the same thing to every evaluator, but
+    // only one spelling gets written going forward so readers stop needing to
+    // guess. (An existing fallback is edited in place and keeps whichever
+    // spelling it already had — qfg-qjdm.)
     test
       .stdout()
-      .command(['set-rollout', 'feature-flag.simple', '--environment=Development', '--true-percent=25', '--confirm'])
+      .command(['set-rollout', 'targeting-only.flag', '--environment=Development', '--true-percent=25', '--confirm'])
       .it('writes the rollout catch-all with the ALWAYS_TRUE spelling', () => {
         const body = flagsUpdateCapture.body
         expect(body, 'flags/update was never called').to.not.be.null
         const environments = body.json.flag.environments as Array<{id: string; rules: Array<{criteria: unknown[]}>}>
         const devEnv = environments.find((e) => e.id === 'Development')
         expect(devEnv, 'development env missing from update payload').to.exist
+        expect(devEnv!.rules.at(-1)!.criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+      })
+  })
+
+  // ── Surgical targeting (qfg-qjdm) ──────────────────────────────────
+  //
+  // Same semantics as `set-default`: the rollout replaces the FALLBACK
+  // rule's value and keeps every targeting rule around it, unless
+  // --replace-targeting says otherwise.
+  describe('surgical targeting', () => {
+    before(() => {
+      setupTestAuth()
+      server.listen()
+    })
+    afterEach(() => {
+      server.resetHandlers()
+      resetClientCache()
+      flagsUpdateCapture.body = null
+    })
+    after(() => {
+      server.close()
+      cleanupTestAuth()
+    })
+
+    test
+      .stdout()
+      .command(['set-rollout', 'targeted.flag', '--environment=Development', '--true-percent=25', '--confirm'])
+      .it('keeps the environment targeting rules and rolls out only the fallback', (ctx) => {
+        const body = flagsUpdateCapture.body
+        expect(body, 'flags/update was never called').to.not.be.null
+        const environments = body.json.flag.environments as Array<{id: string; rules: any[]}>
+        const devEnv = environments.find((e) => e.id === 'Development')
+        expect(devEnv!.rules).to.have.length(2)
+        expect(devEnv!.rules[0].criteria[0].operator).to.equal('PROP_IS_ONE_OF')
+        expect(devEnv!.rules[0].value).to.deep.equal({type: 'bool', value: true})
+        expect(devEnv!.rules[1].criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+        expect(devEnv!.rules[1].value.type).to.equal('weighted_values')
+        expect(ctx.stdout).to.contain('Kept 1 targeting rule')
+      })
+
+    test
+      .stdout()
+      .command([
+        'set-rollout',
+        'targeted.flag',
+        '--environment=Development',
+        '--true-percent=25',
+        '--replace-targeting',
+        '--confirm',
+      ])
+      .it('--replace-targeting collapses the scope to the rollout alone', (ctx) => {
+        const body = flagsUpdateCapture.body
+        const environments = body.json.flag.environments as Array<{id: string; rules: any[]}>
+        const devEnv = environments.find((e) => e.id === 'Development')
+        expect(devEnv!.rules).to.have.length(1)
         expect(devEnv!.rules[0].criteria).to.deep.equal([{operator: 'ALWAYS_TRUE'}])
+        expect(devEnv!.rules[0].value.type).to.equal('weighted_values')
+        expect(ctx.stdout).to.contain('Replaced 1 targeting rule')
+        expect(ctx.stdout).to.contain('abc102')
       })
   })
 })

@@ -7,6 +7,17 @@ import getEnvironment from '../ui/get-environment.js'
 import {checkmark} from '../util/color.js'
 import isInteractive from '../util/is-interactive.js'
 import nameArg from '../util/name-arg.js'
+import {
+  ScopedDocument,
+  catchAllRule,
+  countTargetingRules,
+  keptTargetingNote,
+  replacedTargetingNote,
+  seedScopeRules,
+  seededFromDefaultNote,
+  upsertEnvRules,
+  upsertFallbackRule,
+} from '../util/rules.js'
 
 const WEIGHT_TOTAL = 100_000
 
@@ -32,6 +43,16 @@ Hashing: users are bucketed by the value of hashByPropertyName (default: "user.k
 Use --hash-by to change which property drives the bucket assignment:
   qfg set-rollout my.flag --environment production --true-percent 10 --hash-by user.id
 
+The rollout becomes the environment's fallback: the unconditional rule at the end
+of its rule list, what users receive when no targeting rule matches. Targeting
+rules above it are kept, and the command tells you how many. If the environment
+has no rules of its own yet, they are copied from the flag's default rules first,
+so inherited targeting is kept too.
+
+To roll out to EVERYONE, including users matched by targeting rules, add
+--replace-targeting. This deletes the environment's targeting rules (they stay in
+git history).
+
 For scripted / agent use, add --confirm to skip the interactive confirmation prompt.
 
 To combine a rollout with segment targeting (e.g. beta ON, holdout OFF, everyone else 50/50),
@@ -40,7 +61,7 @@ you need to edit the JSON config file directly:
   qfg pull --dir ./config     # clone workspace to edit
 
 To revert to a single value for everyone, use:
-  qfg set-default my.flag --environment production --value false
+  qfg set-default my.flag --environment production --value false --replace-targeting
 
 To inspect the current rollout:
   qfg info my.flag`
@@ -64,6 +85,11 @@ To inspect the current rollout:
       description: 'percentage of users that receive true (0–100). Remaining users receive false. Boolean flags only.',
       max: 100,
       min: 0,
+    }),
+    'replace-targeting': Flags.boolean({
+      default: false,
+      description:
+        "roll out to EVERYONE: delete this environment's targeting rules instead of keeping them (they stay in git history)",
     }),
     weights: Flags.string({
       description:
@@ -184,13 +210,8 @@ To inspect the current rollout:
       .map((wv) => `${wv.weight / 1000}% → ${JSON.stringify(wv.value.value)}`)
       .join(', ')
 
-    const message = `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}]? yes/no`
-
-    if (!(await getConfirmation({flags, message}))) {
-      return
-    }
-
-    // Fetch the current full config to get commitSha and existing environments
+    // Fetch the current full config BEFORE confirming: the prompt has to say
+    // how many targeting rules the write keeps (or deletes).
     const detailRequest = await this.apiClient.post('/api/v1/metadata/getByKey', {
       workspaceId: this.workspaceId,
       key,
@@ -200,31 +221,44 @@ To inspect the current rollout:
       return this.err(`Failed to fetch config details: ${detailRequest.status}`)
     }
 
-    const currentConfig = detailRequest.json as {
+    const currentConfig = detailRequest.json as unknown as {
       commitSha: string
-      environments: Array<{id: string; rules: unknown[]}>
-      default: {rules: unknown[]}
       variants?: Array<{name?: string; value: {type: string; value: unknown}; description?: string}>
+    } & ScopedDocument
+
+    // The scope this write targets: one environment's rule list, or the
+    // document's `default` block when the user picked [Default].
+    const envName = environment.id === '' ? undefined : environment.name
+    const replaceTargeting = flags['replace-targeting']
+    const scope = seedScopeRules(currentConfig, envName)
+    // A --replace-targeting write does NOT seed from default: there is nothing
+    // in that environment to replace.
+    const targetingRuleCount = replaceTargeting && scope.seeded ? 0 : countTargetingRules(scope.rules)
+
+    const keptPhrase =
+      targetingRuleCount > 0 ? ` (${targetingRuleCount} targeting rule${targetingRuleCount === 1 ? '' : 's'} kept)` : ''
+    const deletePhrase = targetingRuleCount > 0 ? `, deleting ${targetingRuleCount} targeting rule(s)` : ''
+    const message = replaceTargeting
+      ? `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}] for EVERYONE${deletePhrase}? yes/no`
+      : `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}]?${keptPhrase} yes/no`
+
+    if (!(await getConfirmation({flags, message}))) {
+      return
     }
 
-    // A catch-all rule — one that matches everyone, then splits them by
-    // weight. An empty `criteria` array means the same thing and is still
-    // accepted on read, but ALWAYS_TRUE is the spelling we WRITE (qfg-gv54).
-    const newRule = {criteria: [{operator: 'ALWAYS_TRUE'}], value: rolloutValue}
-    const envKey = environment.name
-    const existingEnvs = currentConfig.environments ?? []
-    const hasEnv = existingEnvs.some((e) => e.id === envKey)
-    const updatedEnvironments = hasEnv
-      ? existingEnvs.map((e) => (e.id === envKey ? {...e, rules: [newRule]} : e))
-      : [...existingEnvs, {id: envKey, rules: [newRule]}]
+    // Surgical by default (qfg-qjdm): the rollout replaces the FALLBACK rule's
+    // value and every targeting rule around it is kept. A newly appended
+    // catch-all uses the ALWAYS_TRUE spelling (qfg-gv54); an existing fallback
+    // keeps whichever spelling it already had.
+    const newRules = replaceTargeting ? [catchAllRule(rolloutValue)] : upsertFallbackRule(scope.rules, rolloutValue)
 
     // Auto-create variants when the config has none. The UI cannot render a
     // rollout without named variants, and the server/gitea verify now rejects
     // it. Bool configs are exempt — the UI supplies implicit true/false variants.
     const existingVariants = currentConfig.variants ?? []
-    const updateFields: {environments: typeof updatedEnvironments; variants?: typeof existingVariants} = {
-      environments: updatedEnvironments,
-    }
+    const updateFields: Record<string, unknown> = envName
+      ? {environments: upsertEnvRules(currentConfig.environments ?? [], envName, newRules)}
+      : {default: {rules: newRules}}
     if (existingVariants.length === 0 && config.valueType !== 'bool') {
       const synthesized = synthesizeVariants(weightedValues)
       if (synthesized.length > 0) {
@@ -256,7 +290,29 @@ To inspect the current rollout:
     }
 
     if (request.ok) {
-      this.log(`${checkmark} Rollout set: ${key} in ${environment.name} → [${rolloutDescription}]`)
+      const scopeLabel = envName ?? 'the default'
+      const sentences = replaceTargeting
+        ? [
+            `Rollout set: ${key} in ${scopeLabel} → [${rolloutDescription}] for everyone.`,
+            replacedTargetingNote(targetingRuleCount, currentConfig.commitSha),
+          ]
+        : [
+            `Rollout set: ${key} in ${scopeLabel} → [${rolloutDescription}].`,
+            scope.seeded && envName ? seededFromDefaultNote(envName) : '',
+            keptTargetingNote(targetingRuleCount),
+          ]
+
+      this.log(`${checkmark} ${sentences.filter(Boolean).join(' ')}`)
+
+      const counts: JsonObj = replaceTargeting
+        ? {
+            previousCommitSha: currentConfig.commitSha,
+            ...(targetingRuleCount > 0 ? {replacedTargetingRuleCount: targetingRuleCount} : {}),
+          }
+        : targetingRuleCount > 0
+          ? {keptTargetingRuleCount: targetingRuleCount}
+          : {}
+
       return {
         environment: {id: environment.id, name: environment.name},
         hashByPropertyName: flags['hash-by'],
@@ -264,6 +320,7 @@ To inspect the current rollout:
         rollout: rolloutDescription,
         success: true,
         weightedValues,
+        ...counts,
       }
     }
 

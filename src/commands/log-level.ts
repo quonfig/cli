@@ -4,6 +4,7 @@ import {APICommand} from '../index.js'
 import {JsonObj} from '../result.js'
 import {checkmark} from '../util/color.js'
 import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.js'
+import {seedScopeRules, upsertEnvRules} from '../util/rules.js'
 
 const SDK_LOGGER_CONTEXT = 'quonfig-sdk-logging.key'
 
@@ -161,12 +162,16 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
     // Merge semantics: if an existing rule has the same exact targeting
     // criterion (same propertyName, same valueToMatch set), replace its value.
     // Otherwise insert the new rule before the catch-all so it takes priority.
-    const existingRules = environment ? findEnvRules(current, environment) : (current.default?.rules ?? [])
+    // An environment with no block of its own INHERITS default.rules at
+    // evaluation time, so the merge starts from a clone of those rules rather
+    // than from an empty list — otherwise writing one logger's level silently
+    // dropped every inherited rule for that environment (qfg-qjdm).
+    const {rules: existingRules} = seedScopeRules(current, environment)
 
-    const mergedRules = mergeTargetingRule(existingRules, newRule)
+    const mergedRules = mergeTargetingRule(existingRules as Rule[], newRule)
 
     const logLevelPatch: Record<string, unknown> = environment
-      ? {environments: replaceEnvRules(current.environments ?? [], environment, mergedRules)}
+      ? {environments: upsertEnvRules(current.environments ?? [], environment, mergedRules) as EnvRules[]}
       : {default: {rules: mergedRules}}
 
     const updateRequest = await this.apiClient.post('/api/v1/logLevels/update', {
@@ -192,16 +197,6 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
       },
     )
   }
-}
-
-function findEnvRules(config: LogLevelConfig, environment: string): Rule[] {
-  const env = (config.environments ?? []).find((e) => e.id === environment)
-  return env?.rules ?? []
-}
-
-function replaceEnvRules(envs: EnvRules[], environment: string, rules: Rule[]): EnvRules[] {
-  const hasEnv = envs.some((e) => e.id === environment)
-  return hasEnv ? envs.map((e) => (e.id === environment ? {...e, rules} : e)) : [...envs, {id: environment, rules}]
 }
 
 function mergeTargetingRule(existing: Rule[], incoming: Rule): Rule[] {

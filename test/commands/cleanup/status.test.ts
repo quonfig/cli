@@ -1,7 +1,7 @@
 import {expect, test} from '@oclif/test'
 
 import {resetClientCache} from '../../../src/util/get-client.js'
-import {activeFlagKey, quietFlagKey, server} from '../../responses/cleanup.js'
+import {activeFlagKey, bareFallbackFlagKey, quietFlagKey, server} from '../../responses/cleanup.js'
 import {cleanupTestAuth, setupTestAuth} from '../../test-auth-helper.js'
 
 describe('cleanup status', () => {
@@ -50,6 +50,17 @@ describe('cleanup status', () => {
       const staging = json.environments.find((e) => e.environment === 'staging')
       expect(prod?.total).to.equal(263) // 200 + 50 + 10 + 3
       expect(staging?.total).to.equal(4)
+    })
+
+  // qfg-9kr8: the fallback is whichever rule is unconditional, in EITHER live
+  // spelling. Reading only `criteria: [{operator: 'ALWAYS_TRUE'}]` made this
+  // flag report its targeting rule's value (true) as the fallback.
+  test
+    .stdout()
+    .command(['cleanup status', bareFallbackFlagKey, '--json'])
+    .it('recognizes a bare `criteria: []` fallback under a targeting rule', (ctx) => {
+      const json = JSON.parse(ctx.stdout) as {defaultRule: string}
+      expect(json.defaultRule).to.equal('false (+1 override rule)')
     })
 
   test

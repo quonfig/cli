@@ -7,6 +7,7 @@ import autocomplete from '../util/autocomplete.js'
 import {getAppUrl} from '../util/domain-urls.js'
 import isInteractive from '../util/is-interactive.js'
 import nameArg from '../util/name-arg.js'
+import {isCatchAllRule} from '../util/rules.js'
 
 export default class Info extends APICommand {
   static aliases = ['flag:show', 'flag:info']
@@ -406,12 +407,11 @@ Related commands:
     return this.extractSimpleValue(value)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private hasNonTrivialCriteria(rule: any): boolean {
-    if (!rule.criteria || rule.criteria.length === 0) return false
-    // ALWAYS_TRUE is not a real criteria - treat it as unconditional
-    if (rule.criteria.length === 1 && rule.criteria[0].operator === 'ALWAYS_TRUE') return false
-    return true
+  // Anything that is not a catch-all targets someone. Both live catch-all
+  // spellings (`criteria: []` and all-ALWAYS_TRUE) are unconditional — one
+  // shared predicate, qfg-9kr8.
+  private hasNonTrivialCriteria(rule: unknown): boolean {
+    return !isCatchAllRule(rule)
   }
 
   // A rule value is a "simple scalar" if it carries a literal value that can be
@@ -478,11 +478,8 @@ Related commands:
         displayValue = '[inherit]'
       } else if (envConfig.name === 'Default') {
         // For Default environment, show the unconditional fallback value
-        // Find the ALWAYS_TRUE rule (usually the last rule)
-        const fallbackRule = envConfig.rules.find(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (r: any) => r.criteria?.length === 1 && r.criteria[0].operator === 'ALWAYS_TRUE',
-        )
+        // Find the unconditional rule (usually the last rule)
+        const fallbackRule = envConfig.rules.find((r: unknown) => isCatchAllRule(r))
         displayValue = fallbackRule
           ? this.formatValue(fallbackRule.value, false)
           : this.formatValue(envConfig.rules[0].value, false)
@@ -503,7 +500,7 @@ Related commands:
             displayValue = '[see rules]'
           }
         } else {
-          // Only has unconditional rules (ALWAYS_TRUE) - show [see rules] to indicate env has custom config
+          // Only has unconditional rules - show [see rules] to indicate env has custom config
           displayValue = '[see rules]'
         }
       }
@@ -519,10 +516,7 @@ Related commands:
       if (envConfig.rules && envConfig.rules.length > 0) {
         if (envConfig.name === 'Default') {
           // For Default, show the unconditional fallback value
-          const fallbackRule = envConfig.rules.find(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (r: any) => r.criteria?.length === 1 && r.criteria[0].operator === 'ALWAYS_TRUE',
-          )
+          const fallbackRule = envConfig.rules.find((r: unknown) => isCatchAllRule(r))
           const valueToShow = fallbackRule ? fallbackRule.value.value : envConfig.rules[0].value.value
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ;(json[envConfig.name] as any).value = valueToShow

@@ -21,6 +21,10 @@ export const activeFlagKey = 'flag.active'
 export const variantFlagKey = 'flag.variant'
 export const notReadyFlagKey = 'flag.not-ready-yet'
 export const nonFlagConfigKey = 'config.not-a-flag'
+// qfg-9kr8: a flag whose fallback carries the older bare `criteria: []`
+// spelling, sitting under a real targeting rule. A strict single-ALWAYS_TRUE
+// find misses it and reports the TARGETING rule's value as the fallback.
+export const bareFallbackFlagKey = 'flag.bare-fallback'
 
 // today's calendar date, used to anchor the sparkline mock so the CLI's
 // "today's bucket" arithmetic lines up with the daily grouping.
@@ -211,6 +215,33 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
         valueType: 'string',
         readyForCleanup: true,
         default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'on'}}]},
+        environments: [],
+      },
+    })
+  }
+
+  if (key === bareFallbackFlagKey) {
+    return HttpResponse.json({
+      json: {
+        key: bareFallbackFlagKey,
+        type: 'feature_flag',
+        valueType: 'bool',
+        readyForCleanup: true,
+        default: {
+          rules: [
+            {
+              criteria: [
+                {
+                  operator: 'PROP_IS_ONE_OF',
+                  propertyName: 'user.email',
+                  valueToMatch: {type: 'string_list', value: ['staff@example.test']},
+                },
+              ],
+              value: {type: 'bool', value: true},
+            },
+            {criteria: [], value: {type: 'bool', value: false}},
+          ],
+        },
         environments: [],
       },
     })

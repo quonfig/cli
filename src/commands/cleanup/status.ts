@@ -3,6 +3,7 @@ import {Flags} from '@oclif/core'
 import {APICommand} from '../../index.js'
 import {JsonObj} from '../../result.js'
 import nameArg from '../../util/name-arg.js'
+import {isCatchAllRule} from '../../util/rules.js'
 
 interface ConfigRule {
   criteria?: Array<{operator: string}>
@@ -70,7 +71,10 @@ function formatRuleValue(value: Record<string, unknown> | undefined): string {
 
 function summarizeRules(rules: ConfigRule[] | undefined): string {
   if (!rules || rules.length === 0) return '[inherit default]'
-  const fallback = rules.find((r) => r.criteria && r.criteria.length === 1 && r.criteria[0].operator === 'ALWAYS_TRUE')
+  // Both catch-all spellings count as the fallback (qfg-9kr8): a strict
+  // single-ALWAYS_TRUE find reported a targeting rule's value as the fallback
+  // for every scope written by an older `qfg set-default`.
+  const fallback = rules.find((r) => isCatchAllRule(r))
   const overrides = rules.filter((r) => r !== fallback)
   const fallbackStr = fallback ? formatRuleValue(fallback.value) : formatRuleValue(rules[0].value)
   if (overrides.length === 0) return fallbackStr

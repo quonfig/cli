@@ -65,7 +65,143 @@ const metadataResponse = {
       name: 'Encryption Key',
       description: 'Encryption key for secrets',
     },
+    {
+      key: 'targeted.config',
+      type: 'config',
+      valueType: 'string',
+      version: 1,
+      id: 1007,
+      name: 'Targeted Config',
+      description: 'A config with targeting rules in Staging and in default',
+    },
+    {
+      key: 'targeting-only.config',
+      type: 'config',
+      valueType: 'string',
+      version: 1,
+      id: 1008,
+      name: 'Targeting Only Config',
+      description: 'A config whose Staging block holds a targeting rule and NO catch-all',
+    },
+    {
+      key: 'targeted.flag',
+      type: 'feature_flag',
+      valueType: 'bool',
+      version: 1,
+      id: 1009,
+      name: 'Targeted Flag',
+      description: 'A boolean flag with targeting rules in Development',
+    },
+    {
+      key: 'targeting-only.flag',
+      type: 'feature_flag',
+      valueType: 'bool',
+      version: 1,
+      id: 1010,
+      name: 'Targeting Only Flag',
+      description: 'A boolean flag whose Development block holds a targeting rule and NO catch-all',
+    },
   ],
+}
+
+// ── Targeting fixtures (qfg-qjdm) ──────────────────────────────────────
+//
+// `set-default` / `set-rollout` are SURGICAL: they replace the fallback
+// rule's value and keep every targeting rule around it. These fixtures give
+// the tests the three shapes that matter — a scope with [targeting,
+// catch-all], a scope with targeting and NO catch-all, and an environment
+// with no block at all (which is seeded from `default.rules`).
+
+const emailRule = (email: string, value: unknown) => ({
+  criteria: [
+    {operator: 'PROP_IS_ONE_OF', propertyName: 'user.email', valueToMatch: {type: 'string_list', value: [email]}},
+  ],
+  value,
+})
+
+const targetedConfigResponse = {
+  key: 'targeted.config',
+  type: 'config',
+  valueType: 'string',
+  commitSha: 'abc100',
+  environments: [
+    {
+      id: 'Staging',
+      rules: [
+        emailRule('staff@example.test', {type: 'string', value: 'staging targeted'}),
+        {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'staging fallback'}},
+      ],
+    },
+  ],
+  default: {
+    rules: [
+      emailRule('vip@example.test', {type: 'string', value: 'default targeted'}),
+      {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'string', value: 'default fallback'}},
+    ],
+  },
+}
+
+const targetingOnlyConfigResponse = {
+  key: 'targeting-only.config',
+  type: 'config',
+  valueType: 'string',
+  commitSha: 'abc101',
+  environments: [{id: 'Staging', rules: [emailRule('staff@example.test', {type: 'string', value: 'only targeted'})]}],
+  // No catch-all in the default block either, so both scopes exercise the
+  // append path (and therefore the spelling a fresh fallback is written in).
+  default: {rules: [emailRule('vip@example.test', {type: 'string', value: 'default targeted'})]},
+}
+
+const targetedFlagResponse = {
+  key: 'targeted.flag',
+  type: 'feature_flag',
+  valueType: 'bool',
+  commitSha: 'abc102',
+  environments: [
+    {
+      id: 'Development',
+      rules: [
+        emailRule('staff@example.test', {type: 'bool', value: true}),
+        {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+      ],
+    },
+  ],
+  default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}]},
+}
+
+const targetingOnlyFlagResponse = {
+  key: 'targeting-only.flag',
+  type: 'feature_flag',
+  valueType: 'bool',
+  commitSha: 'abc104',
+  environments: [{id: 'Development', rules: [emailRule('staff@example.test', {type: 'bool', value: true})]}],
+  default: {rules: [emailRule('vip@example.test', {type: 'bool', value: true})]},
+}
+
+// A log level whose targeting lives only in `default.rules` — the shape
+// `qfg log-level --environment` used to drop on the floor by starting the
+// named environment from an empty list.
+const logLevelResponse = {
+  key: 'log-level.test-app',
+  type: 'log_level',
+  valueType: 'log_level',
+  commitSha: 'abc103',
+  environments: [],
+  default: {
+    rules: [
+      {
+        criteria: [
+          {
+            operator: 'PROP_STARTS_WITH_ONE_OF',
+            propertyName: 'quonfig-sdk-logging.key',
+            valueToMatch: {type: 'string_list', value: ['Existing.Logger']},
+          },
+        ],
+        value: {type: 'log_level', value: 'DEBUG'},
+      },
+      {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'log_level', value: 'WARN'}},
+    ],
+  },
 }
 
 // POST /api/v1/metadata/list - list all configs (oRPC wrapped)
@@ -195,6 +331,26 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
     })
   }
 
+  if (key === 'targeted.config') {
+    return HttpResponse.json({json: targetedConfigResponse})
+  }
+
+  if (key === 'targeting-only.config') {
+    return HttpResponse.json({json: targetingOnlyConfigResponse})
+  }
+
+  if (key === 'targeted.flag') {
+    return HttpResponse.json({json: targetedFlagResponse})
+  }
+
+  if (key === 'targeting-only.flag') {
+    return HttpResponse.json({json: targetingOnlyFlagResponse})
+  }
+
+  if (key === 'log-level.test-app') {
+    return HttpResponse.json({json: logLevelResponse})
+  }
+
   if (key === 'robocop-secret') {
     return HttpResponse.json({
       json: {
@@ -253,9 +409,14 @@ const flagsUpdateHandler = http.post(`${getApiBase()}/api/v1/flags/update`, asyn
   return HttpResponse.json({json: {success: true, key: body.json.flagKey}})
 })
 
+// Same idea for /api/v1/logLevels/update — `qfg log-level --target` writes
+// through this endpoint and its tests assert on the merged rule list.
+export const logLevelsUpdateCapture: {body: any} = {body: null}
+
 // POST /api/v1/logLevels/update — update a log-level via oRPC
 const logLevelsUpdateHandler = http.post(`${getApiBase()}/api/v1/logLevels/update`, async ({request}) => {
   const body = (await request.json()) as any
+  logLevelsUpdateCapture.body = body
   if (!body?.json?.logLevelKey) {
     return HttpResponse.json({json: {error: 'Missing logLevelKey'}}, {status: 400})
   }
