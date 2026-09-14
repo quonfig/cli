@@ -16,6 +16,7 @@
  * run in parallel without colliding. The port-collision test takes a
  * pre-bound port and asserts the error message.
  */
+import {Parser} from '@oclif/core'
 import {expect} from 'chai'
 import * as fs from 'node:fs'
 import * as http from 'node:http'
@@ -23,6 +24,7 @@ import * as net from 'node:net'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import Serve from '../../src/commands/serve.js'
 import {resolveDatadirForServe} from '../../src/serve/datadir-discovery.js'
 import {startServer, ServeHandle} from '../../src/serve/server.js'
 
@@ -218,6 +220,39 @@ describe('qfg serve', () => {
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})
       }
+    })
+  })
+
+  describe('--environment resolution (qfg-xk98)', () => {
+    // Parsed through oclif's real parser against the command's own flag table,
+    // so a flag declaration that shadows the env var (the 0.0.73 dead-code bug:
+    // `default: 'development'` always populated, so a `?? process.env` arm in
+    // run() never fired) fails here instead of in production.
+    const saved = process.env.QUONFIG_ENVIRONMENT
+
+    afterEach(() => {
+      if (saved === undefined) delete process.env.QUONFIG_ENVIRONMENT
+      else process.env.QUONFIG_ENVIRONMENT = saved
+    })
+
+    const parseEnvironment = async (argv: string[]): Promise<string> => {
+      const {flags} = await Parser.parse(argv, {flags: Serve.flags, strict: false})
+      return flags.environment
+    }
+
+    it('falls back to development when neither --environment nor QUONFIG_ENVIRONMENT is set', async () => {
+      delete process.env.QUONFIG_ENVIRONMENT
+      expect(await parseEnvironment([])).to.equal('development')
+    })
+
+    it('honors QUONFIG_ENVIRONMENT when --environment is absent (serve hosts a service; the var is its identity)', async () => {
+      process.env.QUONFIG_ENVIRONMENT = 'production'
+      expect(await parseEnvironment([])).to.equal('production')
+    })
+
+    it('--environment wins over QUONFIG_ENVIRONMENT', async () => {
+      process.env.QUONFIG_ENVIRONMENT = 'production'
+      expect(await parseEnvironment(['--environment', 'staging'])).to.equal('staging')
     })
   })
 

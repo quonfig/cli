@@ -178,4 +178,29 @@ describe('override', () => {
         expect(overrideResponses.findOrCreateCallCount).to.equal(0)
       })
   })
+
+  describe('environment must be explicit (qfg-xk98 identity razor)', () => {
+    // Operator commands never read QUONFIG_ENVIRONMENT: that variable tells a
+    // SERVICE what it is; the flag tells the CLI what to aim at. An ambient
+    // var left over from local dev must not steer a write.
+    const saved = process.env.QUONFIG_ENVIRONMENT
+    before(() => {
+      process.env.QUONFIG_ENVIRONMENT = 'Development'
+    })
+    after(() => {
+      if (saved === undefined) delete process.env.QUONFIG_ENVIRONMENT
+      else process.env.QUONFIG_ENVIRONMENT = saved
+    })
+
+    test
+      .stderr()
+      .command(['override', 'feature.simple', 'true'])
+      .catch((error) => {
+        expect(error.message).to.match(/--env/)
+        expect(error.message).to.not.match(/set QUONFIG_ENVIRONMENT/)
+      })
+      .it('ignores QUONFIG_ENVIRONMENT and errors when --env is absent', () => {
+        expect(overrideResponses.findOrCreateCallCount).to.equal(0)
+      })
+  })
 })

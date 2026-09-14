@@ -42,7 +42,9 @@ to confirm a LAN-reachable bind.`
     }),
     environment: Flags.string({
       default: 'development',
-      description: 'Which environment slug to evaluate. Honors QUONFIG_ENVIRONMENT.',
+      description:
+        'Which environment slug to evaluate. Flag wins, then QUONFIG_ENVIRONMENT (serve hosts a service, so the var is its identity), then development.',
+      env: 'QUONFIG_ENVIRONMENT',
     }),
     port: Flags.integer({
       default: 6580,
@@ -76,8 +78,10 @@ to confirm a LAN-reachable bind.`
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(Serve)
 
-    const envEnvironment = process.env.QUONFIG_ENVIRONMENT
-    const environment = flags.environment ?? envEnvironment ?? 'development'
+    // Flag > QUONFIG_ENVIRONMENT > 'development', all resolved by oclif via the
+    // flag's `env:` option. (0.0.73 and earlier did `flags.environment ?? process.env...`
+    // here, but oclif always populated the default, so the env var never applied.)
+    const {environment} = flags
 
     const resolved = resolveDatadirForServe({
       flagDatadir: flags.datadir,

@@ -131,7 +131,7 @@ Examples
 
   static flags = {
     clear: Flags.boolean({default: false, description: 'remove ALL of your overrides in this env'}),
-    env: Flags.string({description: 'environment to operate in (default: $QUONFIG_ENVIRONMENT)'}),
+    env: Flags.string({description: 'environment to operate in (required; QUONFIG_ENVIRONMENT is never read)'}),
     remove: Flags.boolean({default: false, description: 'remove your override on this key'}),
   }
 
@@ -146,9 +146,13 @@ Examples
       return this.err('Not logged in. Run `qfg login` first.')
     }
 
-    const env = flags.env || process.env.QUONFIG_ENVIRONMENT
+    // Operator commands never read QUONFIG_ENVIRONMENT: that variable tells a
+    // service what it is; the flag tells the CLI what to aim at. (0.0.73 and
+    // earlier fell back to the env var here, so a var left over from local dev
+    // could silently pick the environment a write landed in.)
+    const {env} = flags
     if (!env) {
-      return this.err('No environment specified. Pass --env=<env> or set QUONFIG_ENVIRONMENT.')
+      return this.err('No environment specified. Pass --env=<env>. qfg override does not read QUONFIG_ENVIRONMENT.')
     }
 
     if (env === 'production') {
