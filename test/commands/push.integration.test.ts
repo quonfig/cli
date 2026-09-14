@@ -637,7 +637,13 @@ describe('runPush: integration against real local bare git repos (server-side co
   })
 
   describe('4. destructive-delete typed-slug prompt', () => {
-    it('--yes does NOT skip typed-slug; EOF aborts; typed slug proceeds', async () => {
+    it('--yes does NOT skip typed-slug; EOF aborts; typed slug proceeds', async function () {
+      // Two real clones, two commits, and one real pack-push against a bare
+      // remote. Alone this takes ~2s; in a clean serial full-suite run it was
+      // measured at 9.5s against mocha's 10s default, and it timed out
+      // outright on a loaded box (qfg-s3kj). Same explicit headroom the
+      // pre-receive-hook test in clone-and-stack-push.test.ts carries.
+      this.timeout(30_000)
       const {remoteUrl, remoteDir} = createBareRemote(root)
       const seeded: Record<string, string> = {
         'quonfig.json': JSON.stringify({workspace: 'acme/acme-prod'}) + '\n',
