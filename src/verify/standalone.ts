@@ -11,7 +11,7 @@
  *   1  Validation errors found
  */
 
-import {execFileSync} from 'node:child_process'
+import {execFileSync, spawnSync} from 'node:child_process'
 import * as readline from 'node:readline'
 import {formatResult, validateFileMap, validateWorkspace} from './validate.js'
 
@@ -54,7 +54,7 @@ function runDiskValidation(dir: string) {
  * For each new commit, lists all config files and validates them.
  */
 async function runGitHook() {
-  const refs: Array<{oldOid: string; newOid: string; refName: string}> = []
+  const refs: RefUpdate[] = []
 
   // Read all of stdin (ref lines). Use callback API for bun compatibility.
   await new Promise<void>((resolve) => {
@@ -62,41 +62,200 @@ async function runGitHook() {
     rl.on('line', (line: string) => {
       const parts = line.trim().split(' ')
       if (parts.length >= 3) {
-        refs.push({oldOid: parts[0], newOid: parts[1], refName: parts[2]})
+        refs.push({newOid: parts[1], oldOid: parts[0], refName: parts[2]})
       }
     })
     rl.on('close', resolve)
   })
 
+  process.exit(runHookChecks(refs, {env: process.env, log: console.log, logErr: console.error}))
+}
+
+export type RefUpdate = {newOid: string; oldOid: string; refName: string}
+export type HookEnv = Record<string, string | undefined>
+
+export type HookOptions = {
+  cwd?: string
+  env: HookEnv
+  log: (line: string) => void
+  logErr: (line: string) => void
+}
+
+/**
+ * The whole pre-receive decision, as a function: returns the process exit code
+ * (0 accept, 1 reject). Split out of runGitHook so tests can drive it against
+ * real bare repos without a subprocess.
+ */
+export function runHookChecks(refs: readonly RefUpdate[], opts: HookOptions): number {
+  const {cwd, env, log, logErr} = opts
+
+  // Always the first line, so a rollout or rollback can be confirmed by
+  // something other than behaviour (plan 5.6 item 5).
+  log(`qfg-verify ${hookVersion(env)}`)
+
   if (refs.length === 0) {
-    console.log('qfg-verify: no refs received')
-    process.exit(0)
+    log('qfg-verify: no refs received')
+    return 0
   }
 
-  // Validate the latest pushed commit for each ref
   let hasErrors = false
 
+  // Append-only `main` (qfg-jxml.21). Runs BEFORE content validation, but does
+  // not short-circuit it: an operator repair is still validated for content.
+  const appendOnly = checkAppendOnlyMain(refs, env, cwd)
+  if (appendOnly.bypassReason) {
+    logErr(`qfg-verify: operator rewrite bypass by ${env.GITEA_PUSHER_NAME ?? '?'}: ${appendOnly.bypassReason}`)
+  }
+
+  for (const message of appendOnly.errors) {
+    logErr(message)
+    hasErrors = true
+  }
+
+  // Content validation: the latest pushed commit for each ref.
   for (const ref of refs) {
     // Skip deletions
-    if (ref.newOid === '0000000000000000000000000000000000000000') continue
+    if (isZeroOid(ref.newOid)) continue
 
-    console.log(`qfg-verify: validating ${ref.refName} (${ref.newOid.slice(0, 8)})`)
+    log(`qfg-verify: validating ${ref.refName} (${ref.newOid.slice(0, 8)})`)
 
     try {
-      const files = readFilesFromCommit(ref.newOid)
+      const files = readFilesFromCommit(ref.newOid, cwd)
       const result = validateFileMap(files)
-      console.log(formatResult(result))
+      log(formatResult(result))
 
       if (!result.valid) {
         hasErrors = true
       }
     } catch (error: unknown) {
-      console.error(`qfg-verify: error reading commit ${ref.newOid}: ${(error as Error).message}`)
+      logErr(`qfg-verify: error reading commit ${ref.newOid}: ${(error as Error).message}`)
       hasErrors = true
     }
   }
 
-  process.exit(hasErrors ? 1 : 0)
+  return hasErrors ? 1 : 0
+}
+
+function isZeroOid(oid: string): boolean {
+  return /^0+$/.test(oid)
+}
+
+/** The `cli` sha this binary was built from; `dev` for an unstamped build. */
+export function hookVersion(env: HookEnv = process.env): string {
+  return env.QFG_VERIFY_SHA?.trim() || 'dev'
+}
+
+const MAIN_REF = 'refs/heads/main'
+const REWRITE_OPTION = 'quonfig-rewrite='
+
+/**
+ * `main` is append-only: every update to refs/heads/main must have a non-zero
+ * old oid that is an ancestor of the new oid. A delete and a create are both
+ * rejected (provisioning creates `main` with auto_init; no writer creates it by
+ * push, and the zero-oid door is the only way to delete-then-recreate).
+ * Other refs are untouched. See plan 2026-09-17-tree-derived-cache 5.6.
+ */
+export function checkAppendOnlyMain(
+  refs: readonly RefUpdate[],
+  env: HookEnv,
+  cwd?: string,
+): {bypassReason?: string; errors: string[]} {
+  const mainUpdates = refs.filter((ref) => ref.refName === MAIN_REF)
+  if (mainUpdates.length === 0 || !ffEnforcedForRepo(env)) return {errors: []}
+
+  const bypassReason = operatorBypassReason(env)
+  if (bypassReason) return {bypassReason, errors: []}
+
+  const errors: string[] = []
+  for (const ref of mainUpdates) {
+    if (isZeroOid(ref.newOid)) {
+      errors.push(rejection('deleting main is not allowed'))
+    } else if (isZeroOid(ref.oldOid)) {
+      errors.push(rejection('creating main by push is not allowed'))
+    } else if (!isAncestor(ref.oldOid, ref.newOid, cwd)) {
+      errors.push(
+        rejection(`${ref.newOid.slice(0, 8)} is not a descendant of the current tip ${ref.oldOid.slice(0, 8)}`),
+      )
+    }
+  }
+
+  return {errors}
+}
+
+/** Rollout switch: enforce only for repos named in the allowlist; `*` = all. */
+function ffEnforcedForRepo(env: HookEnv): boolean {
+  const allowlist = (env.QUONFIG_HOOK_FF_ENFORCE ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+  if (allowlist.length === 0) return false
+  if (allowlist.includes('*')) return true
+
+  // Gitea 1.25 hands the hook its repo via these (modules/repository/env.go).
+  const owner = (env.GITEA_REPO_USER_NAME ?? '').trim().toLowerCase()
+  const name = (env.GITEA_REPO_NAME ?? '').trim().toLowerCase()
+  if (!owner || !name) return false
+  return allowlist.includes(`${owner}/${name}`)
+}
+
+/**
+ * Operator bypass, two keys, BOTH required: the pusher is the operator admin
+ * account (the app pushes as admin too, so identity only excludes customers)
+ * AND the push declares a reason with `-o quonfig-rewrite=<reason>` (which is
+ * what excludes accidents). No flag-file fallback.
+ */
+function operatorBypassReason(env: HookEnv): string | undefined {
+  const operator = (env.QUONFIG_HOOK_OPERATOR ?? '').trim()
+  const pusher = (env.GITEA_PUSHER_NAME ?? '').trim()
+  if (!operator || !pusher || pusher.toLowerCase() !== operator.toLowerCase()) return undefined
+
+  const count = Number.parseInt(env.GIT_PUSH_OPTION_COUNT ?? '', 10)
+  if (!Number.isInteger(count)) return undefined
+
+  for (let index = 0; index < count; index++) {
+    const option = env[`GIT_PUSH_OPTION_${index}`] ?? ''
+    if (option.startsWith(REWRITE_OPTION)) {
+      const reason = option.slice(REWRITE_OPTION.length).trim()
+      if (reason) return reason
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * `git merge-base --is-ancestor` via spawnSync, never simple-git: simple-git
+ * swallows a non-zero exit with no stderr, so a diverged pair would RESOLVE as
+ * "ancestor" and the rule would be vacuous (plan 12.2 S2). Exit 1 = not an
+ * ancestor; any other non-zero is an error and the push is rejected.
+ * The env is inherited as-is so Gitea's quarantine (GIT_QUARANTINE_PATH,
+ * GIT_OBJECT_DIRECTORY, GIT_ALTERNATE_OBJECT_DIRECTORIES) still resolves the
+ * incoming objects.
+ */
+function isAncestor(oldOid: string, newOid: string, cwd?: string): boolean {
+  const result = spawnSync('git', ['merge-base', '--is-ancestor', oldOid, newOid], {cwd, encoding: 'utf8'})
+  if (result.error) throw result.error
+  if (result.status === 0) return true
+  if (result.status === 1) return false
+  throw new Error(`git merge-base --is-ancestor exited ${result.status}: ${(result.stderr || '').trim()}`)
+}
+
+function rejection(what: string): string {
+  return `qfg-verify: REJECTED ${MAIN_REF}: ${what}.
+
+main is append-only: every push must fast-forward from the current tip. What to do:
+
+  * Lost a race with another writer -- pull and rebase, then push again:
+      qfg pull && qfg push        (or: git pull --rebase origin main && git push origin main)
+
+  * Want the content from an earlier commit -- restore it as a FORWARD commit:
+      git restore --source=<sha> --staged --worktree -- .
+      git commit -m "restore <sha>"
+      qfg push
+
+  * This came from \`qfg workspace bootstrap\` on an older CLI, which force-pushes --
+    upgrade the CLI and run it again:
+      npm install -g @quonfig/cli@latest`
 }
 
 /**
