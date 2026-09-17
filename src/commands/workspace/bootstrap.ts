@@ -14,11 +14,19 @@ import {
   hasAtLeastOneCommit,
   gitSetRemote,
   gitFetch,
-  configDocumentsAtRef,
+  workspaceDocumentsAtRef,
   rebaseOntoOriginAndPush,
   getRemoteUrl,
+  getOriginMainSha,
   displayUrl,
 } from '../../util/git-ops.js'
+
+/**
+ * How the customer points their clone at the workspace after bootstrap.
+ * `pre-bootstrap` keeps their original history; the reset is safe because the
+ * pushed tree was proven equal to their tree before the push.
+ */
+const LOCAL_RESET_RECIPE = 'git branch pre-bootstrap && git fetch origin && git reset --hard origin/main'
 
 export default class WorkspaceBootstrap extends BaseCommand {
   static description = "Push a local git repo to Gitea as this workspace's config repository"
@@ -149,14 +157,23 @@ export default class WorkspaceBootstrap extends BaseCommand {
 
     await gitFetch(resolvedDir)
 
-    // Bootstrap is for a FRESH workspace only. "Fresh" is "holds no config
-    // documents", NOT "has no commits": provisioning seeds README.md and
-    // quonfig.json, so every real workspace arrives with two commits
-    // (plan 2026-09-17-tree-derived-cache.md 5.6, 13.2 risk 5).
-    const documents = await configDocumentsAtRef(resolvedDir, 'origin/main')
+    // Every workspace repo is provisioned with `main`; no `main` means the
+    // workspace is half-created, and the pre-receive hook rejects creating it
+    // by push (plan 5.6 item 1).
+    if ((await getOriginMainSha(resolvedDir)) === undefined) {
+      return this.err(
+        'The workspace repository is not provisioned (it has no `main` branch).\nFinish creating the workspace in the Quonfig app, then run bootstrap again.',
+      )
+    }
+
+    // Bootstrap is for a FRESH workspace only. "Fresh" is "holds no documents",
+    // NOT "has no commits": provisioning seeds README.md and quonfig.json, so
+    // every real workspace arrives with two commits (plan
+    // 2026-09-17-tree-derived-cache.md 5.6, 13.2 risk 5).
+    const documents = await workspaceDocumentsAtRef(resolvedDir, 'origin/main')
     if (documents.length > 0) {
       const sample = documents.slice(0, 3).join(', ') + (documents.length > 3 ? ', ...' : '')
-      this.log(`\nThis workspace already holds ${documents.length} config document(s): ${sample}`)
+      this.log(`\nThis workspace already holds ${documents.length} document(s): ${sample}`)
       this.log(`Bootstrap lands your local history UNDER what is already there, so it is for fresh workspaces only.`)
       this.log(`To send local changes to a workspace that is already in use, run:`)
       this.log(`  qfg push --dir ${resolvedDir}\n`)
@@ -169,29 +186,39 @@ export default class WorkspaceBootstrap extends BaseCommand {
     this.log('Pushing to Gitea...')
     let pushResult
     try {
-      pushResult = await rebaseOntoOriginAndPush(resolvedDir)
+      // Validation runs again against the tree that is actually pushed (which
+      // carries the WORKSPACE's quonfig.json, not the local one), so content
+      // the server would reject fails here.
+      pushResult = await rebaseOntoOriginAndPush(resolvedDir, {validate: !flags['skip-validate']})
     } catch (error: unknown) {
       return this.err(`Push failed: ${String(error)}`)
     }
 
     this.log(`Landed ${pushResult.commitsRebased} commit(s) on the workspace's history.`)
-    if (pushResult.reconciled) {
-      this.log('Added a "reconcile merge resolutions" commit so the workspace tree matches your local files exactly.')
+    if (pushResult.reconcileSubject !== null) {
+      this.log(`Added one commit ("${pushResult.reconcileSubject}") so the workspace tree matches your local files.`)
     }
 
     this.log(`\nBootstrap complete.`)
     this.log(`Workspace "${workspaceName}" now holds the history from ${resolvedDir}.`)
-    // The workspace's own `quonfig.json` carries the workspace pin and wins
-    // over a local one, so nothing is written back here. The local branch was
-    // never moved, so it still points at the pre-bootstrap history.
-    this.log(`Your local branch was left where it was; \`qfg pull\` syncs it with the workspace.`)
-    this.log(`\nTo keep it in sync locally, run:`)
-    this.log(`  qfg sync --watch --dir ${resolvedDir}`)
+    // The customer's branch is never touched, on success or failure, so it
+    // still points at the pre-bootstrap history — which shares no commit with
+    // what was just pushed (the replayed commits have new ids). `qfg pull` and
+    // `qfg sync` both refuse that state ("diverge" / STALE_HEAD), so the only
+    // honest advice is a reset onto the workspace.
+    //
+    // If we ever move the local branch ourselves (option A: save
+    // refs/quonfig/pre-bootstrap and fast-forward `main` to pushedSha once
+    // tree equality is proven), this block is what it replaces.
+    this.log(`\nYour local branch was not moved. The workspace has the same content under new commit ids.`)
+    this.log(`To point this clone at the workspace, keeping your old history on a branch:`)
+    this.log(`  ${LOCAL_RESET_RECIPE}`)
 
     return {
       commitsRebased: pushResult.commitsRebased,
       dir: resolvedDir,
-      reconciled: pushResult.reconciled,
+      localResetRecipe: LOCAL_RESET_RECIPE,
+      reconciled: pushResult.reconcileSubject !== null,
       repoUrl: displayUrl(repoUrl),
       workspaceId,
     }

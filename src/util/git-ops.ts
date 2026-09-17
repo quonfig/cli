@@ -1,4 +1,4 @@
-import {execFile as execFileCb, spawn} from 'node:child_process'
+import {execFile as execFileCb, execFileSync, spawn} from 'node:child_process'
 import * as util from 'node:util'
 
 const execFile = util.promisify(execFileCb)
@@ -420,29 +420,27 @@ const countCommits = async (dir: string, rev: string): Promise<number> => {
 }
 
 /**
- * Every file under a config-document directory (`configs/`, `feature-flags/`,
- * `segments/`, `log-levels/`) at `ref`, sorted.
+ * Every file the validator owns at `ref` — config documents (`configs/`,
+ * `feature-flags/`, `segments/`, `log-levels/`) AND schemas (`schemas/`,
+ * `schemas-protected/`) — sorted.
  *
  * A workspace repo is FRESH exactly when this list is empty. It is NOT "the
  * remote holds only the auto-init commit": provisioning commits `README.md`
  * AND `quonfig.json`, so a commit-count test refuses every real workspace
  * (plan project/plans/2026-09-17-tree-derived-cache.md 5.6, 13.2 risk 5).
+ * Schemas count because a UI-authored schema is content a local-wins rebase
+ * would silently overwrite, exactly like a flag.
  *
- * Returns `[]` when `ref` does not resolve (a repo with no `main` yet).
+ * FAILS CLOSED: if the ref cannot be listed this throws. "I could not look"
+ * must never read as "the workspace is empty".
  */
-export const configDocumentsAtRef = async (dir: string, ref: string): Promise<string[]> => {
+export const workspaceDocumentsAtRef = async (dir: string, ref: string): Promise<string[]> => {
   // Dynamic import: `src/verify/` is copied on its own into the standalone
   // pre-receive-hook build, so it must stay self-contained — and pulling the
   // validator in statically would load it for every command that touches git.
-  const {CONFIG_DIRS} = await import('../verify/validate.js')
-  let paths: string[]
-  try {
-    paths = await treePaths(dir, ref)
-  } catch {
-    return []
-  }
-
-  return paths.filter((p) => CONFIG_DIRS.has(p.split('/')[0])).sort()
+  const {KNOWN_DIRS} = await import('../verify/validate.js')
+  const paths = await treePaths(dir, ref)
+  return paths.filter((p) => KNOWN_DIRS.has(p.split('/')[0])).sort()
 }
 
 export interface RebaseOntoOriginResult {
@@ -450,55 +448,86 @@ export interface RebaseOntoOriginResult {
   commitsRebased: number
   /** The sha now at `origin/main`. */
   pushedSha: string
-  /** True when the final "reconcile merge resolutions" commit was needed. */
-  reconciled: boolean
+  /** Subject of the extra commit that put the tree right, or null if none was needed. */
+  reconcileSubject: null | string
 }
 
 /** Subject of the one commit that puts the tree back to the customer's. */
 const RECONCILE_SUBJECT = 'reconcile merge resolutions'
 
+/** Subject when the only thing put back is the workspace's own pin file. */
+const PIN_SUBJECT = "use the hosted workspace's quonfig.json"
+
+/**
+ * `-c` args that keep the CUSTOMER's git config out of the commits bootstrap
+ * makes in the temporary worktree. A worktree shares the repo's config, so
+ * `commit.gpgsign=true` with an unusable `gpg.program` fails the rebase and a
+ * failing `pre-commit` under `core.hooksPath` fails the reconcile commit (both
+ * verified). Neither commit is the customer's to sign or to gate: the rebase
+ * replays commits they already made, and the reconcile commit only restores
+ * their own tree.
+ */
+const GIT_UNCONFIGURED_ARGS: readonly string[] = [
+  '-c',
+  'commit.gpgsign=false',
+  '-c',
+  'tag.gpgsign=false',
+  '-c',
+  'core.hooksPath=/dev/null',
+  '-c',
+  'rebase.autosquash=false',
+  '-c',
+  'rerere.enabled=false',
+]
+
 /**
  * How `candidate`'s tree differs from the customer's tip in ways bootstrap
- * must not ship. An empty list means the candidate carries exactly the
+ * must not ship. Nothing set means the candidate carries exactly the
  * customer's content plus the files the workspace seeded.
  */
-const unexpectedTreeChanges = async (
+interface TreeMismatch {
+  /** Paths where the candidate would ship content the customer does not have. */
+  content: string[]
+  /** The candidate carries a local `quonfig.json` instead of the workspace's own. */
+  pinLost: boolean
+}
+
+const hasMismatch = (m: TreeMismatch): boolean => m.pinLost || m.content.length > 0
+
+const describeMismatch = (m: TreeMismatch): string =>
+  [...m.content, ...(m.pinLost ? ["quonfig.json (the workspace's pin was lost)"] : [])].join(', ')
+
+const treeMismatch = async (
   dir: string,
   opts: {candidate: string; local: string; remoteQuonfigJson: null | string; seededOnly: Set<string>},
-): Promise<string[]> => {
+): Promise<TreeMismatch> => {
   const {stdout} = await runGit(['-C', dir, 'diff', '--no-renames', '--name-status', opts.local, opts.candidate])
-  const problems: string[] = []
+  const content: string[] = []
   for (const line of stdout.split('\n').filter(Boolean)) {
     const [status, ...rest] = line.split('\t')
     const file = rest.join('\t')
     // A file only the workspace had is expected to appear.
     if (status === 'A' && opts.seededOnly.has(file)) continue
     // The workspace's own quonfig.json wins over a local one: it is the pin
-    // that names the hosted workspace.
+    // that names the hosted workspace. Checked separately, below.
     if (file === 'quonfig.json' && opts.remoteQuonfigJson !== null) continue
-    problems.push(`${status} ${file}`)
+    content.push(`${status} ${file}`)
   }
 
+  let pinLost = false
   if (opts.remoteQuonfigJson !== null) {
     const candidatePin = await revParse(dir, `${opts.candidate}:quonfig.json`)
-    if (candidatePin !== opts.remoteQuonfigJson) problems.push("M quonfig.json (workspace's pin was lost)")
+    pinLost = candidatePin !== opts.remoteQuonfigJson
   }
 
-  return problems
+  return {content, pinLost}
 }
 
 const removeWorktree = async (dir: string, worktree: string): Promise<void> => {
   try {
     await runGit(['-C', dir, 'worktree', 'remove', '--force', worktree])
   } catch {
-    /* fall through to the filesystem cleanup */
-  }
-
-  try {
-    const {rm} = await import('node:fs/promises')
-    await rm(worktree, {force: true, recursive: true})
-  } catch {
-    /* best effort */
+    /* already gone, or never created */
   }
 
   try {
@@ -506,6 +535,27 @@ const removeWorktree = async (dir: string, worktree: string): Promise<void> => {
   } catch {
     /* best effort */
   }
+}
+
+/**
+ * Run the workspace validator — the same one the server's pre-receive hook
+ * runs — over a checked-out tree, and throw with its errors if it would be
+ * rejected.
+ */
+const requireWorkspaceValidates = async (tree: string): Promise<void> => {
+  const {validateWorkspace} = await import('../verify/validate.js')
+  const errors = validateWorkspace(tree).issues.filter((i) => i.severity === 'error')
+  if (errors.length === 0) return
+
+  const shown = errors.slice(0, 10).map((i) => `  ${i.file}: ${i.message}`)
+  if (errors.length > shown.length) shown.push(`  ...and ${errors.length - shown.length} more`)
+  const envHint = errors.some((i) => i.message.includes('not declared in quonfig.json'))
+    ? "\nThe workspace's own quonfig.json replaces yours, so an environment that exists only in your local file is not declared on the workspace. Create it in the Quonfig app (or drop the override), then run bootstrap again."
+    : ''
+
+  throw new Error(
+    `Refusing to push: the workspace would reject this content.\n${shown.join('\n')}${envHint}\nNothing was pushed and your local repository is unchanged.`,
+  )
 }
 
 /**
@@ -527,18 +577,26 @@ const removeWorktree = async (dir: string, worktree: string): Promise<void> => {
  *   3. If it differs, add ONE commit that sets the tree to the local tip's
  *      tree, keeping the seeded files and the workspace's `quonfig.json`. If
  *      that cannot be done cleanly, abort with nothing pushed.
- *   4. Plain `git push` of the result to `main`.
+ *   4. Validate the tree that is ACTUALLY about to be pushed (unless
+ *      `validate: false`), so content the workspace would reject fails here
+ *      instead of at the server hook.
+ *   5. Plain `git push` of the result to `main`.
  */
-export const rebaseOntoOriginAndPush = async (dir: string): Promise<RebaseOntoOriginResult> => {
+export const rebaseOntoOriginAndPush = async (
+  dir: string,
+  opts?: {validate?: boolean},
+): Promise<RebaseOntoOriginResult> => {
   const localHead = await revParse(dir, 'HEAD')
   if (localHead === null) throw new Error('The local repository has no commits to push.')
 
   const remoteHead = await revParse(dir, 'origin/main')
   if (remoteHead === null) {
-    // No `main` on the workspace repo yet: the local history is the history,
-    // and a plain push creates the branch.
-    await runGit(['-C', dir, 'push', 'origin', `${localHead}:refs/heads/main`])
-    return {commitsRebased: await countCommits(dir, localHead), pushedSha: localHead, reconciled: false}
+    // Provisioning always creates `main` with auto_init, and the pre-receive
+    // hook rejects a zero-oid create (plan 5.6 item 1), so pushing the branch
+    // into existence is a dead end, not a fallback.
+    throw new Error(
+      'The workspace repository is not provisioned (it has no `main` branch).\nFinish creating the workspace in the Quonfig app, then run bootstrap again.',
+    )
   }
 
   const remotePaths = await treePaths(dir, remoteHead)
@@ -552,6 +610,21 @@ export const rebaseOntoOriginAndPush = async (dir: string): Promise<RebaseOntoOr
   const {join} = await import('node:path')
   const worktree = join(tmpdir(), `qfg-bootstrap-${process.pid}-${Date.now()}`)
 
+  // Ctrl-C between `worktree add` and the `finally` would leave the temp
+  // worktree registered in the customer's repo; drop it synchronously.
+  const onInterrupt = (): void => {
+    try {
+      execFileSync('git', [...GIT_SAFE_ARGS, '-C', dir, 'worktree', 'remove', '--force', worktree], {stdio: 'ignore'})
+    } catch {
+      /* best effort — `git worktree prune` also clears it later */
+    }
+
+    // eslint-disable-next-line n/no-process-exit, unicorn/no-process-exit
+    process.exit(130)
+  }
+
+  process.once('SIGINT', onInterrupt)
+
   try {
     await runGit(['-C', dir, 'worktree', 'add', '--detach', worktree, localHead])
 
@@ -559,6 +632,7 @@ export const rebaseOntoOriginAndPush = async (dir: string): Promise<RebaseOntoOr
       await runGit([
         '-C',
         worktree,
+        ...GIT_UNCONFIGURED_ARGS,
         'rebase',
         '--root',
         '--onto',
@@ -575,16 +649,31 @@ export const rebaseOntoOriginAndPush = async (dir: string): Promise<RebaseOntoOr
       }
 
       throw new Error(
-        `Could not replay your history onto the workspace repository: ${String(error)}\nNothing was pushed and your local repository is unchanged.`,
+        [
+          'Could not replay your history onto the workspace repository.',
+          'Nothing was pushed and your local repository is unchanged.',
+          '',
+          'To land the files you have now WITHOUT their history, run:',
+          `  qfg push --dir ${dir}`,
+          '',
+          String(error),
+        ].join('\n'),
       )
     }
 
     let candidate = await revParse(worktree, 'HEAD')
     if (candidate === null) throw new Error('The rebase produced no commit. Nothing was pushed.')
 
-    let reconciled = false
-    let problems = await unexpectedTreeChanges(dir, {candidate, local: localHead, remoteQuonfigJson, seededOnly})
-    if (problems.length > 0) {
+    let reconcileSubject: null | string = null
+    let mismatch = await treeMismatch(dir, {candidate, local: localHead, remoteQuonfigJson, seededOnly})
+    if (hasMismatch(mismatch)) {
+      // Honest subject: when the ONLY thing being put back is the workspace's
+      // own pin file, nothing was "reconciled" and saying so would be a lie.
+      reconcileSubject = mismatch.content.length > 0 ? RECONCILE_SUBJECT : PIN_SUBJECT
+      const body =
+        reconcileSubject === RECONCILE_SUBJECT
+          ? 'Sets the tree to the state of the local repository, keeping the files this workspace already had. Replaying merge commits one by one can otherwise resolve a conflict differently than you did.'
+          : 'The hosted workspace seeds its own quonfig.json, which carries the workspace pin and its environment list, so it wins over the one in the local repository.'
       const keepFromRemote = [...seededOnly]
       if (remoteQuonfigJson !== null && !seededOnly.has('quonfig.json')) keepFromRemote.push('quonfig.json')
 
@@ -606,11 +695,13 @@ export const rebaseOntoOriginAndPush = async (dir: string): Promise<RebaseOntoOr
         await runGit([
           '-C',
           worktree,
+          ...GIT_UNCONFIGURED_ARGS,
           'commit',
+          '--no-verify',
           '-m',
-          RECONCILE_SUBJECT,
+          reconcileSubject,
           '-m',
-          'Sets the tree to the state of the local repository, keeping the files this workspace already had. Replaying merge commits one by one can otherwise resolve a conflict differently than you did.',
+          body,
         ])
       } catch (error: unknown) {
         throw new Error(
@@ -618,20 +709,26 @@ export const rebaseOntoOriginAndPush = async (dir: string): Promise<RebaseOntoOr
         )
       }
 
-      reconciled = true
       candidate = await revParse(worktree, 'HEAD')
       if (candidate === null) throw new Error('The reconcile commit produced no commit. Nothing was pushed.')
-      problems = await unexpectedTreeChanges(dir, {candidate, local: localHead, remoteQuonfigJson, seededOnly})
-      if (problems.length > 0) {
+      mismatch = await treeMismatch(dir, {candidate, local: localHead, remoteQuonfigJson, seededOnly})
+      if (hasMismatch(mismatch)) {
         throw new Error(
-          `Refusing to push: the result would not match your local files (${problems.join(', ')}).\nNothing was pushed and your local repository is unchanged.`,
+          `Refusing to push: the result would not match your local files (${describeMismatch(mismatch)}).\nNothing was pushed and your local repository is unchanged.`,
         )
       }
     }
 
+    // Validate what is ACTUALLY going to be pushed. The worktree holds exactly
+    // the candidate's tree, which is the local content plus the workspace's own
+    // quonfig.json — so an environment that exists only in the local pin file
+    // fails HERE, with a readable message, instead of at the server hook.
+    if (opts?.validate !== false) await requireWorkspaceValidates(worktree)
+
     await runGit(['-C', dir, 'push', 'origin', `${candidate}:refs/heads/main`])
-    return {commitsRebased: await countCommits(dir, localHead), pushedSha: candidate, reconciled}
+    return {commitsRebased: await countCommits(dir, localHead), pushedSha: candidate, reconcileSubject}
   } finally {
+    process.off('SIGINT', onInterrupt)
     await removeWorktree(dir, worktree)
   }
 }

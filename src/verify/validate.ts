@@ -215,9 +215,10 @@ const DIR_TO_TYPE: Record<string, string> = {
 }
 
 /** The directories a config document can live in. Source of truth. */
-export const CONFIG_DIRS = new Set(Object.keys(DIR_TO_TYPE))
+const CONFIG_DIRS = new Set(Object.keys(DIR_TO_TYPE))
 const SCHEMA_DIRS = new Set(['schemas', 'schemas-protected'])
-const KNOWN_DIRS = new Set([...CONFIG_DIRS, ...SCHEMA_DIRS])
+/** Every directory this validator owns: config documents plus schemas. */
+export const KNOWN_DIRS = new Set([...CONFIG_DIRS, ...SCHEMA_DIRS])
 
 // ── Ghost-file prevention (qfg-hbuy.4) ──────────────────────────────────
 // Within the validated content dirs (KNOWN_DIRS), every entry must be a

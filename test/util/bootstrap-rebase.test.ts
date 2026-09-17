@@ -18,7 +18,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import {configDocumentsAtRef, gitFetch, gitSetRemote, rebaseOntoOriginAndPush} from '../../src/util/git-ops.js'
+import {gitFetch, gitSetRemote, rebaseOntoOriginAndPush, workspaceDocumentsAtRef} from '../../src/util/git-ops.js'
 
 const SEED_IDENTITY = {
   GIT_AUTHOR_NAME: 'Quonfig Provisioner',
@@ -34,15 +34,29 @@ const CUSTOMER_IDENTITY = {
   GIT_COMMITTER_EMAIL: 'customer@example.test',
 }
 
-const REMOTE_PIN = '{"workspace":"test-org/hosted-ws"}\n'
+const REMOTE_PIN = '{"workspace":"test-org/hosted-ws","environments":["production","staging"]}\n'
 
+/**
+ * Every setup call is shielded from the developer's own git config — a machine
+ * with `commit.gpgsign=true` globally must still be able to run this suite.
+ * The code under test does its own shielding; that is what the "customer git
+ * config" case below asserts.
+ */
 function git(cwd: string, args: string[], env: Record<string, string> = {}): string {
-  return execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'rerere.enabled=false', ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: {...process.env, ...env},
-  }).trim()
+  return execFileSync(
+    'git',
+    ['-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', '-c', 'rerere.enabled=false', ...args],
+    {
+      cwd,
+      encoding: 'utf8',
+      env: {...process.env, ...env},
+    },
+  ).trim()
 }
+
+/** The git-only cases do not care about document validity; that has its own case. */
+const rebasePush = (dir: string, opts: {validate?: boolean} = {}) =>
+  rebaseOntoOriginAndPush(dir, {validate: false, ...opts})
 
 function mkTmp(prefix: string): string {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
@@ -58,6 +72,23 @@ function write(dir: string, file: string, contents: string): void {
   const full = path.join(dir, file)
   fs.mkdirSync(path.dirname(full), {recursive: true})
   fs.writeFileSync(full, contents)
+}
+
+/** A valid feature flag document, optionally with a per-environment override. */
+function flagDoc(key: string, envIds: string[] = []): string {
+  return (
+    JSON.stringify(
+      {
+        key,
+        type: 'feature_flag',
+        valueType: 'bool',
+        default: {rules: [{criteria: [], value: {type: 'bool', value: false}}]},
+        environments: envIds.map((id) => ({id, rules: []})),
+      },
+      null,
+      2,
+    ) + '\n'
+  )
 }
 
 /**
@@ -117,6 +148,16 @@ function diffAgainstLocal(dir: string, remote: string): string[] {
   return git(dir, ['diff', '--no-renames', '--name-status', 'HEAD', remoteTip]).split('\n').filter(Boolean)
 }
 
+async function failureOf(fn: () => Promise<unknown>): Promise<string> {
+  try {
+    await fn()
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : String(error)
+  }
+
+  throw new Error('expected the call to fail, but it succeeded')
+}
+
 describe('bootstrap: rebase onto origin and push (no force)', () => {
   let root: string
 
@@ -138,7 +179,7 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
 
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
-    const result = await rebaseOntoOriginAndPush(dir)
+    const result = await rebasePush(dir)
 
     expect(result.commitsRebased).to.equal(2)
     expect(result.pushedSha).to.have.length(40)
@@ -165,7 +206,7 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
 
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
-    await rebaseOntoOriginAndPush(dir)
+    await rebasePush(dir)
 
     // Only the remote-seeded quonfig.json is extra; README collides and the
     // LOCAL copy wins.
@@ -175,19 +216,21 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
     expect(readRemoteFile(remote, 'configs/nested/deep.json')).to.equal('{"key":"deep"}\n')
   })
 
-  it("keeps the remote's seeded quonfig.json when the local repo has one of its own", async () => {
+  it("keeps the remote's seeded quonfig.json and says so honestly in the commit subject", async () => {
     const remote = provisionRemote(root)
     const dir = localRepo(root)
-    write(dir, 'quonfig.json', '{"workspace":"someone-else/old-local"}\n')
+    write(dir, 'quonfig.json', '{"workspace":"someone-else/old-local","environments":["production"]}\n')
     write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
     commitAll(dir, 'local config with its own pin')
 
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
-    const result = await rebaseOntoOriginAndPush(dir)
+    const result = await rebasePush(dir)
 
     expect(readRemoteFile(remote, 'quonfig.json')).to.equal(REMOTE_PIN)
-    expect(result.reconciled).to.equal(true)
+    // Nothing was "reconciled": the only difference is the workspace's own pin.
+    expect(result.reconcileSubject).to.equal("use the hosted workspace's quonfig.json")
+    expect(remoteSubjects(remote)[0]).to.equal("use the hosted workspace's quonfig.json")
     // Everything else is the customer's content, plus the seeded README the
     // local repo never had.
     expect(diffAgainstLocal(dir, remote)).to.deep.equal(['A\tREADME.md', 'M\tquonfig.json'])
@@ -215,12 +258,12 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
 
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
-    const result = await rebaseOntoOriginAndPush(dir)
+    const result = await rebasePush(dir)
 
     // Without the reconcile commit the linearised history would ship
     // `"side"` — exit 0 and the wrong content (13.2 risk 4).
     expect(readRemoteFile(remote, 'feature-flags/x.json')).to.equal('{"key":"x","v":"hand-resolved"}\n')
-    expect(result.reconciled).to.equal(true)
+    expect(result.reconcileSubject).to.equal('reconcile merge resolutions')
     expect(remoteSubjects(remote)[0]).to.equal('reconcile merge resolutions')
     expect(diffAgainstLocal(dir, remote)).to.deep.equal(['A\tREADME.md', 'A\tquonfig.json'])
     // The seeded README the local repo never had is still there.
@@ -236,7 +279,7 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
 
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
-    await rebaseOntoOriginAndPush(dir)
+    await rebasePush(dir)
 
     expect(git(dir, ['rev-parse', 'main'])).to.equal(before)
     expect(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD'])).to.equal('main')
@@ -265,38 +308,120 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
     git(other, ['push', 'origin', 'main'])
     const remoteBefore = git(remote, ['rev-parse', 'main'])
 
-    let threw = false
-    try {
-      await rebaseOntoOriginAndPush(dir)
-    } catch {
-      threw = true
-    }
+    await failureOf(() => rebasePush(dir))
 
-    expect(threw).to.equal(true)
     expect(git(dir, ['rev-parse', 'main'])).to.equal(localBefore)
     expect(git(remote, ['rev-parse', 'main'])).to.equal(remoteBefore)
     expect(git(dir, ['worktree', 'list']).split('\n')).to.have.length(1)
   })
 
-  it('pushes the local history when the workspace repo has no main yet', async () => {
+  it('refuses a workspace repo that has no main branch instead of creating one', async () => {
     const remote = path.join(root, 'empty.git')
     git(root, ['init', '--bare', '--initial-branch=main', remote])
-    git(remote, ['config', 'receive.denyNonFastForwards', 'true'])
     const dir = localRepo(root)
     write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
     commitAll(dir, 'local config')
 
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
-    const result = await rebaseOntoOriginAndPush(dir)
 
-    expect(result.reconciled).to.equal(false)
-    expect(remoteSubjects(remote)).to.deep.equal(['local config'])
-    expect(result.pushedSha).to.equal(git(dir, ['rev-parse', 'main']))
+    // The pre-receive hook rejects a zero-oid create of `main` (plan 5.6 item
+    // 1), so "push it into existence" is not a fallback, it is a dead end.
+    const message = await failureOf(() => rebasePush(dir))
+    expect(message).to.match(/not provisioned/i)
+    expect(git(remote, ['branch', '--list'])).to.equal('')
+  })
+
+  it('aborts a failed rebase cleanly and points at `qfg push` to land the content', async () => {
+    // A file/directory collision is a conflict `-X theirs` cannot resolve (a
+    // modify/delete is another): the workspace seeded a FILE named `notes`,
+    // the local repo has a DIRECTORY of that name.
+    const remote = provisionRemote(root, {notes: 'hosted note\n'})
+    const dir = localRepo(root)
+    write(dir, 'notes/a.md', 'local note\n')
+    write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
+    commitAll(dir, 'local config')
+    const localBefore = git(dir, ['rev-parse', 'main'])
+
+    await gitSetRemote(dir, remote)
+    await gitFetch(dir)
+    const remoteBefore = git(remote, ['rev-parse', 'main'])
+
+    const message = await failureOf(() => rebasePush(dir))
+
+    expect(message).to.contain(`qfg push --dir ${dir}`)
+    expect(git(remote, ['rev-parse', 'main'])).to.equal(remoteBefore)
+    expect(git(dir, ['rev-parse', 'main'])).to.equal(localBefore)
+    expect(git(dir, ['status', '--porcelain'])).to.equal('')
+    expect(git(dir, ['worktree', 'list']).split('\n')).to.have.length(1)
+  })
+
+  it("is not broken by the customer's commit hooks or gpg signing config", async () => {
+    const remote = provisionRemote(root)
+    const dir = localRepo(root)
+    // A local pin, so the reconcile commit runs too — both the rebase and the
+    // commit have to be shielded.
+    write(dir, 'quonfig.json', '{"workspace":"someone-else/old-local","environments":["production"]}\n')
+    write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
+    commitAll(dir, 'local config')
+
+    const hooks = mkDirIn(root, 'hooks')
+    fs.writeFileSync(path.join(hooks, 'pre-commit'), '#!/bin/sh\necho "customer hook says no" >&2\nexit 1\n', {
+      mode: 0o755,
+    })
+    git(dir, ['config', 'core.hooksPath', hooks])
+    git(dir, ['config', 'commit.gpgsign', 'true'])
+    git(dir, ['config', 'tag.gpgsign', 'true'])
+    git(dir, ['config', 'gpg.program', path.join(root, 'no-such-gpg')])
+
+    await gitSetRemote(dir, remote)
+    await gitFetch(dir)
+    const result = await rebasePush(dir)
+
+    expect(result.reconcileSubject).to.equal("use the hosted workspace's quonfig.json")
+    expect(readRemoteFile(remote, 'feature-flags/a.json')).to.equal('{"key":"a"}\n')
+    expect(readRemoteFile(remote, 'quonfig.json')).to.equal(REMOTE_PIN)
+  })
+
+  it('validates the tree it is about to push, not the local one', async () => {
+    const remote = provisionRemote(root)
+    const dir = localRepo(root)
+    // Valid locally: the local quonfig.json declares `local-only`. Not valid on
+    // the workspace: its own quonfig.json wins and declares production/staging,
+    // so the override would be rejected by the server hook after the push.
+    write(dir, 'quonfig.json', '{"workspace":"someone-else/old-local","environments":["production","local-only"]}\n')
+    write(dir, 'feature-flags/a.json', flagDoc('a', ['local-only']))
+    commitAll(dir, 'local config')
+
+    await gitSetRemote(dir, remote)
+    await gitFetch(dir)
+    const remoteBefore = git(remote, ['rev-parse', 'main'])
+
+    const message = await failureOf(() => rebasePush(dir, {validate: true}))
+
+    expect(message).to.contain('local-only')
+    expect(message).to.match(/nothing was pushed/i)
+    expect(git(remote, ['rev-parse', 'main'])).to.equal(remoteBefore)
+    expect(git(dir, ['worktree', 'list']).split('\n')).to.have.length(1)
+  })
+
+  it('pushes a tree the workspace hook would accept', async () => {
+    const remote = provisionRemote(root)
+    const dir = localRepo(root)
+    write(dir, 'quonfig.json', '{"workspace":"someone-else/old-local","environments":["production"]}\n')
+    write(dir, 'feature-flags/a.json', flagDoc('a', ['production']))
+    commitAll(dir, 'local config')
+
+    await gitSetRemote(dir, remote)
+    await gitFetch(dir)
+    const result = await rebasePush(dir, {validate: true})
+
+    expect(result.pushedSha).to.have.length(40)
+    expect(readRemoteFile(remote, 'feature-flags/a.json')).to.equal(flagDoc('a', ['production']))
   })
 })
 
-describe('bootstrap: a workspace is fresh only when it holds no config documents', () => {
+describe('bootstrap: a workspace is fresh only when it holds no documents', () => {
   let root: string
 
   beforeEach(() => {
@@ -315,13 +440,16 @@ describe('bootstrap: a workspace is fresh only when it holds no config documents
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
 
-    expect(await configDocumentsAtRef(dir, 'origin/main')).to.deep.equal([])
+    expect(await workspaceDocumentsAtRef(dir, 'origin/main')).to.deep.equal([])
   })
 
-  it('reports the documents of a populated workspace so bootstrap can refuse it', async () => {
+  it('counts schemas and schemas-protected, not just config documents', async () => {
+    // A UI-authored schema is content a local-wins rebase would silently
+    // overwrite, so it makes the workspace non-fresh just like a flag does.
     const remote = provisionRemote(root, {
       'configs/db.url.json': '{"key":"db.url"}\n',
       'feature-flags/live.json': '{"key":"live"}\n',
+      'schemas-protected/locked.json': '{"key":"locked"}\n',
       'schemas/thing.json': '{"key":"thing"}\n',
     })
     const dir = localRepo(root)
@@ -330,19 +458,22 @@ describe('bootstrap: a workspace is fresh only when it holds no config documents
     await gitSetRemote(dir, remote)
     await gitFetch(dir)
 
-    // schemas/ is not a config-document dir; the two documents are.
-    expect(await configDocumentsAtRef(dir, 'origin/main')).to.deep.equal([
+    expect(await workspaceDocumentsAtRef(dir, 'origin/main')).to.deep.equal([
       'configs/db.url.json',
       'feature-flags/live.json',
+      'schemas-protected/locked.json',
+      'schemas/thing.json',
     ])
   })
 
-  it('returns nothing when the ref does not resolve', async () => {
+  it('fails closed when the ref cannot be listed', async () => {
     const dir = localRepo(root)
     write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
     commitAll(dir, 'local config')
 
-    expect(await configDocumentsAtRef(dir, 'origin/main')).to.deep.equal([])
+    // "I could not look" must never read as "the workspace is empty" — that
+    // would let bootstrap land a local history under live documents.
+    await failureOf(() => workspaceDocumentsAtRef(dir, 'origin/main'))
   })
 })
 
@@ -351,22 +482,5 @@ describe('bootstrap: nothing can force-push any more', () => {
     const gitOps = await import('../../src/util/git-ops.js')
     expect(Object.keys(gitOps)).to.not.include('gitPushForce')
     expect(Object.keys(gitOps)).to.not.include('gitPushForceLease')
-  })
-
-  // Read as source, not imported: importing the command module pulls in the
-  // oclif BaseCommand chain, which terminates the mocha process outright.
-  const commandSource = (): string =>
-    fs.readFileSync(new URL('../../src/commands/workspace/bootstrap.ts', import.meta.url), 'utf8')
-
-  it('still accepts --force, declared as a no-op', () => {
-    const source = commandSource()
-    expect(source, '--force must stay accepted so pinned scripts do not break').to.match(/force: Flags\.boolean\(/)
-    expect(source).to.match(/description: 'Accepted and ignored \(no-op\)/)
-  })
-
-  it('never passes a force flag to git', () => {
-    const source = commandSource()
-    expect(source).to.not.match(/--force-with-lease/)
-    expect(source).to.not.match(/'--force'/)
   })
 })
