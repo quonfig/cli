@@ -2271,7 +2271,7 @@ USAGE
 
 FLAGS
   --dir=<value>    Local directory to push (defaults to current directory)
-  --force          Force push even if remote already has commits
+  --force          Accepted and ignored (no-op). Bootstrap never rewrites the workspace history.
   --skip-validate  Skip config validation before pushing
 
 GLOBAL FLAGS

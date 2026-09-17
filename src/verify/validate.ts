@@ -214,7 +214,8 @@ const DIR_TO_TYPE: Record<string, string> = {
   'log-levels': 'log_level',
 }
 
-const CONFIG_DIRS = new Set(Object.keys(DIR_TO_TYPE))
+/** The directories a config document can live in. Source of truth. */
+export const CONFIG_DIRS = new Set(Object.keys(DIR_TO_TYPE))
 const SCHEMA_DIRS = new Set(['schemas', 'schemas-protected'])
 const KNOWN_DIRS = new Set([...CONFIG_DIRS, ...SCHEMA_DIRS])
 

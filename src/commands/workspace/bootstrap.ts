@@ -8,17 +8,16 @@ import type {JsonObj} from '../../result.js'
 import {BaseCommand} from '../../index.js'
 import {getActiveProfile, loadAuthConfig} from '../../util/token-storage.js'
 import {mintGiteaToken} from '../../util/gitea-api.js'
-import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../../util/quonfig-json.js'
 import {resolveWorkspaceUuid} from '../../util/resolve-workspace.js'
 import {
   isGitRepo,
   hasAtLeastOneCommit,
   gitSetRemote,
-  gitPushForceLease,
-  gitPushForce,
+  gitFetch,
+  configDocumentsAtRef,
+  rebaseOntoOriginAndPush,
   getRemoteUrl,
   displayUrl,
-  runGit,
 } from '../../util/git-ops.js'
 
 export default class WorkspaceBootstrap extends BaseCommand {
@@ -37,7 +36,7 @@ export default class WorkspaceBootstrap extends BaseCommand {
     }),
     force: Flags.boolean({
       default: false,
-      description: 'Force push even if remote already has commits',
+      description: 'Accepted and ignored (no-op). Bootstrap never rewrites the workspace history.',
     }),
     'skip-validate': Flags.boolean({
       default: false,
@@ -51,6 +50,12 @@ export default class WorkspaceBootstrap extends BaseCommand {
     // Resolve target directory
     const dir = flags.dir || process.env.QUONFIG_DIR || process.cwd()
     const resolvedDir = path.resolve(dir)
+
+    // `--force` is kept so pinned scripts don't die on an unknown flag, but a
+    // workspace's `main` is append-only: nothing here ever rewrites it.
+    if (flags.force) {
+      this.log('Note: --force is accepted for compatibility and ignored — bootstrap never rewrites the workspace.\n')
+    }
 
     const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this)
 
@@ -134,17 +139,6 @@ export default class WorkspaceBootstrap extends BaseCommand {
     const {repoUrl, workspaceSlug: backendSlug} = tokenData
     this.verboseLog('WorkspaceBootstrap', {repoUrl: displayUrl(repoUrl), backendSlug})
 
-    // Idempotency: check if remote already has commits
-    if (!flags.force) {
-      const remoteHasCommits = await this.remoteHasCommits(repoUrl)
-      if (remoteHasCommits) {
-        this.log(`\nThe remote repository already has commits.`)
-        this.log(`Run \`qfg pull --dir ${resolvedDir}\` to sync, then re-run bootstrap.`)
-        this.log(`Or run with --force to overwrite the remote.\n`)
-        return this.err('Remote is not empty.')
-      }
-    }
-
     // Set remote
     if (existingRemote) {
       this.log(`Updating remote origin...`)
@@ -153,106 +147,53 @@ export default class WorkspaceBootstrap extends BaseCommand {
     }
     await gitSetRemote(resolvedDir, repoUrl)
 
-    // Push
+    await gitFetch(resolvedDir)
+
+    // Bootstrap is for a FRESH workspace only. "Fresh" is "holds no config
+    // documents", NOT "has no commits": provisioning seeds README.md and
+    // quonfig.json, so every real workspace arrives with two commits
+    // (plan 2026-09-17-tree-derived-cache.md 5.6, 13.2 risk 5).
+    const documents = await configDocumentsAtRef(resolvedDir, 'origin/main')
+    if (documents.length > 0) {
+      const sample = documents.slice(0, 3).join(', ') + (documents.length > 3 ? ', ...' : '')
+      this.log(`\nThis workspace already holds ${documents.length} config document(s): ${sample}`)
+      this.log(`Bootstrap lands your local history UNDER what is already there, so it is for fresh workspaces only.`)
+      this.log(`To send local changes to a workspace that is already in use, run:`)
+      this.log(`  qfg push --dir ${resolvedDir}\n`)
+      return this.err('Workspace is not empty.')
+    }
+
+    // Push. The history is replayed onto the workspace's own head on a
+    // temporary worktree and pushed plainly: `main` is append-only, and a
+    // force-push silently wedges config delivery (plan 5.6).
     this.log('Pushing to Gitea...')
+    let pushResult
     try {
-      if (flags.force) {
-        await gitPushForce(resolvedDir)
-      } else {
-        await gitPushForceLease(resolvedDir)
-      }
+      pushResult = await rebaseOntoOriginAndPush(resolvedDir)
     } catch (error: unknown) {
       return this.err(`Push failed: ${String(error)}`)
     }
 
-    // Write the workspace pin into `quonfig.json` (Guard 1 in
-    // project/plans/cli-git-sync.md). If the pin already exists and disagrees,
-    // we keep what is there — bootstrap is for fresh cases, not re-pinning.
-    // If we do write it, commit and push so the bootstrap leaves no
-    // uncommitted changes behind.
-    //
-    // The pin is stored as `<org-slug>/<workspace-slug>`. The backend's
-    // `workspaceSlug` is just the workspace component today; until the
-    // server returns the slash form, we skip the write rather than
-    // emitting a bare slug.
-    const backendPin = tryParseWorkspacePin(backendSlug)
-    try {
-      const existingPin = await readWorkspaceSlug(resolvedDir)
-      const existingFormatted = existingPin ? `${existingPin.orgSlug}/${existingPin.workspaceSlug}` : undefined
-
-      if (!backendPin) {
-        this.verboseLog(
-          'WorkspaceBootstrap',
-          `Backend workspaceSlug "${backendSlug}" is not in <org>/<ws> form; skipping pin write.`,
-        )
-      } else if (
-        existingPin &&
-        (existingPin.orgSlug !== backendPin.orgSlug || existingPin.workspaceSlug !== backendPin.workspaceSlug)
-      ) {
-        const backendFormatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`
-        this.log('')
-        this.log(
-          `Warning: quonfig.json already pins workspace "${existingFormatted}", but the backend says this workspace is "${backendFormatted}".`,
-        )
-        this.log('Leaving the existing pin in place. If this is wrong, edit quonfig.json manually and re-run.')
-      } else if (existingPin) {
-        this.verboseLog('WorkspaceBootstrap', `quonfig.json already pinned to ${existingFormatted}; no-op.`)
-      } else {
-        const backendFormatted = `${backendPin.orgSlug}/${backendPin.workspaceSlug}`
-        this.log('')
-        this.log(`Pinning quonfig.json to workspace "${backendFormatted}"...`)
-        await writeWorkspaceSlug(resolvedDir, backendPin)
-        await this.commitAndPushPin(resolvedDir, backendFormatted, flags.force)
-      }
-    } catch (error: unknown) {
-      // The main push has already succeeded, so don't fail the whole command.
-      // Surface the issue clearly so the user knows to follow up.
-      this.log('')
-      this.log(`Warning: could not write the workspace pin to quonfig.json: ${String(error)}`)
-      this.log('The workspace is connected, but you should re-run `qfg pull` to backfill the pin.')
+    this.log(`Landed ${pushResult.commitsRebased} commit(s) on the workspace's history.`)
+    if (pushResult.reconciled) {
+      this.log('Added a "reconcile merge resolutions" commit so the workspace tree matches your local files exactly.')
     }
 
     this.log(`\nBootstrap complete.`)
-    this.log(`Workspace "${workspaceName}" is now connected to your local directory.`)
+    this.log(`Workspace "${workspaceName}" now holds the history from ${resolvedDir}.`)
+    // The workspace's own `quonfig.json` carries the workspace pin and wins
+    // over a local one, so nothing is written back here. The local branch was
+    // never moved, so it still points at the pre-bootstrap history.
+    this.log(`Your local branch was left where it was; \`qfg pull\` syncs it with the workspace.`)
     this.log(`\nTo keep it in sync locally, run:`)
     this.log(`  qfg sync --watch --dir ${resolvedDir}`)
 
     return {
+      commitsRebased: pushResult.commitsRebased,
       dir: resolvedDir,
+      reconciled: pushResult.reconciled,
       repoUrl: displayUrl(repoUrl),
       workspaceId,
     }
-  }
-
-  /**
-   * Stage, commit, and push the `quonfig.json` pin. Runs after the main
-   * bootstrap push so the pin lands as a committed+pushed change rather than
-   * an uncommitted local edit. We stage only `quonfig.json` (not `-A`) so we
-   * don't accidentally sweep in unrelated user edits.
-   */
-  private async commitAndPushPin(dir: string, slug: string, force: boolean): Promise<void> {
-    // Stage just quonfig.json so we don't accidentally commit other dirty files.
-    await runGit(['-C', dir, 'add', 'quonfig.json'])
-
-    // If `git add` produced no staged change (e.g. content matched an earlier
-    // version on disk), `git commit` would fail. Check the index first.
-    const {stdout: diffStat} = await runGit(['-C', dir, 'diff', '--cached', '--name-only'])
-    if (!diffStat.trim()) {
-      this.verboseLog('WorkspaceBootstrap', 'quonfig.json pin matches HEAD; no commit needed.')
-      return
-    }
-
-    await runGit(['-C', dir, 'commit', '-m', `chore: pin quonfig.json to workspace "${slug}"`])
-
-    // Push the new commit using the same force semantics as the main push.
-    const pushArgs = ['-C', dir, 'push', 'origin', 'main']
-    pushArgs.push(force ? '--force' : '--force-with-lease')
-    await runGit(pushArgs)
-    this.log(`Pushed pin commit.`)
-  }
-
-  private async remoteHasCommits(repoUrl: string): Promise<boolean> {
-    const {stdout} = await runGit(['ls-remote', '--heads', repoUrl])
-    return stdout.trim().length > 0
   }
 }
