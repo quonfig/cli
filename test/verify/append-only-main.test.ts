@@ -168,6 +168,19 @@ describe('append-only main (qfg-jxml.21)', () => {
       expect(err, 'push after restore').to.include('qfg push')
       expect(err, 'bootstrap on an older CLI').to.match(/upgrade/i)
     })
+
+    // The ancestry check itself can fail: an old oid the repo does not have
+    // (git exits 128 "Not a valid object name"), or git missing entirely (spawn
+    // error). That must come out as the normal rejection, not as an escaped
+    // exception the pusher sees as `qfg-verify: fatal: ...`.
+    it('turns an is-ancestor failure into the normal rejection (old oid not in the repo)', () => {
+      const missing = 'd'.repeat(40)
+      const {code, err} = run(mainRef(missing, fixture.second), enforcingEnv())
+      expect(code, err).to.equal(1)
+      expect(err, 'helpful message').to.match(/append-only/i)
+      expect(err, 'forward restore recipe').to.include('git restore --source=')
+      expect(err, 'underlying error').to.match(/could not check|merge-base/i)
+    })
   })
 
   describe('operator bypass (two keys, both required)', () => {

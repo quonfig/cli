@@ -168,13 +168,27 @@ export function checkAppendOnlyMain(
 
   const errors: string[] = []
   for (const ref of mainUpdates) {
-    if (isZeroOid(ref.newOid)) {
-      errors.push(rejection('deleting main is not allowed'))
-    } else if (isZeroOid(ref.oldOid)) {
-      errors.push(rejection('creating main by push is not allowed'))
-    } else if (!isAncestor(ref.oldOid, ref.newOid, cwd)) {
+    try {
+      if (isZeroOid(ref.newOid)) {
+        errors.push(rejection('deleting main is not allowed'))
+      } else if (isZeroOid(ref.oldOid)) {
+        errors.push(rejection('creating main by push is not allowed'))
+      } else if (!isAncestor(ref.oldOid, ref.newOid, cwd)) {
+        errors.push(
+          rejection(`${ref.newOid.slice(0, 8)} is not a descendant of the current tip ${ref.oldOid.slice(0, 8)}`),
+        )
+      }
+    } catch (error: unknown) {
+      // The ancestry check itself failed: git exited 128 (old oid missing from
+      // the repo), git could not be spawned, ... Fail CLOSED, but as the normal
+      // rejection with the recovery recipe — an escaped throw reaches the
+      // pusher as an opaque `qfg-verify: fatal: ...` (qfg-jxml.21 review).
       errors.push(
-        rejection(`${ref.newOid.slice(0, 8)} is not a descendant of the current tip ${ref.oldOid.slice(0, 8)}`),
+        rejection(
+          `could not check that ${ref.newOid.slice(0, 8)} descends from the current tip ${ref.oldOid.slice(0, 8)}: ${
+            (error as Error).message
+          }`,
+        ),
       )
     }
   }
