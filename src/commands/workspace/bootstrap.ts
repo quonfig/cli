@@ -8,6 +8,8 @@ import type {JsonObj} from '../../result.js'
 import {BaseCommand} from '../../index.js'
 import {getActiveProfile, loadAuthConfig} from '../../util/token-storage.js'
 import {mintGiteaToken} from '../../util/gitea-api.js'
+import {bootstrapPinMismatch, describeBootstrapTarget} from '../../util/bootstrap-target.js'
+import {readWorkspaceSlug} from '../../util/quonfig-json.js'
 import {resolveWorkspaceUuid} from '../../util/resolve-workspace.js'
 import {
   isGitRepo,
@@ -65,14 +67,30 @@ export default class WorkspaceBootstrap extends BaseCommand {
       this.log('Note: --force is accepted for compatibility and ignored — bootstrap never rewrites the workspace.\n')
     }
 
-    const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this)
+    // The target is resolved like push/pull/sync resolve theirs: QUONFIG_WORKSPACE,
+    // then the directory's quonfig.json pin, then the active profile.
+    const {workspaceId, orgSlug} = await resolveWorkspaceUuid(this, undefined, resolvedDir)
 
-    // The display name is best-effort; we still want it for the confirmation
-    // prompt. Fall back through saved profile → workspaceId UUID.
+    // The pin is read again here for the prompt and for the mismatch guard
+    // below. A legacy bare-slug pin reads as "no pin", as it does for push.
+    let pin: Awaited<ReturnType<typeof readWorkspaceSlug>>
+    try {
+      pin = await readWorkspaceSlug(resolvedDir)
+    } catch {
+      pin = undefined
+    }
+
+    // The prompt names whichever source chose the target; the profile only
+    // when it IS the resolved workspace (qfg-8p8i).
     const authConfig = await loadAuthConfig()
     const activeProfile = getActiveProfile()
     const profile = authConfig?.profiles[activeProfile] || authConfig?.profiles[authConfig?.defaultProfile || 'default']
-    const workspaceName = profile?.workspaceSlug || profile?.workspaceName || workspaceId
+    const workspaceName = describeBootstrapTarget({
+      envOverride: process.env.QUONFIG_WORKSPACE,
+      pin,
+      profile,
+      workspaceId,
+    })
 
     this.verboseLog('WorkspaceBootstrap', {workspaceId, orgSlug, dir: resolvedDir})
 
@@ -146,6 +164,11 @@ export default class WorkspaceBootstrap extends BaseCommand {
 
     const {repoUrl, workspaceSlug: backendSlug} = tokenData
     this.verboseLog('WorkspaceBootstrap', {repoUrl: displayUrl(repoUrl), backendSlug})
+
+    // Guard, as `qfg push` has: a directory pinned to one workspace is not
+    // pushed to another. Checked before the remote is touched.
+    const mismatch = bootstrapPinMismatch(pin, backendSlug)
+    if (mismatch) return this.err(mismatch)
 
     // Set remote
     if (existingRemote) {

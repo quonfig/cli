@@ -196,6 +196,40 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
     expect(landed).to.deep.equal(['add flag b|Local Customer|2024-03-04', 'add flag a|Local Customer|2024-01-02'])
   })
 
+  it('lands without a git identity on the machine (CI runners, fresh laptops), keeping the authors', async () => {
+    const remote = provisionRemote(root)
+    const dir = localRepo(root)
+    write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
+    commitAll(dir, 'add flag a')
+
+    await gitSetRemote(dir, remote)
+    await gitFetch(dir)
+
+    // No user.name / user.email anywhere, and an EMPTY ident from the
+    // environment: exactly what git sees on a GitHub runner, where it refuses
+    // with "empty ident name (for <runner@host>) not allowed".
+    const saved = {...process.env}
+    Object.assign(process.env, {
+      GIT_AUTHOR_NAME: '',
+      GIT_COMMITTER_NAME: '',
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+    })
+    try {
+      const result = await rebasePush(dir)
+      expect(result.commitsRebased).to.equal(1)
+    } finally {
+      for (const key of ['GIT_AUTHOR_NAME', 'GIT_COMMITTER_NAME', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM']) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
+    }
+
+    // The customer's authorship is untouched; only the committer falls back.
+    const landed = git(remote, ['log', '--pretty=format:%s|%an|%cn', '-1', 'main'])
+    expect(landed).to.equal('add flag a|Local Customer|quonfig migrator')
+  })
+
   it('pushes a tree equal to the local tree except for files the remote seeded', async () => {
     const remote = provisionRemote(root)
     const dir = localRepo(root)
@@ -247,11 +281,15 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
     git(dir, ['checkout', 'main'])
     write(dir, 'feature-flags/x.json', '{"key":"x","v":"main"}\n')
     commitAll(dir, 'main edit')
+    // The merge is the customer's, so it carries their identity like every
+    // other fixture commit. Without one, git refuses before it records the
+    // merge at all, and the commit below would silently be a plain commit.
     try {
-      git(dir, ['merge', 'side'])
+      git(dir, ['merge', 'side'], CUSTOMER_IDENTITY)
     } catch {
       /* expected conflict, resolved by hand below */
     }
+    expect(fs.existsSync(path.join(dir, '.git', 'MERGE_HEAD')), 'the fixture merge must really conflict').to.be.true
     write(dir, 'feature-flags/x.json', '{"key":"x","v":"hand-resolved"}\n')
     git(dir, ['add', '-A'])
     git(dir, ['commit', '--no-edit', '-m', 'merge side (hand resolved)'], CUSTOMER_IDENTITY)
