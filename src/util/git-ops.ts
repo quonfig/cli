@@ -481,6 +481,38 @@ const GIT_UNCONFIGURED_ARGS: readonly string[] = [
 ]
 
 /**
+ * The identity the CLI commits as when nothing better is known: `qfg push`
+ * and `qfg migrate` stack their commits under it, and bootstrap's replayed
+ * commits get it as COMMITTER when the machine has no git identity at all.
+ */
+export const MIGRATOR_IDENTITY = {
+  name: 'quonfig migrator',
+  email: 'migrator@quonfig.com',
+} as const
+
+/**
+ * Env that gives git a committer when it cannot find one itself, and nothing
+ * otherwise. A rebase writes a committer on every replayed commit, and git
+ * refuses ("empty ident name ... not allowed") on a machine with no
+ * `user.name` / `user.email` and no guessable one — every GitHub runner, and
+ * a fresh laptop. `git var GIT_COMMITTER_IDENT` is git's own check, so a
+ * customer whose identity works keeps it, guessed or configured.
+ */
+const committerFallbackEnv = async (dir: string): Promise<Record<string, string>> => {
+  try {
+    await runGit(['-C', dir, 'var', 'GIT_COMMITTER_IDENT'])
+    return {}
+  } catch {
+    return {
+      GIT_AUTHOR_EMAIL: MIGRATOR_IDENTITY.email,
+      GIT_AUTHOR_NAME: MIGRATOR_IDENTITY.name,
+      GIT_COMMITTER_EMAIL: MIGRATOR_IDENTITY.email,
+      GIT_COMMITTER_NAME: MIGRATOR_IDENTITY.name,
+    }
+  }
+}
+
+/**
  * How `candidate`'s tree differs from the customer's tip in ways bootstrap
  * must not ship. Nothing set means the candidate carries exactly the
  * customer's content plus the files the workspace seeded.
@@ -609,6 +641,9 @@ export const rebaseOntoOriginAndPush = async (
   const {tmpdir} = await import('node:os')
   const {join} = await import('node:path')
   const worktree = join(tmpdir(), `qfg-bootstrap-${process.pid}-${Date.now()}`)
+  // The rebase keeps each commit's AUTHOR; this only decides the committer
+  // (and the author of the reconcile commit, which is the CLI's own).
+  const identityEnv = await committerFallbackEnv(dir)
 
   // Ctrl-C between `worktree add` and the `finally` would leave the temp
   // worktree registered in the customer's repo; drop it synchronously.
@@ -640,7 +675,7 @@ export const rebaseOntoOriginAndPush = async (
         '-X',
         'theirs',
         '--committer-date-is-author-date',
-      ])
+      ], {env: identityEnv})
     } catch (error: unknown) {
       try {
         await runGit(['-C', worktree, 'rebase', '--abort'])
@@ -702,7 +737,7 @@ export const rebaseOntoOriginAndPush = async (
           reconcileSubject,
           '-m',
           body,
-        ])
+        ], {env: identityEnv})
       } catch (error: unknown) {
         throw new Error(
           `Could not reconcile your local content with the workspace repository: ${String(error)}\nNothing was pushed and your local repository is unchanged.`,

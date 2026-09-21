@@ -1,12 +1,9 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import {runGit as runGitSafe, spawnGit} from './git-ops.js'
+import {MIGRATOR_IDENTITY, runGit as runGitSafe, spawnGit} from './git-ops.js'
 
-export const MIGRATOR_IDENTITY = {
-  name: 'quonfig migrator',
-  email: 'migrator@quonfig.com',
-} as const
+export {MIGRATOR_IDENTITY} from './git-ops.js'
 
 export interface PushIdentity {
   email: string
