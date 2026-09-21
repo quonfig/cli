@@ -664,18 +664,21 @@ export const rebaseOntoOriginAndPush = async (
     await runGit(['-C', dir, 'worktree', 'add', '--detach', worktree, localHead])
 
     try {
-      await runGit([
-        '-C',
-        worktree,
-        ...GIT_UNCONFIGURED_ARGS,
-        'rebase',
-        '--root',
-        '--onto',
-        remoteHead,
-        '-X',
-        'theirs',
-        '--committer-date-is-author-date',
-      ], {env: identityEnv})
+      await runGit(
+        [
+          '-C',
+          worktree,
+          ...GIT_UNCONFIGURED_ARGS,
+          'rebase',
+          '--root',
+          '--onto',
+          remoteHead,
+          '-X',
+          'theirs',
+          '--committer-date-is-author-date',
+        ],
+        {env: identityEnv},
+      )
     } catch (error: unknown) {
       try {
         await runGit(['-C', worktree, 'rebase', '--abort'])
@@ -727,17 +730,10 @@ export const rebaseOntoOriginAndPush = async (
           ])
         }
 
-        await runGit([
-          '-C',
-          worktree,
-          ...GIT_UNCONFIGURED_ARGS,
-          'commit',
-          '--no-verify',
-          '-m',
-          reconcileSubject,
-          '-m',
-          body,
-        ], {env: identityEnv})
+        await runGit(
+          ['-C', worktree, ...GIT_UNCONFIGURED_ARGS, 'commit', '--no-verify', '-m', reconcileSubject, '-m', body],
+          {env: identityEnv},
+        )
       } catch (error: unknown) {
         throw new Error(
           `Could not reconcile your local content with the workspace repository: ${String(error)}\nNothing was pushed and your local repository is unchanged.`,

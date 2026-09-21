@@ -281,11 +281,15 @@ describe('bootstrap: rebase onto origin and push (no force)', () => {
     git(dir, ['checkout', 'main'])
     write(dir, 'feature-flags/x.json', '{"key":"x","v":"main"}\n')
     commitAll(dir, 'main edit')
+    // The merge is the customer's, so it carries their identity like every
+    // other fixture commit. Without one, git refuses before it records the
+    // merge at all, and the commit below would silently be a plain commit.
     try {
-      git(dir, ['merge', 'side'])
+      git(dir, ['merge', 'side'], CUSTOMER_IDENTITY)
     } catch {
       /* expected conflict, resolved by hand below */
     }
+    expect(fs.existsSync(path.join(dir, '.git', 'MERGE_HEAD')), 'the fixture merge must really conflict').to.be.true
     write(dir, 'feature-flags/x.json', '{"key":"x","v":"hand-resolved"}\n')
     git(dir, ['add', '-A'])
     git(dir, ['commit', '--no-edit', '-m', 'merge side (hand resolved)'], CUSTOMER_IDENTITY)
