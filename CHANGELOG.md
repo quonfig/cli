@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2026-09-21
+## Unreleased
 
 - **fix(workspace bootstrap): bootstrap works on a machine with no git identity.** Replaying your history writes a committer on every commit, and git refuses (`empty ident name ... not allowed`) on a machine with no `user.name` / `user.email` and nothing to guess one from: every GitHub Actions runner, and a fresh laptop. When git cannot find a committer at all, bootstrap now supplies `quonfig migrator <migrator@quonfig.com>` as the committer of the replayed commits (and as the author of the one reconcile commit, which is the CLI's own). Your commits keep their authors and dates. A machine whose identity works keeps using it, configured or guessed. (qfg-8p8i)
 - **fix(workspace bootstrap): the directory's `quonfig.json` pin chooses the target, and a mismatch is refused.** Bootstrap was the one command that took `--dir` and ignored that directory's pin: the target was `QUONFIG_WORKSPACE` or the active profile, full stop. It now resolves the workspace the way `push`, `pull` and `sync` do: `QUONFIG_WORKSPACE`, then the pin in `<dir>/quonfig.json`, then the active profile. And, as `qfg push` already does, a directory pinned to one workspace is refused for another: `This directory's quonfig.json is pinned to workspace "acme/prod", but the target workspace is "staging". Nothing was pushed.` The check runs before the remote is touched. A directory with no pin, or a pin that matches your active workspace, behaves as before. (qfg-8p8i)
