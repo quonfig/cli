@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **qfg-verify: the append-only `main` rule is now enforced for every workspace.** The server-side rollout switch introduced in 0.1.0 was flipped to all workspaces on the Quonfig Git server on 2026-09-22. A `git push --force` to a workspace's `main`, a delete of `main`, or a create of `main` by push is rejected on every workspace from that date, with the same message as before naming the alternatives (pull and rebase; restore earlier content as a forward commit; upgrade a pre-0.1.0 CLI whose `workspace bootstrap` force-pushed). No CLI change is needed; this entry records the server change because the rule ships from this repository. (qfg-jxml.22)
+
 ## 0.1.0 - 2026-09-21
 
 - **fix(workspace bootstrap): bootstrap works on a machine with no git identity.** Replaying your history writes a committer on every commit, and git refuses (`empty ident name ... not allowed`) on a machine with no `user.name` / `user.email` and nothing to guess one from: every GitHub Actions runner, and a fresh laptop. When git cannot find a committer at all, bootstrap now supplies `quonfig migrator <migrator@quonfig.com>` as the committer of the replayed commits (and as the author of the one reconcile commit, which is the CLI's own). Your commits keep their authors and dates. A machine whose identity works keeps using it, configured or guessed. (qfg-8p8i)
