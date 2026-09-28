@@ -133,6 +133,37 @@ describe('jsonSchemaToZod', () => {
       expect(schema.safeParse({id: 'x', a: 'y'}).success).to.equal(true)
       expect(schema.safeParse({a: 'y'}).success).to.equal(false)
     })
+
+    it('ignores a constraint-only anyOf (required) next to type: object', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        properties: {email: {type: 'string'}, phone: {type: 'string'}},
+        anyOf: [{required: ['email']}, {required: ['phone']}],
+      })
+
+      expect(toTs(schema)).to.equal('{ "email"?: string; "phone"?: string }')
+    })
+
+    it('ignores a constraint-only anyOf (format) next to type: string', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        properties: {contact: {type: 'string', anyOf: [{format: 'email'}, {format: 'uri'}]}},
+      })
+
+      expect(toTs(schema)).to.equal('{ "contact"?: string }')
+    })
+
+    it('ignores a constraint-only oneOf (pattern, minLength) next to type: string', () => {
+      const schema = jsonSchemaToZod({type: 'string', oneOf: [{pattern: '^a'}, {minLength: 3}]})
+
+      expect(toTs(schema)).to.equal('string')
+    })
+
+    it('keeps the union when only some branches are constraint-only', () => {
+      const schema = jsonSchemaToZod({anyOf: [{type: 'string'}, {minLength: 3}]})
+
+      expect(introspect.isUnion(schema)).to.equal(true)
+    })
   })
 
   describe('arrays with minItems', () => {
@@ -146,6 +177,18 @@ describe('jsonSchemaToZod', () => {
 
     it('keeps a plain array when maxItems is also set', () => {
       const schema = jsonSchemaToZod({type: 'array', minItems: 2, maxItems: 4, items: {type: 'string'}})
+
+      expect(toTs(schema)).to.equal('Array<string>')
+    })
+
+    it('expands up to 8 fixed items', () => {
+      const schema = jsonSchemaToZod({type: 'array', minItems: 8, items: {type: 'string'}})
+
+      expect(toTs(schema)).to.equal(`[${Array.from({length: 8}, () => 'string').join(', ')}, ...string[]]`)
+    })
+
+    it('keeps a plain array when minItems is above 8', () => {
+      const schema = jsonSchemaToZod({type: 'array', minItems: 9, items: {type: 'string'}})
 
       expect(toTs(schema)).to.equal('Array<string>')
     })

@@ -175,6 +175,29 @@ function schemaFromUnion(branches: unknown[]): z.ZodTypeAny {
   return z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
 }
 
+const STRUCTURAL_KEYWORDS = ['type', 'properties', 'const', 'enum', '$ref', 'items'] as const
+
+/**
+ * A branch is structural when it describes a shape (type, properties, const, enum, $ref, items or a
+ * schema-valued additionalProperties), as opposed to adding constraints only (required, format,
+ * pattern, min/max...) to the sibling `type`.
+ */
+function isStructuralBranch(branch: unknown): boolean {
+  if (!isObject(branch)) {
+    return false
+  }
+
+  return STRUCTURAL_KEYWORDS.some((key) => branch[key] !== undefined) || isObject(branch.additionalProperties)
+}
+
+/**
+ * A oneOf/anyOf is only a union when at least one branch is structural. When every branch is
+ * constraint-only it can't change the type, so the sibling `type` decides it.
+ */
+function hasStructuralBranch(branches: unknown[]): boolean {
+  return branches.some((branch) => isStructuralBranch(branch))
+}
+
 /**
  * oneOf/anyOf, checked before `type` so a union next to `type: "object"` (or no type) isn't lost.
  * Sibling `properties` are kept as an intersection with the union.
@@ -189,6 +212,8 @@ function schemaFromCombinator(schema: JsonSchemaObject, branches: unknown[]): z.
   return union
 }
 
+const MAX_TUPLE_MIN_ITEMS = 8
+
 function schemaFromArray(schema: JsonSchemaObject): z.ZodTypeAny {
   if (Array.isArray(schema.prefixItems)) {
     const items = schema.prefixItems.map((item) => schemaToZod(item))
@@ -198,8 +223,15 @@ function schemaFromArray(schema: JsonSchemaObject): z.ZodTypeAny {
   const item = schema.items === undefined ? z.any() : schemaToZod(schema.items)
   const {maxItems, minItems} = schema
 
-  // `minItems: n` with no upper bound is a tuple of n items plus a rest: [T, T, ...T[]]
-  if (typeof minItems === 'number' && Number.isInteger(minItems) && minItems >= 1 && maxItems === undefined) {
+  // `minItems: n` with no upper bound is a tuple of n items plus a rest: [T, T, ...T[]].
+  // Above MAX_TUPLE_MIN_ITEMS the tuple would be unreadable, so it stays a plain array.
+  if (
+    typeof minItems === 'number' &&
+    Number.isInteger(minItems) &&
+    minItems >= 1 &&
+    minItems <= MAX_TUPLE_MIN_ITEMS &&
+    maxItems === undefined
+  ) {
     const fixed = Array.from({length: minItems}, () => item)
     return z.tuple(fixed as [z.ZodTypeAny, ...z.ZodTypeAny[]]).rest(item)
   }
@@ -220,9 +252,9 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
     result = literalFromEnum(schema.enum)
   } else if (schema.const !== undefined) {
     result = z.literal(schema.const as string | number | boolean | null)
-  } else if (Array.isArray(schema.oneOf)) {
+  } else if (Array.isArray(schema.oneOf) && hasStructuralBranch(schema.oneOf)) {
     result = schemaFromCombinator(schema, schema.oneOf)
-  } else if (Array.isArray(schema.anyOf)) {
+  } else if (Array.isArray(schema.anyOf) && hasStructuralBranch(schema.anyOf)) {
     result = schemaFromCombinator(schema, schema.anyOf)
   } else if (Array.isArray(schema.type)) {
     result = schemaFromTypeArray(schema, schema.type)
