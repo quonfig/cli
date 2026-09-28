@@ -85,6 +85,128 @@ function schemaFromObject(schema: JsonSchemaObject): z.ZodTypeAny {
   return base
 }
 
+/**
+ * JSON Schema object branch check for tag detection: `type: "object"`, or no type with `properties`.
+ */
+function isObjectBranch(schema: unknown): schema is JsonSchemaObject {
+  if (!isObject(schema)) {
+    return false
+  }
+
+  if (schema.type === 'object') {
+    return true
+  }
+
+  return schema.type === undefined && isObject(schema.properties)
+}
+
+/**
+ * The single value a property schema pins, from `const` or a one-value `enum`.
+ */
+function pinnedValue(schema: unknown): {value: unknown} | undefined {
+  if (!isObject(schema)) {
+    return undefined
+  }
+
+  if (schema.const !== undefined) {
+    return {value: schema.const}
+  }
+
+  if (Array.isArray(schema.enum) && schema.enum.length === 1) {
+    return {value: schema.enum[0]}
+  }
+
+  return undefined
+}
+
+/**
+ * Finds the tag of a tagged oneOf/anyOf: every branch is an object, and exactly one property name is
+ * required and pinned to a single value (`const` or one-value `enum`) in every branch, with a
+ * different value in each. Returns undefined when there is no such property, or more than one.
+ */
+function findUnionTag(branches: unknown[]): string | undefined {
+  if (branches.length < 2 || !branches.every((branch) => isObjectBranch(branch))) {
+    return undefined
+  }
+
+  const objectBranches = branches as JsonSchemaObject[]
+  const [first] = objectBranches
+  const firstProperties = isObject(first.properties) ? first.properties : {}
+
+  const candidates = Object.keys(firstProperties).filter((key) => {
+    const values: unknown[] = []
+
+    for (const branch of objectBranches) {
+      const properties = isObject(branch.properties) ? branch.properties : {}
+      const required = Array.isArray(branch.required) ? branch.required : []
+      const pinned = pinnedValue(properties[key])
+
+      if (!pinned || !required.includes(key)) {
+        return false
+      }
+
+      values.push(pinned.value)
+    }
+
+    return new Set(values.map((value) => JSON.stringify(value))).size === values.length
+  })
+
+  return candidates.length === 1 ? candidates[0] : undefined
+}
+
+function schemaFromUnion(branches: unknown[]): z.ZodTypeAny {
+  if (branches.length === 0) {
+    return z.never()
+  }
+
+  const options = branches.map((item) => schemaToZod(item))
+
+  if (options.length === 1) {
+    return options[0]
+  }
+
+  const tag = findUnionTag(branches)
+
+  // discriminatedUnion needs every option to be a plain object schema (no default/other wrapper)
+  if (tag && options.every((option) => option instanceof z.ZodObject)) {
+    return z.discriminatedUnion(tag, options as unknown as [z.ZodObject, z.ZodObject, ...z.ZodObject[]])
+  }
+
+  return z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+}
+
+/**
+ * oneOf/anyOf, checked before `type` so a union next to `type: "object"` (or no type) isn't lost.
+ * Sibling `properties` are kept as an intersection with the union.
+ */
+function schemaFromCombinator(schema: JsonSchemaObject, branches: unknown[]): z.ZodTypeAny {
+  const union = schemaFromUnion(branches)
+  // schemaFromObject reads only properties/required/additionalProperties, so the combinator isn't re-entered
+  if (isObject(schema.properties) && Object.keys(schema.properties).length > 0) {
+    return z.intersection(schemaFromObject(schema), union)
+  }
+
+  return union
+}
+
+function schemaFromArray(schema: JsonSchemaObject): z.ZodTypeAny {
+  if (Array.isArray(schema.prefixItems)) {
+    const items = schema.prefixItems.map((item) => schemaToZod(item))
+    return z.tuple(items as [z.ZodTypeAny, ...z.ZodTypeAny[]])
+  }
+
+  const item = schema.items === undefined ? z.any() : schemaToZod(schema.items)
+  const {maxItems, minItems} = schema
+
+  // `minItems: n` with no upper bound is a tuple of n items plus a rest: [T, T, ...T[]]
+  if (typeof minItems === 'number' && Number.isInteger(minItems) && minItems >= 1 && maxItems === undefined) {
+    const fixed = Array.from({length: minItems}, () => item)
+    return z.tuple(fixed as [z.ZodTypeAny, ...z.ZodTypeAny[]]).rest(item)
+  }
+
+  return z.array(item)
+}
+
 function schemaToZod(schema: unknown): z.ZodTypeAny {
   if (!isObject(schema)) {
     return z.any()
@@ -98,6 +220,10 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
     result = literalFromEnum(schema.enum)
   } else if (schema.const !== undefined) {
     result = z.literal(schema.const as string | number | boolean | null)
+  } else if (Array.isArray(schema.oneOf)) {
+    result = schemaFromCombinator(schema, schema.oneOf)
+  } else if (Array.isArray(schema.anyOf)) {
+    result = schemaFromCombinator(schema, schema.anyOf)
   } else if (Array.isArray(schema.type)) {
     result = schemaFromTypeArray(schema, schema.type)
   } else {
@@ -128,14 +254,7 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
       }
 
       case 'array': {
-        if (Array.isArray(schema.prefixItems)) {
-          const items = schema.prefixItems.map((item) => schemaToZod(item))
-          result = z.tuple(items as [z.ZodTypeAny, ...z.ZodTypeAny[]])
-        } else if (schema.items === undefined) {
-          result = z.array(z.any())
-        } else {
-          result = z.array(schemaToZod(schema.items))
-        }
+        result = schemaFromArray(schema)
         break
       }
 
@@ -150,20 +269,6 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
       }
 
       default: {
-        if (Array.isArray(schema.oneOf)) {
-          const options = schema.oneOf.map((item) => schemaToZod(item))
-          result =
-            options.length === 1 ? options[0] : z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
-          break
-        }
-
-        if (Array.isArray(schema.anyOf)) {
-          const options = schema.anyOf.map((item) => schemaToZod(item))
-          result =
-            options.length === 1 ? options[0] : z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
-          break
-        }
-
         if (Array.isArray(schema.allOf) && schema.allOf.length === 1) {
           result = schemaToZod(schema.allOf[0])
           break

@@ -3,6 +3,7 @@ import {stripIndent} from 'common-tags'
 
 import {ReactTypeScriptGenerator} from '../../../src/codegen/code-generators/react-typescript-generator.js'
 import {type ConfigFile} from '../../../src/codegen/types.js'
+import {jevQuestionsSchema} from '../fixtures/jev-questions-schema.js'
 
 const mockLog: (category: string | unknown, message?: unknown) => void = () => {}
 const defaultMockConfigFile: ConfigFile = {
@@ -901,6 +902,52 @@ describe('ReactTypeScriptGenerator', () => {
       expect(result).to.include("TypedFrontEndConfigurationAccessor['keyWithSlashes']")
       expect(result).to.not.include('keyWithSlashes2')
       expect(warnings).to.have.length(0)
+    })
+  })
+
+  describe('Jev questions schema (tagged oneOf + tuple with rest, qfg-q5f6.14)', () => {
+    const jevConfigFile: ConfigFile = {
+      configs: [
+        {
+          configType: 'CONFIG',
+          key: 'support.triage.jev',
+          rows: [
+            {
+              values: [
+                {
+                  value: {
+                    json: {
+                      json: JSON.stringify({
+                        questions: {
+                          frustration: {criteria: ['Calm', 'Annoyed', 'Angry'], type: 'score'},
+                          urgent: {criteria: {false: 'No', true: 'Yes'}, type: 'noul'},
+                        },
+                      }),
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+          schemaKey: 'jev-questions',
+          sendToClientSdk: true,
+          valueType: 'JSON',
+        },
+      ],
+      schemas: [{path: 'schemas/jev-questions.json', schema: jevQuestionsSchema}],
+    }
+
+    it('declarationGenerate emits the union and the rubric rest element', () => {
+      const generator = new ReactTypeScriptGenerator({configFile: jevConfigFile, log: mockLog})
+
+      const result = generator.declarationGenerate()
+
+      expect(result).to.include('"criteria": [string, string, ...string[]] }')
+      expect(result).to.include('"type": "noul"')
+      expect(result).to.include('"type": "score"')
+      expect(result).to.include('"type": "choice"')
+      expect(result).to.include('"criteria": Record<string, string> }')
+      expect(result).to.not.include('Record<string, {  }>')
     })
   })
 })

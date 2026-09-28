@@ -3,6 +3,7 @@ import {stripIndent} from 'common-tags'
 
 import {NodeTypeScriptGenerator} from '../../../src/codegen/code-generators/node-typescript-generator.js'
 import {type ConfigFile} from '../../../src/codegen/types.js'
+import {jevQuestionsSchema} from '../fixtures/jev-questions-schema.js'
 
 const mockLog: (category: string | unknown, message?: unknown) => void = () => {}
 const defaultMockConfigFile: ConfigFile = {
@@ -833,6 +834,93 @@ describe('NodeTypeScriptGenerator', () => {
         )
         expect(result).to.not.include('myFlag')
       })
+    })
+  })
+
+  describe('Jev questions schema (tagged oneOf + tuple with rest, qfg-q5f6.14)', () => {
+    const jevConfigFile: ConfigFile = {
+      configs: [
+        {
+          configType: 'CONFIG',
+          key: 'support.triage.jev',
+          rows: [
+            {
+              values: [
+                {
+                  value: {
+                    json: {
+                      json: JSON.stringify({
+                        questions: {
+                          frustration: {criteria: ['Calm', 'Annoyed', 'Angry'], type: 'score'},
+                          urgent: {criteria: {false: 'No', true: 'Yes'}, type: 'noul'},
+                        },
+                      }),
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+          schemaKey: 'jev-questions',
+          sendToClientSdk: true,
+          valueType: 'JSON',
+        },
+      ],
+      schemas: [{path: 'schemas/jev-questions.json', schema: jevQuestionsSchema}],
+    }
+
+    it('declarationGenerate emits the union and the rubric rest element', () => {
+      const generator = new NodeTypeScriptGenerator({configFile: jevConfigFile, log: mockLog})
+
+      const result = generator.declarationGenerate()
+
+      expect(result).to.include('"criteria": [string, string, ...string[]] }')
+      expect(result).to.include('"type": "noul"')
+      expect(result).to.include('"type": "score"')
+      expect(result).to.include('"type": "choice"')
+      expect(result).to.include('"criteria": Record<string, string> }')
+      expect(result).to.not.include('Record<string, {  }>')
+    })
+  })
+
+  describe('tuple with rest in a config that has mustache functions (qfg-q5f6.14)', () => {
+    it('passes the rest of the array through instead of truncating it', () => {
+      const configFile: ConfigFile = {
+        configs: [
+          {
+            configType: 'CONFIG',
+            key: 'greeting',
+            rows: [
+              {
+                values: [{value: {json: {json: JSON.stringify({rubric: ['a', 'b', 'c'], text: 'Hi {{name}}'})}}}],
+              },
+            ],
+            schemaKey: 'greeting-schema',
+            valueType: 'JSON',
+          },
+        ],
+        schemas: [
+          {
+            path: 'schemas/greeting-schema.json',
+            schema: {
+              properties: {
+                rubric: {items: {type: 'string'}, minItems: 2, type: 'array'},
+                text: {type: 'string'},
+              },
+              required: ['text', 'rubric'],
+              type: 'object',
+            },
+          },
+        ],
+      }
+
+      const generator = new NodeTypeScriptGenerator({configFile, log: mockLog})
+
+      const result = generator.generate()
+
+      expect(result).to.include(
+        `"rubric": [raw?.['rubric']?.[0]!, raw?.['rubric']?.[1]!, ...(raw?.['rubric']?.slice(2) ?? [])]`,
+      )
     })
   })
 })
