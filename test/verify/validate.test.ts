@@ -2,6 +2,7 @@ import {expect} from 'chai'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 import type {ValidationIssue} from '../../src/verify/validate.js'
 
@@ -1323,7 +1324,7 @@ describe('validate', () => {
 describe('schema-bound JSON value validation (qfg-phcv)', () => {
   const jevSchema = JSON.parse(
     fs.readFileSync(
-      path.join(path.dirname(new URL(import.meta.url).pathname), 'fixtures', 'jev-questions.schema.json'),
+      path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'jev-questions.schema.json'),
       'utf8',
     ),
   )
