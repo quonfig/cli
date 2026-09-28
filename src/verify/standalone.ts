@@ -298,29 +298,61 @@ export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string
   const files = new Map<string, string>()
   const dirs = ['configs', 'feature-flags', 'segments', 'log-levels', 'schemas', 'schemas-protected']
 
-  for (const dir of dirs) {
-    // List every leaf entry under this directory at the given commit. A
-    // directory that doesn't exist yields an empty listing (exit 0); a
-    // bad/unreadable OID throws — fail closed, the hook rejects the push.
-    const listing = execFileSync('git', ['ls-tree', '-z', '-r', '--name-only', commitOid, `${dir}/`], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+  // qfg-3nyi: exactly two git processes per call, whatever the tree size. One
+  // `git show` per file cost ~10s on a 620-file workspace, all of it spawns.
+  //
+  // List every leaf entry under the validated dirs at the given commit. A dir
+  // that doesn't exist yields nothing (exit 0); a bad/unreadable OID throws —
+  // fail closed, the hook rejects the push.
+  const listing = execFileSync('git', ['ls-tree', '-z', '-r', commitOid, '--', ...dirs.map((dir) => `${dir}/`)], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  // Each entry is `<mode> SP <type> SP <oid> TAB <path>`.
+  const entries = listing
+    .split('\0')
+    .filter(Boolean)
+    .map((entry) => {
+      const tab = entry.indexOf('\t')
+      const [, type, oid] = entry.slice(0, tab).split(' ')
+      return {filePath: entry.slice(tab + 1), oid, type}
     })
 
-    const filenames = listing.split('\0').filter(Boolean)
-    for (const filePath of filenames) {
-      // Fail closed: if a listed entry can't be read (bad object, submodule
-      // gitlink, ...), the push must not be accepted with that entry
-      // unvalidated — let the error propagate to the hook's per-ref handler,
-      // which rejects the push.
-      const content = execFileSync('git', ['show', `${commitOid}:${filePath}`], {
-        cwd,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      files.set(filePath, content)
+  // Fail closed: an entry that isn't a readable blob (submodule gitlink, bad
+  // object, ...) must not be accepted unvalidated. Throwing reaches the
+  // hook's per-ref handler, which rejects the push.
+  for (const {filePath, type} of entries) {
+    if (type !== 'blob') throw new Error(`cannot read ${filePath}: tree entry is a ${type}, not a file`)
+  }
+
+  if (entries.length === 0) return files
+
+  const output = execFileSync('git', ['cat-file', '--batch'], {
+    cwd,
+    input: entries.map(({oid}) => oid).join('\n') + '\n',
+    // The whole tree comes back in one buffer; execFileSync's 1MB default
+    // would fail a large workspace.
+    maxBuffer: 1024 ** 3,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  // Replies come in request order: `<oid> SP blob SP <size> LF <bytes> LF`, or
+  // `<oid> SP missing LF`. Sizes are bytes, so slice the Buffer before decoding.
+  let offset = 0
+  for (const {filePath, oid} of entries) {
+    const headerEnd = output.indexOf(0x0a, offset)
+    const header = headerEnd === -1 ? '' : output.subarray(offset, headerEnd).toString('utf8')
+    const [replyOid, replyType, size] = header.split(' ')
+    if (replyOid !== oid || replyType !== 'blob') {
+      throw new Error(`cannot read ${filePath}: git cat-file replied "${header}"`)
     }
+
+    const start = headerEnd + 1
+    const end = start + Number(size)
+    files.set(filePath, output.subarray(start, end).toString('utf8'))
+    offset = end + 1
   }
 
   return files

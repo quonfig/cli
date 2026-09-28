@@ -157,6 +157,72 @@ describe('standalone readFilesFromCommit', () => {
       expect(result.valid, JSON.stringify(result.issues)).to.be.true
     })
   })
+
+  // qfg-3nyi: one `git show` per file made a 620-file push spend ~10s just
+  // spawning processes. The tree must be read with a fixed number of git
+  // processes, whatever its size.
+  describe('batched reads (qfg-3nyi)', () => {
+    function withGitShim<T>(fn: () => T): {calls: string[]; result: T} {
+      const realGit = execFileSync('sh', ['-c', 'command -v git'], {encoding: 'utf8'}).trim()
+      const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-git-shim-'))
+      const log = path.join(shimDir, 'calls.log')
+      fs.writeFileSync(path.join(shimDir, 'git'), `#!/bin/sh\necho "$1" >> "${log}"\nexec "${realGit}" "$@"\n`, {
+        mode: 0o755,
+      })
+      const originalPath = process.env.PATH
+      process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`
+      try {
+        const result = fn()
+        const calls = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean) : []
+        return {calls, result}
+      } finally {
+        process.env.PATH = originalPath
+      }
+    }
+
+    it('reads a 40-file tree with at most two git processes', () => {
+      const dir = createGitRepo()
+      for (let i = 0; i < 20; i++) writeConfig(dir, `configs/key-${i}.json`, `key-${i}`)
+      for (let i = 0; i < 20; i++) writeConfig(dir, `segments/seg-${i}.json`, `seg-${i}`)
+      const oid = commitAll(dir)
+
+      const {calls, result: files} = withGitShim(() => readFilesFromCommit(oid, dir))
+      expect(files.size).to.equal(40)
+      expect(calls.length, calls.join(',')).to.be.at.most(2)
+      // macOS scans a freshly written script on its first exec (~3s each).
+    }).timeout(30_000)
+
+    it('returns exact contents for multi-byte and identical files', () => {
+      const dir = createGitRepo()
+      const multiByte = '{"note": "café ☕ 日本語 🚀"}\n'
+      fs.mkdirSync(path.join(dir, 'configs'), {recursive: true})
+      fs.writeFileSync(path.join(dir, 'configs/a.json'), multiByte)
+      fs.writeFileSync(path.join(dir, 'configs/b.json'), multiByte) // same blob oid as a.json
+      fs.writeFileSync(path.join(dir, 'configs/c.json'), '')
+      fs.writeFileSync(path.join(dir, 'configs/d.json'), '{"z": 1}')
+      const oid = commitAll(dir)
+
+      const files = readFilesFromCommit(oid, dir)
+      expect(Object.fromEntries(files)).to.deep.equal({
+        'configs/a.json': multiByte,
+        'configs/b.json': multiByte,
+        'configs/c.json': '',
+        'configs/d.json': '{"z": 1}',
+      })
+    })
+
+    it('fails closed: a gitlink (submodule) entry under a validated dir throws', () => {
+      const dir = createGitRepo()
+      writeConfig(dir, 'configs/clean-key.json', 'clean-key')
+      const git = (...args: string[]) => execFileSync('git', args, {cwd: dir, encoding: 'utf8'})
+      git('add', '-A')
+      git('update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},configs/sub`)
+      git('commit', '--quiet', '-m', 'gitlink')
+      const oid = git('rev-parse', 'HEAD').trim()
+
+      expect(() => readFilesFromCommit(oid, dir)).to.throw(/configs\/sub/)
+    })
+  })
 })
 
 /**
