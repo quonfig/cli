@@ -1319,8 +1319,8 @@ describe('validate', () => {
 })
 
 // qfg-phcv: JSON values bound to a schema are validated with Ajv, behind the
-// `validateValues` option. CLI callers turn it on; the pre-receive hook
-// (standalone.ts, validateFileMap) leaves it off until phase 1b (W1b).
+// `validateValues` option. CLI callers and the pre-receive hook
+// (standalone.ts, since qfg-q5f6.10 / W1b) turn it on; the library default is off.
 describe('schema-bound JSON value validation (qfg-phcv)', () => {
   const jevSchema = JSON.parse(
     fs.readFileSync(

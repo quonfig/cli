@@ -121,7 +121,10 @@ export function runHookChecks(refs: readonly RefUpdate[], opts: HookOptions): nu
 
     try {
       const files = readFilesFromCommit(ref.newOid, cwd)
-      const result = validateFileMap(files)
+      // validateValues: schema-bound JSON values must match their schema and
+      // every schema must compile, same as the CLI and the app (qfg-q5f6.10,
+      // plan 2026-09-25-advanced-schema-for-jev.md W1b Decision 10).
+      const result = validateFileMap(files, {validateValues: true})
       log(formatResult(result))
 
       if (!result.valid) {

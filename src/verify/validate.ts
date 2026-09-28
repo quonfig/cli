@@ -16,8 +16,9 @@
  *  - Log level constraints (valueType=log_level)
  *  - Referential integrity (IN_SEG/NOT_IN_SEG reference existing segments)
  *  - schemaKey references existing schemas
- *  - Schema-bound JSON values match their schema (Ajv, opt-in via
- *    `validateValues`; see validateBoundJsonValues)
+ *  - Schema-bound JSON values match their schema, and every schema compiles
+ *    (Ajv, opt-in via `validateValues`, which the CLI and the pre-receive
+ *    hook both set; see validateBoundJsonValues)
  *  - Rule structure (criteria + value present)
  *  - Value type consistency
  *  - Weighted values non-empty and consistent
@@ -206,10 +207,10 @@ export interface ValidationStats {
 export interface ValidateOptions {
   /**
    * Validate every schema-bound JSON value against its schema with Ajv
-   * (qfg-phcv). The CLI callers (`qfg verify`, `qfg push`, `qfg workspace
-   * bootstrap`, `qfg migrate --push`) turn it on. The pre-receive hook
-   * (standalone.ts) leaves it OFF until phase 1b (plan
-   * 2026-09-25-advanced-schema-for-jev.md W1b).
+   * (qfg-phcv), and check that every schema compiles. The CLI callers (`qfg
+   * verify`, `qfg push`, `qfg workspace bootstrap`, `qfg migrate --push`) and
+   * the pre-receive hook (standalone.ts, since qfg-q5f6.10 / plan
+   * 2026-09-25-advanced-schema-for-jev.md W1b) all turn it on.
    */
   validateValues?: boolean
 }
@@ -1091,8 +1092,8 @@ function validateBoundJsonValues(
 
 /**
  * A schema that does not compile is an error on the schema file, bound or not.
- * Gated on `validateValues` with the value checks, so the pre-receive hook
- * leaves it off until phase 1b.
+ * Gated on `validateValues` with the value checks; the CLI and the pre-receive
+ * hook both turn it on.
  */
 function validateSchemaCompiles(
   schemaKey: string,

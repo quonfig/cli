@@ -15,9 +15,9 @@
  *   collide in the shared Ajv instance.
  *
  * Lives inside cli/src/verify/ because the app-gitea hook build only copies
- * this directory (see validate.ts). The hook does not run value validation
- * yet (phase 1b), but it compiles this file, so app-gitea/Dockerfile must
- * install `ajv` and `ajv-formats`.
+ * this directory (see validate.ts). The hook runs value validation
+ * (qfg-q5f6.10), so app-gitea/Dockerfile must install `ajv` and
+ * `ajv-formats`.
  *
  * Imports: the CLI is ESM with nodenext resolution and Ajv ships CommonJS, so
  * the default import may be the class or the module object depending on the
