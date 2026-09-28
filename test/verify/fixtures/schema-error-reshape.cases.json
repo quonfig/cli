@@ -1,0 +1,192 @@
+{
+  "description": "Shared cases for schema-error-reshape.ts (qfg-q5f6.1). Synthetic schemas only: cli copies this file into its public repo. Each case validates `value` against `schemas[schema]` with Ajv 2020 (allErrors, strict:false) and expects exactly `violations` from schemaErrorsToViolations.",
+  "schemas": {
+    "pets": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["pets"],
+      "additionalProperties": false,
+      "$defs": {
+        "fish": {
+          "type": "object",
+          "required": ["kind", "fins"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {"const": "fish"},
+            "fins": {"type": "integer", "minimum": 1}
+          }
+        }
+      },
+      "properties": {
+        "pets": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "title": "Cat",
+                "type": "object",
+                "required": ["kind"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {"const": "cat"},
+                  "lives": {"type": "integer", "maximum": 9}
+                }
+              },
+              {
+                "title": "Dog",
+                "type": "object",
+                "required": ["kind", "tricks"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {"enum": ["dog"]},
+                  "tricks": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"type": "string"}
+                  },
+                  "collar": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "required": ["style"],
+                        "properties": {
+                          "style": {"const": "plain"},
+                          "color": {"type": "string"}
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "required": ["style", "tag"],
+                        "properties": {
+                          "style": {"const": "tagged"},
+                          "tag": {"type": "string", "minLength": 1}
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {"$ref": "#/$defs/fish"}
+            ]
+          }
+        }
+      }
+    },
+    "untagged": {
+      "oneOf": [{"type": "string"}, {"type": "integer"}]
+    }
+  },
+  "cases": [
+    {
+      "name": "valid value has no violations",
+      "schema": "pets",
+      "value": {"pets": {"tom": {"kind": "cat", "lives": 3}}},
+      "violations": []
+    },
+    {
+      "name": "known tag reports only the selected branch's errors",
+      "schema": "pets",
+      "value": {"pets": {"rex": {"kind": "dog", "tricks": []}}},
+      "violations": [
+        {
+          "path": "pets.rex.tricks",
+          "message": "must NOT have fewer than 1 items"
+        }
+      ]
+    },
+    {
+      "name": "known tag, several errors in the selected branch",
+      "schema": "pets",
+      "value": {
+        "pets": {"tom": {"kind": "cat", "lives": 12, "owner": "x"}}
+      },
+      "violations": [
+        {
+          "path": "pets.tom",
+          "message": "must NOT have additional property 'owner'"
+        },
+        {"path": "pets.tom.lives", "message": "must be <= 9"}
+      ]
+    },
+    {
+      "name": "missing tag is one error naming the tag and its values",
+      "schema": "pets",
+      "value": {"pets": {"rex": {"tricks": ["sit"]}}},
+      "violations": [
+        {
+          "path": "pets.rex",
+          "message": "`kind` must be one of cat, dog, fish"
+        }
+      ]
+    },
+    {
+      "name": "unknown tag is one error naming the tag and its values",
+      "schema": "pets",
+      "value": {"pets": {"polly": {"kind": "parrot"}}},
+      "violations": [
+        {
+          "path": "pets.polly",
+          "message": "`kind` must be one of cat, dog, fish"
+        }
+      ]
+    },
+    {
+      "name": "non-object where a tagged union is expected",
+      "schema": "pets",
+      "value": {"pets": {"tom": "cat"}},
+      "violations": [{"path": "pets.tom", "message": "must be object"}]
+    },
+    {
+      "name": "a $ref branch selected by its tag",
+      "schema": "pets",
+      "value": {"pets": {"nemo": {"kind": "fish", "fins": 0}}},
+      "violations": [{"path": "pets.nemo.fins", "message": "must be >= 1"}]
+    },
+    {
+      "name": "nested tagged union inside the selected branch",
+      "schema": "pets",
+      "value": {
+        "pets": {
+          "rex": {
+            "kind": "dog",
+            "tricks": ["sit"],
+            "collar": {"style": "tagged", "tag": ""}
+          }
+        }
+      },
+      "violations": [
+        {
+          "path": "pets.rex.collar.tag",
+          "message": "must NOT have fewer than 1 characters"
+        }
+      ]
+    },
+    {
+      "name": "each map entry is reshaped on its own",
+      "schema": "pets",
+      "value": {
+        "pets": {
+          "rex": {"kind": "dog", "tricks": [1]},
+          "polly": {"kind": "parrot"}
+        }
+      },
+      "violations": [
+        {"path": "pets.rex.tricks[0]", "message": "must be string"},
+        {
+          "path": "pets.polly",
+          "message": "`kind` must be one of cat, dog, fish"
+        }
+      ]
+    },
+    {
+      "name": "a oneOf without a tag is left as Ajv reports it",
+      "schema": "untagged",
+      "value": true,
+      "violations": [
+        {"path": "", "message": "must be string"},
+        {"path": "", "message": "must be integer"},
+        {"path": "", "message": "must match exactly one schema in oneOf"}
+      ]
+    }
+  ]
+}

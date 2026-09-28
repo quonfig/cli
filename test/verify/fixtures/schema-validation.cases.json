@@ -1,0 +1,479 @@
+{
+  "schemas": {
+    "jev": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Jev questions",
+      "description": "A set of named Jev questions in TypeSafe's request shape.",
+      "type": "object",
+      "required": ["questions"],
+      "additionalProperties": false,
+      "properties": {
+        "questions": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "title": "Yes / No",
+                "type": "object",
+                "required": ["type"],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "noul"
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "title": "Question"
+                  },
+                  "criteria": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "true": {
+                        "type": "string",
+                        "title": "Means yes"
+                      },
+                      "false": {
+                        "type": "string",
+                        "title": "Means no"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "title": "Score",
+                "type": "object",
+                "required": ["type", "criteria"],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "score"
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "title": "Question"
+                  },
+                  "criteria": {
+                    "title": "Rubric, lowest first",
+                    "description": "Jev returns the position counted from 0: first line = 0.",
+                    "type": "array",
+                    "minItems": 2,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "title": "Choice",
+                "type": "object",
+                "required": ["type", "criteria"],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "choice"
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "title": "Question"
+                  },
+                  "criteria": {
+                    "title": "Labels",
+                    "type": "object",
+                    "minProperties": 2,
+                    "maxProperties": 255,
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "empty-enum": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "level": {
+          "enum": []
+        }
+      }
+    },
+    "draft-04": {
+      "$schema": "http://json-schema.org/draft-04/schema#",
+      "type": "object"
+    },
+    "draft-07-tuple": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "array",
+      "items": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer"
+        }
+      ],
+      "additionalItems": false
+    },
+    "draft-07-https": {
+      "$schema": "https://json-schema.org/draft-07/schema",
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 5
+        }
+      }
+    },
+    "keywords": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["name", "tier", "tags", "limits", "retries"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 8,
+          "default": "svc"
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["free", "pro", "team"]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "notes": {
+          "type": "string",
+          "format": "textarea"
+        },
+        "contact": {
+          "type": "string",
+          "format": "email"
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "cases": [
+    {
+      "name": "jev: a valid value passes",
+      "schema": "jev",
+      "value": {
+        "questions": {
+          "urgent": {
+            "type": "noul",
+            "criteria": {
+              "true": "yes",
+              "false": "no"
+            }
+          },
+          "tone": {
+            "type": "score",
+            "criteria": ["low", "high"]
+          },
+          "topic": {
+            "type": "choice",
+            "criteria": {
+              "a": "A",
+              "b": "B"
+            }
+          }
+        }
+      },
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "name": "jev: known tag reports only that branch",
+      "schema": "jev",
+      "value": {
+        "questions": {
+          "tone": {
+            "type": "score",
+            "instructions": "How calm?",
+            "criteria": ["low"]
+          }
+        }
+      },
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "questions.tone.criteria",
+            "message": "must NOT have fewer than 2 items"
+          }
+        ]
+      }
+    },
+    {
+      "name": "jev: missing tag is one error",
+      "schema": "jev",
+      "value": {
+        "questions": {
+          "tone": {
+            "criteria": ["low", "high"]
+          }
+        }
+      },
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "questions.tone",
+            "message": "`type` must be one of noul, score, choice"
+          }
+        ]
+      }
+    },
+    {
+      "name": "jev: unknown tag is one error",
+      "schema": "jev",
+      "value": {
+        "questions": {
+          "tone": {
+            "type": "rating",
+            "criteria": ["low", "high"]
+          }
+        }
+      },
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "questions.tone",
+            "message": "`type` must be one of noul, score, choice"
+          }
+        ]
+      }
+    },
+    {
+      "name": "compile: empty enum is an invalid schema",
+      "schema": "empty-enum",
+      "value": {
+        "mode": "x"
+      },
+      "result": {
+        "kind": "invalid-schema",
+        "ok": false,
+        "reason": "enum must have non-empty array"
+      }
+    },
+    {
+      "name": "compile: draft-04 $schema is unsupported",
+      "schema": "draft-04",
+      "value": {},
+      "result": {
+        "kind": "invalid-schema",
+        "ok": false,
+        "reason": "unsupported $schema http://json-schema.org/draft-04/schema#; use draft 2020-12 or draft-07"
+      }
+    },
+    {
+      "name": "draft-07: tuple items accept a matching tuple",
+      "schema": "draft-07-tuple",
+      "value": ["a", 1],
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "name": "draft-07: tuple items reject a wrong position",
+      "schema": "draft-07-tuple",
+      "value": ["a", "b"],
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "[1]",
+            "message": "must be integer"
+          }
+        ]
+      }
+    },
+    {
+      "name": "draft-07: additionalItems false rejects an extra item",
+      "schema": "draft-07-tuple",
+      "value": ["a", 1, 2],
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "",
+            "message": "must NOT have more than 2 items"
+          }
+        ]
+      }
+    },
+    {
+      "name": "draft-07: https spelling without # is draft-07",
+      "schema": "draft-07-https",
+      "value": {
+        "title": "too long"
+      },
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "title",
+            "message": "must NOT have more than 5 characters"
+          }
+        ]
+      }
+    },
+    {
+      "name": "keywords: a valid value passes (textarea format is free text)",
+      "schema": "keywords",
+      "value": {
+        "name": "api",
+        "tier": "pro",
+        "tags": ["a"],
+        "limits": {
+          "rps": 10
+        },
+        "retries": 3,
+        "ratio": 0.5,
+        "notes": "any\ntext",
+        "contact": "ops@quonfig.test"
+      },
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "name": "keywords: every keyword violated",
+      "schema": "keywords",
+      "value": {
+        "name": "x",
+        "tier": "gold",
+        "tags": [],
+        "limits": {
+          "rps": -1,
+          "burst": "many"
+        },
+        "retries": 9,
+        "ratio": 0,
+        "contact": "not-an-email",
+        "extra": true
+      },
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "name",
+            "message": "must NOT have fewer than 2 characters"
+          },
+          {
+            "path": "tier",
+            "message": "must be equal to one of the allowed values: free, pro, team"
+          },
+          {
+            "path": "tags",
+            "message": "must NOT have fewer than 1 items"
+          },
+          {
+            "path": "limits.rps",
+            "message": "must be >= 0"
+          },
+          {
+            "path": "limits.burst",
+            "message": "must be integer"
+          },
+          {
+            "path": "retries",
+            "message": "must be <= 5"
+          },
+          {
+            "path": "ratio",
+            "message": "must be > 0"
+          },
+          {
+            "path": "contact",
+            "message": "must match format \"email\""
+          },
+          {
+            "path": "",
+            "message": "must NOT have unevaluated property 'extra'"
+          }
+        ]
+      }
+    },
+    {
+      "name": "keywords: missing required, too many items, too long",
+      "schema": "keywords",
+      "value": {
+        "name": "much-too-long",
+        "tags": ["a", "b", "c", "d", 5],
+        "limits": {},
+        "retries": 0
+      },
+      "result": {
+        "kind": "violations",
+        "ok": false,
+        "violations": [
+          {
+            "path": "",
+            "message": "must have required property 'tier'"
+          },
+          {
+            "path": "name",
+            "message": "must NOT have more than 8 characters"
+          },
+          {
+            "path": "tags",
+            "message": "must NOT have more than 3 items"
+          },
+          {
+            "path": "tags[4]",
+            "message": "must be string"
+          },
+          {
+            "path": "retries",
+            "message": "must be >= 1"
+          }
+        ]
+      }
+    }
+  ]
+}
