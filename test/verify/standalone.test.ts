@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import {readFilesFromCommit} from '../../src/verify/standalone.js'
+import {readFilesFromCommit, runHookChecks} from '../../src/verify/standalone.js'
 import {validateFileMap} from '../../src/verify/validate.js'
 
 /**
@@ -156,5 +156,63 @@ describe('standalone readFilesFromCommit', () => {
       const result = validateFileMap(files)
       expect(result.valid, JSON.stringify(result.issues)).to.be.true
     })
+  })
+})
+
+/**
+ * qfg-phcv: value validation is OFF in hook mode until phase 1b (W1b). An
+ * app-gitea deploy during phase 1 must change nothing about values, so a
+ * pushed commit with a schema-violating value is still accepted by the hook,
+ * while the same tree fails the CLI's value check (anti-vacuity).
+ */
+describe('hook mode does not validate schema-bound values (qfg-phcv)', () => {
+  it('runHookChecks accepts a commit whose json value violates its schema', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-hook-values-'))
+    try {
+      const git = (...args: string[]) => execFileSync('git', args, {cwd: dir, encoding: 'utf8'}).trim()
+      git('init', '--quiet', '--initial-branch', 'main')
+      git('config', 'user.email', 'test@quonfig.test')
+      git('config', 'user.name', 'test')
+      fs.mkdirSync(path.join(dir, 'configs'))
+      fs.mkdirSync(path.join(dir, 'schemas'))
+      fs.writeFileSync(
+        path.join(dir, 'schemas', 'retry.json'),
+        JSON.stringify({properties: {retries: {type: 'integer'}}, required: ['retries'], type: 'object'}),
+      )
+      fs.writeFileSync(
+        path.join(dir, 'configs', 'retry-policy.json'),
+        JSON.stringify({
+          default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'json', value: {retries: 'three'}}}]},
+          environments: [],
+          key: 'retry-policy',
+          schemaKey: 'retry',
+          type: 'config',
+          valueType: 'json',
+          variants: [],
+        }),
+      )
+      git('add', '-A')
+      git('commit', '--quiet', '-m', 'bad value')
+      const oid = git('rev-parse', 'HEAD')
+
+      // Anti-vacuity: the CLI value check rejects this exact tree.
+      const withValues = validateFileMap(readFilesFromCommit(oid, dir), {validateValues: true})
+      expect(withValues.valid).to.equal(false)
+      expect(withValues.issues.map((i) => i.message)).to.deep.equal([
+        'Value does not match schema "retry": default.rules[0].value.retries: must be integer',
+      ])
+
+      const logs: string[] = []
+      const code = runHookChecks([{newOid: oid, oldOid: '0'.repeat(40), refName: 'refs/heads/main'}], {
+        cwd: dir,
+        env: {},
+        log: (line) => logs.push(line),
+        logErr: (line) => logs.push(line),
+      })
+      expect(code, logs.join('\n')).to.equal(0)
+      expect(logs.join('\n')).to.not.include('does not match schema')
+    } finally {
+      fs.rmSync(dir, {force: true, recursive: true})
+    }
   })
 })

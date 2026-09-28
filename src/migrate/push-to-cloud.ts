@@ -115,7 +115,7 @@ const verifyOnDisk = (dir: string): void => {
   // qfg-52qg: client-side verify against the cumulative tree before commit
   // lands. The Gitea pre-receive hook runs against the final HEAD; failing
   // here matches what the server would reject and avoids a wasted push.
-  const verifyResult = validateWorkspace(dir)
+  const verifyResult = validateWorkspace(dir, {validateValues: true})
   if (!verifyResult.valid) throw new MigratorVerifyError(verifyResult)
 }
 

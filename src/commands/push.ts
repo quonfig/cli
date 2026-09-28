@@ -372,7 +372,7 @@ export function buildRealDeps(
     },
     async validate(dir: string) {
       const {validateWorkspace} = await import('../verify/validate.js')
-      const result = validateWorkspace(dir)
+      const result = validateWorkspace(dir, {validateValues: true})
       const errors = result.issues.filter((i) => i.severity === 'error').map((i) => i.message)
       return {errors}
     },

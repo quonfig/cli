@@ -7,6 +7,7 @@ import * as path from 'node:path'
 import type {LegacyChange, MigrationSource, QuonfigFile} from '../../src/migrate/source.js'
 
 import {MigratorVerifyError, pushMigrationToCloud} from '../../src/migrate/push-to-cloud.js'
+import {zodToJsonSchema} from '../../src/migrate/sources/launch/zod-to-json-schema.js'
 
 function run(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, {cwd, encoding: 'utf8'}).trim()
@@ -379,6 +380,69 @@ describe('pushMigrationToCloud', () => {
     const reader = cloneForRead(remote, root)
     expect(logSubjects(reader)).to.deep.equal(['initial'])
     expect(fs.existsSync(path.join(reader, 'feature-flags/flag-bad.json'))).to.equal(false)
+  })
+
+  // qfg-phcv: `qfg migrate --push` now validates schema-bound json values
+  // (there is no skip flag). The Launch converter closes every z.object() with
+  // additionalProperties: false, so a Launch value carrying a key its Zod
+  // schema never declared -- which Zod's default strip mode silently
+  // tolerated -- now fails the migration before anything is pushed. Decided
+  // behaviour: refuse the push with the value error; the user fixes the value
+  // in the source (or loosens the emitted schema) and re-runs.
+  it('refuses to push a Launch value with a key its converted Zod schema does not declare (qfg-phcv)', async () => {
+    const remote = createBareRemote(root)
+    seedRemote(remote, root)
+    const localDir = path.join(root, 'workspace')
+
+    const schema = zodToJsonSchema('z.object({ retries: z.number(), mode: z.string().optional() })').schema
+    expect(schema).to.include({additionalProperties: false})
+
+    const schemaFile = JSON.stringify(schema, null, 2) + '\n'
+    const configFile =
+      JSON.stringify(
+        {
+          default: {
+            rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'json', value: {legacy: true, retries: 3}}}],
+          },
+          environments: [],
+          key: 'retry-policy',
+          schemaKey: 'retry-schema',
+          type: 'config',
+          valueType: 'json',
+          variants: [],
+        },
+        null,
+        2,
+      ) + '\n'
+
+    const filesByKey = new Map<string, QuonfigFile[]>([
+      ['retry-policy', [{contents: configFile, path: 'configs/retry-policy.json'}]],
+      ['retry-schema', [{contents: schemaFile, path: 'schemas/retry-schema.json'}]],
+    ])
+
+    let thrown: unknown
+    try {
+      await pushMigrationToCloud({
+        changes: [makeChange('retry-schema', 1000), makeChange('retry-policy', 1001)],
+        environments: ['production'],
+        importState: {lastProcessedAt: 1001, source: 'fake'},
+        localDir,
+        remoteUrl: remote,
+        reportData: emptyReport(),
+        source: makeFakeSource(filesByKey),
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown, 'expected pushMigrationToCloud to throw a verify error').to.be.instanceOf(MigratorVerifyError)
+    const issues = (thrown as MigratorVerifyError).result.issues.filter((i) => i.severity === 'error')
+    expect(issues.map((i) => `${i.file}: ${i.message}`)).to.deep.equal([
+      `configs/retry-policy.json: Value does not match schema "retry-schema": default.rules[0].value: must NOT have additional property 'legacy'`,
+    ])
+
+    const reader = cloneForRead(remote, root)
+    expect(logSubjects(reader)).to.deep.equal(['initial'])
   })
 
   it('merges source envs into the target quonfig.json without clobbering existing envs (qfg-zfl.22)', async () => {

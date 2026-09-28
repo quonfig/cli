@@ -82,4 +82,43 @@ describe('verify', () => {
         expect(ctx.stdout).to.match(/FAILED/)
       })
   })
+
+  // qfg-phcv: `qfg verify` validates schema-bound json values with Ajv.
+  describe('a json value that violates its schemaKey schema', () => {
+    beforeEach(() => {
+      fs.writeFileSync(path.join(tmpdir, 'quonfig.json'), JSON.stringify({environments: ['production']}))
+      fs.mkdirSync(path.join(tmpdir, 'schemas'))
+      fs.mkdirSync(path.join(tmpdir, 'configs'))
+      fs.writeFileSync(
+        path.join(tmpdir, 'schemas', 'retry.json'),
+        JSON.stringify({properties: {retries: {type: 'integer'}}, required: ['retries'], type: 'object'}),
+      )
+      fs.writeFileSync(
+        path.join(tmpdir, 'configs', 'retry-policy.json'),
+        JSON.stringify({
+          default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'json', value: {retries: 'three'}}}]},
+          environments: [],
+          key: 'retry-policy',
+          schemaKey: 'retry',
+          type: 'config',
+          valueType: 'json',
+          variants: [],
+        }),
+      )
+    })
+
+    test
+      .stdout()
+      .command(['verify', '.', '--json'])
+      .catch((error) => {
+        expect((error as {oclif?: {exit?: number}}).oclif?.exit ?? 1).to.equal(1)
+      })
+      .it('is an error and exits non-zero', (ctx) => {
+        const output = JSON.parse(ctx.stdout) as {issues: Array<{message: string; severity: string}>; valid: boolean}
+        expect(output.valid).to.equal(false)
+        expect(output.issues.filter((i) => i.severity === 'error').map((i) => i.message)).to.deep.equal([
+          'Value does not match schema "retry": default.rules[0].value.retries: must be integer',
+        ])
+      })
+  })
 })

@@ -112,7 +112,7 @@ export default class WorkspaceBootstrap extends BaseCommand {
       this.log('Verifying config files...')
       try {
         const {validateWorkspace} = await import('../../verify/validate.js')
-        const result = validateWorkspace(resolvedDir)
+        const result = validateWorkspace(resolvedDir, {validateValues: true})
         const errors = result.issues.filter((i: {severity: string}) => i.severity === 'error')
         if (errors.length > 0) {
           this.log(`\nFound ${errors.length} validation error(s):\n`)

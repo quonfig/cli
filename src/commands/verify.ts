@@ -30,7 +30,7 @@ export default class Verify extends BaseCommand {
     const {args, flags} = await this.parse(Verify)
     const dir = args.path
 
-    const result = validateWorkspace(dir)
+    const result = validateWorkspace(dir, {validateValues: true})
 
     if (flags.strict) {
       // Promote warnings to errors

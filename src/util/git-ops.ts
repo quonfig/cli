@@ -576,7 +576,7 @@ const removeWorktree = async (dir: string, worktree: string): Promise<void> => {
  */
 const requireWorkspaceValidates = async (tree: string): Promise<void> => {
   const {validateWorkspace} = await import('../verify/validate.js')
-  const errors = validateWorkspace(tree).issues.filter((i) => i.severity === 'error')
+  const errors = validateWorkspace(tree, {validateValues: true}).issues.filter((i) => i.severity === 'error')
   if (errors.length === 0) return
 
   const shown = errors.slice(0, 10).map((i) => `  ${i.file}: ${i.message}`)

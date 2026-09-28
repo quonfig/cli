@@ -16,12 +16,16 @@
  *  - Log level constraints (valueType=log_level)
  *  - Referential integrity (IN_SEG/NOT_IN_SEG reference existing segments)
  *  - schemaKey references existing schemas
+ *  - Schema-bound JSON values match their schema (Ajv, opt-in via
+ *    `validateValues`; see validateBoundJsonValues)
  *  - Rule structure (criteria + value present)
  *  - Value type consistency
  *  - Weighted values non-empty and consistent
  */
 
 import {z} from 'zod'
+
+import {validateAgainstSchema} from './schema-validator.js'
 
 // Inlined to keep this directory self-contained for the standalone bun-compile
 // build that runs as the qfg-verify pre-receive hook in app-gitea — that build
@@ -197,6 +201,17 @@ export interface ValidationStats {
   segmentRefsChecked: number
   segments: number
   uniqueKeysVerified: number
+}
+
+export interface ValidateOptions {
+  /**
+   * Validate every schema-bound JSON value against its schema with Ajv
+   * (qfg-phcv). The CLI callers (`qfg verify`, `qfg push`, `qfg workspace
+   * bootstrap`, `qfg migrate --push`) turn it on. The pre-receive hook
+   * (standalone.ts) leaves it OFF until phase 1b (plan
+   * 2026-09-25-advanced-schema-for-jev.md W1b).
+   */
+  validateValues?: boolean
 }
 
 export interface ValidationResult {
@@ -378,7 +393,7 @@ import * as path from 'node:path'
 /**
  * Validate an entire workspace directory on disk.
  */
-export function validateWorkspace(workspaceDir: string): ValidationResult {
+export function validateWorkspace(workspaceDir: string, options: ValidateOptions = {}): ValidationResult {
   const issues: ValidationIssue[] = []
   let filesChecked = 0
   const stats: ValidationStats = {
@@ -400,6 +415,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
   const allSchemaFiles: Array<{key: string; file: string}> = []
   const segmentKeys = new Set<string>()
   const schemaKeys = new Set<string>()
+  const schemaDocuments = new Map<string, Record<string, unknown>>()
   const declaredEnvIds = new Set<string>()
 
   // Check for unexpected top-level entries
@@ -530,6 +546,7 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
 
         const schemaKey = file.replace(/\.json$/, '')
         schemaKeys.add(schemaKey)
+        schemaDocuments.set(schemaKey, result.data)
         validateKey(schemaKey, relPath, issues)
         allSchemaFiles.push({key: schemaKey, file: relPath})
         stats.schemas++
@@ -724,6 +741,8 @@ export function validateWorkspace(workspaceDir: string): ValidationResult {
         }
       }
 
+      if (options.validateValues) validateBoundJsonValues(parsed, config, schemaDocuments, relPath, issues)
+
       // Check environment IDs referenced in config exist in quonfig.json
       if (declaredEnvIds.size > 0) {
         for (const env of config.environments) {
@@ -775,7 +794,7 @@ function emptyStats(): ValidationStats {
  * Validate configs provided as a map of { "dir/file.json": jsonString }.
  * Used by the pre-receive hook which reads files from git objects.
  */
-export function validateFileMap(files: Map<string, string>): ValidationResult {
+export function validateFileMap(files: Map<string, string>, options: ValidateOptions = {}): ValidationResult {
   const issues: ValidationIssue[] = []
   let filesChecked = 0
 
@@ -783,7 +802,13 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
   const schemaKeys = new Set<string>()
   const allSchemaFiles: Array<{key: string; file: string}> = []
   const allConfigs: Array<{key: string; file: string}> = []
-  const parsedConfigs: Array<{relPath: string; config: z.infer<typeof StoredConfigSchema>; dir: string}> = []
+  const schemaDocuments = new Map<string, Record<string, unknown>>()
+  const parsedConfigs: Array<{
+    config: z.infer<typeof StoredConfigSchema>
+    dir: string
+    raw: unknown
+    relPath: string
+  }> = []
   const declaredEnvIds = new Set<string>()
 
   // Validate quonfig.json if it's included in the file map (it may not be in every commit)
@@ -858,6 +883,7 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
 
       const schemaKey = file.replace(/\.json$/, '')
       schemaKeys.add(schemaKey)
+      schemaDocuments.set(schemaKey, result.data)
       validateKey(schemaKey, relPath, issues)
       allSchemaFiles.push({key: schemaKey, file: relPath})
       continue
@@ -950,11 +976,11 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
     }
 
     allConfigs.push({key: config.key, file: relPath})
-    parsedConfigs.push({relPath, config, dir})
+    parsedConfigs.push({config, dir, raw: parsed, relPath})
   }
 
   // Referential integrity
-  for (const {relPath, config} of parsedConfigs) {
+  for (const {config, raw, relPath} of parsedConfigs) {
     const segRefs = collectSegmentReferences(config)
     for (const ref of segRefs) {
       if (!segmentKeys.has(ref)) {
@@ -975,6 +1001,8 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
         suggestion: `Create schemas/${config.schemaKey}.json or schemas-protected/${config.schemaKey}.json, or remove schemaKey`,
       })
     }
+
+    if (options.validateValues) validateBoundJsonValues(raw, config, schemaDocuments, relPath, issues)
 
     // Check environment IDs referenced in config exist in quonfig.json
     if (declaredEnvIds.size > 0) {
@@ -1000,6 +1028,79 @@ export function validateFileMap(files: Map<string, string>): ValidationResult {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Validate a config's schema-bound JSON values (qfg-phcv). Scope matches the
+ * app's save gate (app-quonfig config-crud-handlers.ts findJsonBoundViolations)
+ * exactly:
+ * - only `type === "config"` with `valueType === "json"` and a `schemaKey`
+ *   whose schema exists (a missing schema is the reference error above);
+ * - every `{type: "json", value}` node anywhere in the RAW document: default
+ *   and environment rules, weighted-value entries, top-level variants.
+ *   `provided` values are not json nodes, so they are skipped;
+ * - one issue per violation, worded `Value does not match schema "<key>":
+ *   <document path>.<path in value>: <message>`;
+ * - a schema that does not compile is ONE error at the first json value's
+ *   path, `schema <key> is invalid: <reason>`, and the walk stops. An unbound
+ *   schema that does not compile is not an error here.
+ */
+function validateBoundJsonValues(
+  raw: unknown,
+  config: z.infer<typeof StoredConfigSchema>,
+  schemaDocuments: Map<string, Record<string, unknown>>,
+  file: string,
+  issues: ValidationIssue[],
+): void {
+  if (config.type !== 'config' || config.valueType !== 'json' || !config.schemaKey) return
+  const schemaKey = config.schemaKey
+  const schema = schemaDocuments.get(schemaKey)
+  if (!schema) return
+
+  const isPlainObject = (node: unknown): node is Record<string, unknown> =>
+    typeof node === 'object' && node !== null && !Array.isArray(node)
+
+  // Returns true to stop the walk.
+  const walk = (node: unknown, docPath: string): boolean => {
+    if (Array.isArray(node)) return node.some((child, index) => walk(child, `${docPath}[${index}]`))
+    if (!isPlainObject(node)) return false
+
+    if (node.type === 'json' && 'value' in node) {
+      const valuePath = docPath || 'value'
+      const result = validateAgainstSchema(schema, node.value)
+      if (result.ok) return false
+      if (result.kind === 'invalid-schema') {
+        issues.push({
+          file,
+          message: `${valuePath}: schema ${schemaKey} is invalid: ${result.reason}`,
+          severity: 'error',
+          suggestion: `Fix the schema "${schemaKey}" so it compiles as JSON Schema draft 2020-12 or draft-07`,
+        })
+        return true
+      }
+
+      for (const violation of result.violations) {
+        issues.push({
+          file,
+          message: `Value does not match schema "${schemaKey}": ${joinSchemaPath(valuePath, violation.path)}: ${violation.message}`,
+          severity: 'error',
+        })
+      }
+
+      return false
+    }
+
+    return Object.entries(node).some(([key, child]) => walk(child, docPath ? `${docPath}.${key}` : key))
+  }
+
+  walk(raw, '')
+}
+
+/** Same as app-quonfig schema-json.ts joinSchemaPath: `[n]` attaches without a dot. */
+function joinSchemaPath(prefix: string, valuePath: string): string {
+  if (!valuePath) return prefix
+  if (!prefix) return valuePath
+  return valuePath.startsWith('[') ? `${prefix}${valuePath}` : `${prefix}.${valuePath}`
+}
 
 function validateEnvironmentIds(
   environments: z.infer<typeof ConfigEnvironmentSchema>[],

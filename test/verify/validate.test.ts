@@ -1316,3 +1316,229 @@ describe('validate', () => {
     })
   })
 })
+
+// qfg-phcv: JSON values bound to a schema are validated with Ajv, behind the
+// `validateValues` option. CLI callers turn it on; the pre-receive hook
+// (standalone.ts, validateFileMap) leaves it off until phase 1b (W1b).
+describe('schema-bound JSON value validation (qfg-phcv)', () => {
+  const jevSchema = JSON.parse(
+    fs.readFileSync(
+      path.join(path.dirname(new URL(import.meta.url).pathname), 'fixtures', 'jev-questions.schema.json'),
+      'utf8',
+    ),
+  )
+
+  const retrySchema = {
+    type: 'object',
+    required: ['retries'],
+    properties: {retries: {type: 'integer', minimum: 1}, mode: {enum: ['fast', 'slow']}},
+    additionalProperties: false,
+  }
+
+  const always = [{operator: 'ALWAYS_TRUE'}]
+  const json = (value: unknown) => ({type: 'json', value})
+
+  function config(key: string, extra: Record<string, unknown>): string {
+    return JSON.stringify({
+      key,
+      type: 'config',
+      valueType: 'json',
+      schemaKey: 'retry',
+      default: {rules: [{criteria: always, value: json({retries: 1})}]},
+      environments: [],
+      variants: [],
+      ...extra,
+    })
+  }
+
+  function files(entries: Record<string, unknown>): Map<string, string> {
+    const map = new Map<string, string>([
+      ['quonfig.json', JSON.stringify({environments: ['production']})],
+      ['schemas/retry.json', JSON.stringify(retrySchema)],
+    ])
+    for (const [p, content] of Object.entries(entries)) {
+      map.set(p, typeof content === 'string' ? content : JSON.stringify(content))
+    }
+
+    return map
+  }
+
+  function writeToDisk(map: Map<string, string>): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-values-'))
+    for (const [rel, content] of map) {
+      fs.mkdirSync(path.join(dir, path.dirname(rel)), {recursive: true})
+      fs.writeFileSync(path.join(dir, rel), content)
+    }
+
+    return dir
+  }
+
+  /** Error messages from BOTH validate paths, which must agree. */
+  function errorsBothPaths(map: Map<string, string>, validateValues = true): string[] {
+    const fromMap = validateFileMap(map, {validateValues})
+      .issues.filter((i) => i.severity === 'error')
+      .map((i) => `${i.file}: ${i.message}`)
+    const dir = writeToDisk(map)
+    try {
+      const fromDisk = validateWorkspace(dir, {validateValues})
+        .issues.filter((i) => i.severity === 'error')
+        .map((i) => `${i.file}: ${i.message}`)
+      expect(fromDisk).to.deep.equal(fromMap)
+    } finally {
+      fs.rmSync(dir, {force: true, recursive: true})
+    }
+
+    return fromMap
+  }
+
+  it('a valid bound value passes', () => {
+    expect(errorsBothPaths(files({'configs/retry-policy.json': config('retry-policy', {})}))).to.deep.equal([])
+  })
+
+  it('is OFF by default: an invalid value passes when validateValues is not set', () => {
+    const map = files({
+      'configs/retry-policy.json': config('retry-policy', {
+        default: {rules: [{criteria: always, value: json({retries: 'three'})}]},
+      }),
+    })
+    expect(validateFileMap(map).valid).to.equal(true)
+    const dir = writeToDisk(map)
+    try {
+      expect(validateWorkspace(dir).valid).to.equal(true)
+    } finally {
+      fs.rmSync(dir, {force: true, recursive: true})
+    }
+
+    expect(errorsBothPaths(map)).to.have.length(1)
+  })
+
+  it('reports every violation with the document path of the value plus the path inside it', () => {
+    const map = files({
+      'configs/retry-policy.json': config('retry-policy', {
+        default: {rules: [{criteria: always, value: json({retries: 0, mode: 'turbo', extra: 1})}]},
+      }),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([
+      `configs/retry-policy.json: Value does not match schema "retry": default.rules[0].value: must NOT have additional property 'extra'`,
+      `configs/retry-policy.json: Value does not match schema "retry": default.rules[0].value.retries: must be >= 1`,
+      `configs/retry-policy.json: Value does not match schema "retry": default.rules[0].value.mode: must be equal to one of the allowed values: fast, slow`,
+    ])
+  })
+
+  it('checks environment rules, weighted-value variants and top-level variants', () => {
+    const good = json({retries: 2})
+    const bad = json({retries: 'x'})
+    const map = files({
+      'configs/retry-policy.json': config('retry-policy', {
+        default: {rules: [{criteria: always, value: good}]},
+        environments: [
+          {
+            id: 'production',
+            rules: [
+              {
+                criteria: always,
+                value: {
+                  type: 'weighted_values',
+                  value: {
+                    hashByPropertyName: 'user.key',
+                    weightedValues: [
+                      {value: good, weight: 50_000},
+                      {value: bad, weight: 50_000},
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        variants: [
+          {key: 'good', value: good},
+          {key: 'bad', value: bad},
+        ],
+      }),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([
+      `configs/retry-policy.json: Value does not match schema "retry": environments[0].rules[0].value.value.weightedValues[1].value.retries: must be integer`,
+      `configs/retry-policy.json: Value does not match schema "retry": variants[1].value.retries: must be integer`,
+    ])
+  })
+
+  it('skips provided values, feature flags with a schemaKey, and non-json configs', () => {
+    const map = files({
+      'configs/provided.json': config('provided', {
+        default: {rules: [{criteria: always, value: {type: 'provided', value: {lookup: 'RETRY', source: 'ENV_VAR'}}}]},
+      }),
+      'configs/as-string.json': config('as-string', {
+        valueType: 'string',
+        default: {rules: [{criteria: always, value: {type: 'string', value: 'nope'}}]},
+      }),
+      'feature-flags/flag-with-schema.json': config('flag-with-schema', {
+        type: 'feature_flag',
+        default: {rules: [{criteria: always, value: json({retries: 'x'})}]},
+      }),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([])
+  })
+
+  it('finds schemas in schemas-protected/', () => {
+    const map = files({
+      'schemas-protected/locked.json': JSON.stringify(retrySchema),
+      'configs/locked-policy.json': config('locked-policy', {
+        schemaKey: 'locked',
+        default: {rules: [{criteria: always, value: json({})}]},
+      }),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([
+      `configs/locked-policy.json: Value does not match schema "locked": default.rules[0].value: must have required property 'retries'`,
+    ])
+  })
+
+  it('a bound schema that does not compile is ONE error at the first json value; an unbound one is not an error', () => {
+    const map = files({
+      'schemas/broken.json': JSON.stringify({type: 'object', properties: {level: {enum: []}}}),
+      'schemas/unbound-broken.json': JSON.stringify({type: 'object', properties: {level: {enum: []}}}),
+      'configs/uses-broken.json': config('uses-broken', {
+        schemaKey: 'broken',
+        environments: [{id: 'production', rules: [{criteria: always, value: json({})}]}],
+        default: {rules: [{criteria: always, value: json({})}]},
+      }),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([
+      `configs/uses-broken.json: default.rules[0].value: schema broken is invalid: enum must have non-empty array`,
+    ])
+  })
+
+  it('a missing schema is only the existing reference error', () => {
+    const map = files({
+      'configs/orphan.json': config('orphan', {schemaKey: 'nope'}),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([`configs/orphan.json: References schema "nope" which does not exist`])
+  })
+
+  it('collapses tagged oneOf errors in the Jev schema to one message per question', () => {
+    const map = files({
+      'schemas/jev-questions.json': JSON.stringify(jevSchema),
+      'configs/jev.json': config('jev', {
+        schemaKey: 'jev-questions',
+        default: {
+          rules: [
+            {
+              criteria: always,
+              value: json({
+                questions: {
+                  tone: {criteria: ['low', 'high']},
+                  mood: {type: 'score', criteria: ['low']},
+                  topic: {type: 'choice', criteria: {a: 'A', b: 'B'}},
+                },
+              }),
+            },
+          ],
+        },
+      }),
+    })
+    expect(errorsBothPaths(map)).to.deep.equal([
+      'configs/jev.json: Value does not match schema "jev-questions": default.rules[0].value.questions.tone: `type` must be one of noul, score, choice',
+      'configs/jev.json: Value does not match schema "jev-questions": default.rules[0].value.questions.mood.criteria: must NOT have fewer than 2 items',
+    ])
+  })
+})
