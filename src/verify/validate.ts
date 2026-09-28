@@ -684,6 +684,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
 
   // Second pass: referential integrity. Keep the plain skip-filter here —
   // ghost entries were already reported (once) by the first pass.
+  const cycleNodes: CycleNode[] = []
   for (const dir of KNOWN_DIRS) {
     const dirPath = path.join(workspaceDir, dir)
     if (!fs.existsSync(dirPath)) continue
@@ -715,6 +716,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
       if (!result.success) continue
 
       const config = result.data
+      cycleNodes.push({config, raw: parsed, relPath})
 
       // Check segment references in criteria
       const segRefs = collectSegmentReferences(config)
@@ -761,6 +763,8 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
       }
     }
   }
+
+  detectReferenceCycles(cycleNodes, issues)
 
   // Check for duplicate keys across directories (case-insensitive — see
   // detectDuplicateKeys).
@@ -1021,6 +1025,8 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
       }
     }
   }
+
+  detectReferenceCycles(parsedConfigs, issues)
 
   // Duplicate keys (case-insensitive — see detectDuplicateKeys).
   detectDuplicateKeys(allConfigs, 'key', issues)
@@ -1410,6 +1416,125 @@ function collectSegmentReferences(config: z.infer<typeof StoredConfigSchema>): s
     scanRules(env.rules)
   }
 
+  return refs
+}
+
+interface CycleNode {
+  config: z.infer<typeof StoredConfigSchema>
+  raw: unknown
+  relPath: string
+}
+
+/**
+ * Reject reference cycles that SDKs recurse through at eval time (qfg-9dxb.11):
+ * - segment -> segment via IN_SEG / NOT_IN_SEG criteria;
+ * - config -> config via `decryptWith` on a confidential value (the SDKs
+ *   resolve the key config's value to decrypt, and follow its decryptWith).
+ * An unguarded SDK recurses until the stack overflows (sdk-net: an
+ * uncatchable StackOverflowException), so a cycle is a hard error at write
+ * time. Edges to keys that do not exist are skipped — a missing segment is
+ * the reference error above. Each cycle is reported once, on the file of its
+ * lexicographically first key, with the path starting there.
+ */
+function detectReferenceCycles(nodes: CycleNode[], issues: ValidationIssue[]): void {
+  const segments = nodes.filter((n) => n.config.type === 'segment')
+  const segmentKeys = new Set(segments.map((n) => n.config.key))
+  reportCycles(
+    segments.map((n) => ({
+      key: n.config.key,
+      relPath: n.relPath,
+      targets: collectSegmentReferences(n.config).filter((ref) => segmentKeys.has(ref)),
+    })),
+    'Segment reference cycle',
+    'Remove one of the IN_SEG / NOT_IN_SEG references in the cycle',
+    issues,
+  )
+
+  const configKeys = new Set(nodes.map((n) => n.config.key))
+  reportCycles(
+    nodes.map((n) => ({
+      key: n.config.key,
+      relPath: n.relPath,
+      targets: collectDecryptWithReferences(n.raw).filter((ref) => configKeys.has(ref)),
+    })),
+    'decryptWith cycle',
+    'A decryption key config must not itself be decrypted with a config in the cycle',
+    issues,
+  )
+}
+
+function reportCycles(
+  graph: Array<{key: string; relPath: string; targets: string[]}>,
+  label: string,
+  suggestion: string,
+  issues: ValidationIssue[],
+): void {
+  const byKey = new Map(graph.map((n) => [n.key, n]))
+  const state = new Map<string, 'done' | 'visiting'>()
+  const stack: string[] = []
+  const seen = new Set<string>()
+
+  function visit(key: string): void {
+    state.set(key, 'visiting')
+    stack.push(key)
+    for (const target of [...new Set(byKey.get(key)!.targets)].sort()) {
+      const s = state.get(target)
+      if (s === 'visiting') {
+        const cycle = stack.slice(stack.indexOf(target))
+        const first = cycle.indexOf([...cycle].sort()[0])
+        const rotated = [...cycle.slice(first), ...cycle.slice(0, first)]
+        const id = rotated.join('\0')
+        if (!seen.has(id)) {
+          seen.add(id)
+          issues.push({
+            file: byKey.get(rotated[0])!.relPath,
+            message: `${label}: ${[...rotated, rotated[0]].join(' -> ')}`,
+            severity: 'error',
+            suggestion,
+          })
+        }
+      } else if (s === undefined) {
+        visit(target)
+      }
+    }
+
+    stack.pop()
+    state.set(key, 'done')
+  }
+
+  for (const key of [...byKey.keys()].sort()) {
+    if (!state.has(key)) visit(key)
+  }
+}
+
+/** decryptWith targets of every confidential value in a config's rules and variants. */
+function collectDecryptWithReferences(raw: unknown): string[] {
+  const refs: string[] = []
+  const doc = (raw ?? {}) as {
+    default?: {rules?: unknown[]}
+    environments?: Array<{rules?: unknown[]}>
+    variants?: Array<{value?: unknown}>
+  }
+
+  function scanValue(value: unknown): void {
+    if (!value || typeof value !== 'object') return
+    const v = value as {confidential?: unknown; decryptWith?: unknown; type?: unknown; value?: unknown}
+    if (v.type === 'weighted_values') {
+      const wv = v.value as {weightedValues?: Array<{value?: unknown}>} | undefined
+      for (const entry of wv?.weightedValues ?? []) scanValue(entry?.value)
+      return
+    }
+
+    if (v.confidential === true && typeof v.decryptWith === 'string') refs.push(v.decryptWith)
+  }
+
+  function scanRules(rules: unknown[] | undefined): void {
+    for (const rule of rules ?? []) scanValue((rule as {value?: unknown})?.value)
+  }
+
+  scanRules(doc.default?.rules)
+  for (const env of doc.environments ?? []) scanRules(env?.rules)
+  for (const variant of doc.variants ?? []) scanValue(variant?.value)
   return refs
 }
 

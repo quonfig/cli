@@ -1551,3 +1551,149 @@ describe('schema-bound JSON value validation (qfg-phcv)', () => {
     ])
   })
 })
+
+describe('reference cycle detection (qfg-9dxb.11)', () => {
+  const always = [{operator: 'ALWAYS_TRUE'}]
+
+  function segment(key: string, refs: Array<{op?: string; to: string | string[]}>): string {
+    const rules = refs.map(({op = 'IN_SEG', to}) => ({
+      criteria: [
+        {
+          operator: op,
+          valueToMatch: Array.isArray(to) ? {type: 'string_list', value: to} : {type: 'string', value: to},
+        },
+      ],
+      value: {type: 'bool', value: true},
+    }))
+    rules.push({criteria: always as never, value: {type: 'bool', value: false}})
+    return JSON.stringify({key, type: 'segment', valueType: 'bool', default: {rules}, environments: [], variants: []})
+  }
+
+  function secret(key: string, decryptWith: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {type: 'string', value: 'ciphertext', confidential: true, decryptWith, ...extra}
+  }
+
+  function config(key: string, value: unknown, extra: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      key,
+      type: 'config',
+      valueType: 'string',
+      default: {rules: [{criteria: always, value}]},
+      environments: [],
+      variants: [],
+      ...extra,
+    })
+  }
+
+  function files(entries: Record<string, string>): Map<string, string> {
+    return new Map<string, string>([
+      ['quonfig.json', JSON.stringify({environments: ['production']})],
+      ...Object.entries(entries),
+    ])
+  }
+
+  /** Error messages from BOTH validate paths, which must agree. */
+  function errorsBothPaths(map: Map<string, string>): string[] {
+    const fromMap = validateFileMap(map)
+      .issues.filter((i) => i.severity === 'error')
+      .map((i) => `${i.file}: ${i.message}`)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-cycles-'))
+    try {
+      for (const [rel, content] of map) {
+        fs.mkdirSync(path.join(dir, path.dirname(rel)), {recursive: true})
+        fs.writeFileSync(path.join(dir, rel), content)
+      }
+
+      const fromDisk = validateWorkspace(dir)
+        .issues.filter((i) => i.severity === 'error')
+        .map((i) => `${i.file}: ${i.message}`)
+      expect(fromDisk).to.deep.equal(fromMap)
+    } finally {
+      fs.rmSync(dir, {force: true, recursive: true})
+    }
+
+    return fromMap
+  }
+
+  describe('segments', () => {
+    it('rejects a segment that references itself', () => {
+      const map = files({'segments/seg-a.json': segment('seg-a', [{to: 'seg-a'}])})
+      expect(errorsBothPaths(map)).to.deep.equal(['segments/seg-a.json: Segment reference cycle: seg-a -> seg-a'])
+    })
+
+    it('rejects a two-segment cycle once, anchored on the first key', () => {
+      const map = files({
+        'segments/seg-a.json': segment('seg-a', [{to: 'seg-b'}]),
+        'segments/seg-b.json': segment('seg-b', [{op: 'NOT_IN_SEG', to: 'seg-a'}]),
+      })
+      expect(errorsBothPaths(map)).to.deep.equal([
+        'segments/seg-a.json: Segment reference cycle: seg-a -> seg-b -> seg-a',
+      ])
+    })
+
+    it('rejects a three-segment cycle through a string_list reference', () => {
+      const map = files({
+        'segments/seg-a.json': segment('seg-a', [{to: 'seg-b'}]),
+        'segments/seg-b.json': segment('seg-b', [{to: ['seg-x', 'seg-c']}]),
+        'segments/seg-c.json': segment('seg-c', [{to: 'seg-a'}]),
+        'segments/seg-x.json': segment('seg-x', []),
+      })
+      expect(errorsBothPaths(map)).to.deep.equal([
+        'segments/seg-a.json: Segment reference cycle: seg-a -> seg-b -> seg-c -> seg-a',
+      ])
+    })
+
+    it('accepts acyclic chains and diamonds', () => {
+      const map = files({
+        'segments/seg-a.json': segment('seg-a', [{to: 'seg-b'}, {to: 'seg-c'}]),
+        'segments/seg-b.json': segment('seg-b', [{to: 'seg-d'}]),
+        'segments/seg-c.json': segment('seg-c', [{op: 'NOT_IN_SEG', to: 'seg-d'}]),
+        'segments/seg-d.json': segment('seg-d', []),
+      })
+      expect(errorsBothPaths(map)).to.deep.equal([])
+    })
+  })
+
+  describe('decryptWith', () => {
+    it('rejects a key config decrypted with itself', () => {
+      const map = files({'configs/enc-key.json': config('enc-key', secret('enc-key', 'enc-key'))})
+      expect(errorsBothPaths(map)).to.deep.equal(['configs/enc-key.json: decryptWith cycle: enc-key -> enc-key'])
+    })
+
+    it('rejects a cycle reached through an environment rule and a weighted value', () => {
+      const map = files({
+        'configs/key-a.json': config(
+          'key-a',
+          {type: 'string', value: 'plain'},
+          {
+            environments: [{id: 'production', rules: [{criteria: always, value: secret('key-a', 'key-b')}]}],
+          },
+        ),
+        'configs/key-b.json': config(
+          'key-b',
+          {
+            type: 'weighted_values',
+            value: {weightedValues: [{weight: 1, value: secret('key-b', 'key-a')}], hashByPropertyName: 'user.key'},
+          },
+          {variants: [{value: {type: 'string', value: 'ciphertext'}}]},
+        ),
+      })
+      expect(errorsBothPaths(map)).to.deep.equal(['configs/key-a.json: decryptWith cycle: key-a -> key-b -> key-a'])
+    })
+
+    it('accepts a secret decrypted with a plain key config', () => {
+      const map = files({
+        'configs/a.secret.json': config('a.secret', secret('a.secret', 'enc-key')),
+        'configs/enc-key.json': config('enc-key', {type: 'string', value: 'plaintext-key'}),
+      })
+      expect(errorsBothPaths(map)).to.deep.equal([])
+    })
+
+    it('ignores decryptWith on a non-confidential value (SDKs do not follow it)', () => {
+      const map = files({
+        'configs/enc-key.json': config('enc-key', secret('enc-key', 'enc-key', {confidential: false})),
+      })
+      expect(errorsBothPaths(map)).to.deep.equal([])
+    })
+  })
+})
