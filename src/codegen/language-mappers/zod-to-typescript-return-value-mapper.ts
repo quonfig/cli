@@ -50,6 +50,11 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
     return `Mustache.render(raw${this.printPropertyPath()} ?? "", ${this.FUNCTION_ARGUMENTS_NAME})`
   }
 
+  intersection() {
+    // Explicitly not supporting navigation into intersections, pass the raw value through
+    return `raw${this.printPropertyPath()}`
+  }
+
   literal() {
     return `raw${this.printPropertyPath()}`
   }
@@ -134,7 +139,7 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
     return `raw${this.printPropertyPath()}`
   }
 
-  tuple(wrappedTypes: string[]) {
+  tuple(wrappedTypes: string[], rest?: string) {
     const tupleNavigation = wrappedTypes.map((wt, index) => {
       let massagedWrappedType = wt
 
@@ -145,6 +150,12 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
 
       return `${massagedWrappedType}?.[${index}]!`
     })
+
+    if (rest !== undefined) {
+      // Pass the remaining items through untouched; truncating to the fixed items would drop data at runtime
+      const path = this.printPropertyPath().replace(/!$/, '')
+      tupleNavigation.push(`...(raw${path}?.slice(${wrappedTypes.length}) ?? [])`)
+    }
 
     return `[${tupleNavigation.join(`, `)}]`
   }

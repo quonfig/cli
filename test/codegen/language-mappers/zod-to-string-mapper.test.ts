@@ -145,6 +145,26 @@ describe('ZodToStringMapper', () => {
       expect(rendered).to.equal('z.tuple([z.string(), z.number()])')
     })
 
+    it('Can successfully parse tuples with a rest element', () => {
+      const zodAst = secureEvaluateSchema(`z.tuple([z.string(), z.string()]).rest(z.string())`)
+
+      const mapper = new ZodToStringMapper()
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('z.tuple([z.string(), z.string()]).rest(z.string())')
+    })
+
+    it('Can successfully parse intersections', () => {
+      const zodAst = secureEvaluateSchema(`z.intersection(z.object({ id: z.string() }), z.object({ a: z.string() }))`)
+
+      const mapper = new ZodToStringMapper()
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('z.intersection(z.object({id: z.string()}), z.object({a: z.string()}))')
+    })
+
     it('Can successfully parse objects', () => {
       const zodAst = secureEvaluateSchema(`z.object({ name: z.string(), age: z.number() })`)
       const mapper = new ZodToStringMapper()

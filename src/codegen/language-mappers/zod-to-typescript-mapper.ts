@@ -1,12 +1,17 @@
 import {z} from 'zod'
+import {$ZodType} from 'zod/v4/core'
 
 import {ZodTypeSupported} from '../types.js'
+import * as introspect from '../zod-introspection.js'
 import {ZodBaseMapper} from './zod-base-mapper.js'
 
 export type ZodToTypescriptMapperTarget = 'accessor' | 'raw'
 
 export class ZodToTypescriptMapper extends ZodBaseMapper {
   private fieldName: string | undefined
+  // A field's comment comes from its own meta, looking through optional/nullable/default wrappers only.
+  // Meta deeper inside (a union branch title, an array item description) must not become the field's comment.
+  private metaCaptureOpen = true
   private metaDescription: string | undefined = undefined
   private optionalProperty: boolean
   private target: ZodToTypescriptMapperTarget
@@ -56,6 +61,10 @@ export class ZodToTypescriptMapper extends ZodBaseMapper {
   functionReturns(value: z.ZodTypeAny): string {
     const mapper = new ZodToTypescriptMapper()
     return mapper.resolveType(value)
+  }
+
+  intersection(left: string, right: string) {
+    return [left, right].map((t) => (t.includes(' | ') || t.includes('=>') ? `(${t})` : t)).join(' & ')
   }
 
   literal(value: string | number | boolean | null) {
@@ -132,12 +141,38 @@ export class ZodToTypescriptMapper extends ZodBaseMapper {
     return result
   }
 
+  override resolveType(type: $ZodType): string {
+    const wasOpen = this.metaCaptureOpen
+    if (wasOpen) {
+      const description = introspect.getMetaDescription(type)
+      if (description) {
+        this.metaDescription = description
+      }
+    }
+
+    this.metaCaptureOpen =
+      wasOpen && (introspect.isOptional(type) || introspect.isNullable(type) || introspect.isDefault(type))
+
+    try {
+      return super.resolveType(type)
+    } finally {
+      this.metaCaptureOpen = wasOpen
+    }
+  }
+
   string() {
     return 'string'
   }
 
-  tuple(wrappedTypes: string[]) {
-    return `[${wrappedTypes.join(', ')}]`
+  tuple(wrappedTypes: string[], rest?: string) {
+    const items = [...wrappedTypes]
+    if (rest !== undefined) {
+      // `...A | B[]` would parse as `...(A | (B[]))`, so wrap anything that isn't a simple type
+      const restType = /^[\w ,<>]+$/.test(rest) ? rest : `(${rest})`
+      items.push(`...${restType}[]`)
+    }
+
+    return `[${items.join(', ')}]`
   }
 
   undefined() {
@@ -161,9 +196,8 @@ export class ZodToTypescriptMapper extends ZodBaseMapper {
     return 'unknown'
   }
 
-  protected withMeta(description: string, resolveType: () => string): string {
-    // Store the description to be used when rendering the field
-    this.metaDescription = description
+  protected withMeta(_description: string, resolveType: () => string): string {
+    // The description is captured in resolveType, which knows whether it belongs to this field
     return resolveType()
   }
 }

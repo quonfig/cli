@@ -95,6 +95,11 @@ export abstract class ZodBaseMapper {
       return this.optional(internalType)
     }
 
+    if (introspect.isIntersection(type)) {
+      const {left, right} = introspect.getIntersectionTypes(type)
+      return this.intersection(this.resolveType(left), this.resolveType(right))
+    }
+
     if (introspect.isRecord(type)) {
       const {keyType, valueType} = introspect.getRecordTypes(type)
       const keyTypeStr = this.resolveType(keyType)
@@ -109,7 +114,8 @@ export abstract class ZodBaseMapper {
     if (introspect.isTuple(type)) {
       const items = introspect.getTupleItems(type)
       const itemsStr = items.map((item) => this.resolveType(item))
-      return this.tuple(itemsStr)
+      const rest = introspect.getTupleRest(type)
+      return this.tuple(itemsStr, rest ? this.resolveType(rest) : undefined)
     }
 
     if (introspect.isUndefined(type)) {
@@ -142,6 +148,7 @@ export abstract class ZodBaseMapper {
   protected abstract function(args: string, returns: string): string
   protected abstract functionArguments(value?: $ZodFunctionArgs): string
   protected abstract functionReturns(value: $ZodFunctionOut): string
+  protected abstract intersection(left: string, right: string): string
   protected abstract literal(value: string | number | boolean | null): string
   protected abstract never(): string
   protected abstract null(): string
@@ -150,7 +157,11 @@ export abstract class ZodBaseMapper {
   protected abstract optional(wrappedType: string): string
   protected abstract record(keyType: string, valueType: string): string
   protected abstract string(): string
-  protected abstract tuple(wrappedTypes: string[]): string
+  /**
+   * @param wrappedTypes The fixed leading items
+   * @param rest The rest element type (`z.tuple([...]).rest(x)`), when the tuple has one
+   */
+  protected abstract tuple(wrappedTypes: string[], rest?: string): string
   protected abstract undefined(): string
   protected abstract union(wrappedTypes: string[]): string
   protected abstract unknown(): string

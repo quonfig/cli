@@ -44,6 +44,10 @@ export class ZodToStringMapper extends ZodBaseMapper {
     return mapper.resolveType(value)
   }
 
+  intersection(left: string, right: string) {
+    return `z.intersection(${left}, ${right})`
+  }
+
   literal(value: string | number | boolean | null) {
     return `z.literal(${JSON.stringify(value)})`
   }
@@ -99,8 +103,9 @@ export class ZodToStringMapper extends ZodBaseMapper {
     return 'z.string()'
   }
 
-  tuple(wrappedTypes: string[]) {
-    return `z.tuple([${wrappedTypes.join(', ')}])`
+  tuple(wrappedTypes: string[], rest?: string) {
+    const base = `z.tuple([${wrappedTypes.join(', ')}])`
+    return rest === undefined ? base : `${base}.rest(${rest})`
   }
 
   undefined() {

@@ -61,6 +61,10 @@ export function isTuple(schema: $ZodType): schema is z.ZodTuple {
   return schema instanceof z.ZodTuple
 }
 
+export function isIntersection(schema: $ZodType): schema is z.ZodIntersection<z.ZodTypeAny, z.ZodTypeAny> {
+  return schema instanceof z.ZodIntersection
+}
+
 export function isRecord(schema: $ZodType): schema is z.ZodRecord {
   return schema instanceof z.ZodRecord
 }
@@ -116,6 +120,23 @@ export function getObjectShape(schema: z.ZodObject<z.ZodRawShape>): z.ZodRawShap
  */
 export function getTupleItems(schema: z.ZodTuple): readonly $ZodType[] {
   return schema.def.items
+}
+
+/**
+ * Gets the rest element from a tuple schema (`z.tuple([...]).rest(x)`), or undefined when it has none
+ */
+export function getTupleRest(schema: z.ZodTuple): $ZodType | undefined {
+  return schema.def.rest ?? undefined
+}
+
+/**
+ * Gets both sides of an intersection schema
+ */
+export function getIntersectionTypes(schema: z.ZodIntersection<z.ZodTypeAny, z.ZodTypeAny>): {
+  left: $ZodType
+  right: $ZodType
+} {
+  return {left: schema.def.left, right: schema.def.right}
 }
 
 /**

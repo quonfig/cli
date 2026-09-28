@@ -145,6 +145,62 @@ describe('ZodToTypescriptMapper', () => {
       expect(rendered).to.equal('"someKey": [string, number]')
     })
 
+    it('Can successfully parse tuples with a rest element', () => {
+      const zodAst = secureEvaluateSchema(`z.tuple([z.string(), z.string()]).rest(z.string())`)
+
+      const mapper = new ZodToTypescriptMapper({fieldName: 'someKey'})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('"someKey": [string, string, ...string[]]')
+    })
+
+    it('Parenthesizes a union rest element', () => {
+      const zodAst = secureEvaluateSchema(`z.tuple([z.string()]).rest(z.union([z.string(), z.number()]))`)
+
+      const mapper = new ZodToTypescriptMapper({fieldName: 'someKey'})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('"someKey": [string, ...(string | number)[]]')
+    })
+
+    it('Can successfully parse intersections', () => {
+      const zodAst = secureEvaluateSchema(
+        `z.intersection(z.object({ id: z.string() }), z.union([z.object({ a: z.string() }), z.object({ b: z.number() })]))`,
+      )
+
+      const mapper = new ZodToTypescriptMapper({fieldName: 'someKey'})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('"someKey": { "id": string } & ({ "a": string } | { "b": number })')
+    })
+
+    it('Can successfully parse discriminated unions', () => {
+      const zodAst = secureEvaluateSchema(
+        `z.discriminatedUnion('type', [z.object({ type: z.literal('a') }), z.object({ type: z.literal('b'), n: z.number() })])`,
+      )
+
+      const mapper = new ZodToTypescriptMapper({fieldName: 'someKey'})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('"someKey": { "type": "a" } | { "type": "b"; "n": number }')
+    })
+
+    it('Does not hoist the title of a union branch onto the enclosing field', () => {
+      const zodAst = secureEvaluateSchema(
+        `z.record(z.string(), z.union([z.object({ a: z.string() }).meta({ title: 'Branch A' }), z.object({ b: z.string() }).meta({ title: 'Branch B' })]))`,
+      )
+
+      const mapper = new ZodToTypescriptMapper({fieldName: 'someKey'})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('"someKey": Record<string, { "a": string } | { "b": string }>')
+    })
+
     it('Can successfully parse objects', () => {
       const zodAst = secureEvaluateSchema(`z.object({ name: z.string(), age: z.number() })`)
       const mapper = new ZodToTypescriptMapper({fieldName: 'someKey'})

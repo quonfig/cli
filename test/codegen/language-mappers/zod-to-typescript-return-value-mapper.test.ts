@@ -289,6 +289,38 @@ describe('ZodToTypescriptReturnValueMapper', () => {
       )
     })
 
+    it('Passes the rest of a tuple through instead of truncating it', () => {
+      const zodAst = secureEvaluateSchema(`z.tuple([z.string(), z.string()]).rest(z.string())`)
+
+      const mapper = new ZodToTypescriptReturnValueMapper({fieldName: 'someKey'})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal('"someKey": [raw?.[0]!, raw?.[1]!, ...(raw?.slice(2) ?? [])]')
+    })
+
+    it('Passes the rest of a tuple through with property paths', () => {
+      const zodAst = secureEvaluateSchema(`z.tuple([z.string(), z.string()]).rest(z.string())`)
+
+      const mapper = new ZodToTypescriptReturnValueMapper({fieldName: 'someKey', returnTypePropertyPath})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal(
+        "\"someKey\": [raw?.['first']?.['second']?.['third']?.[0]!, raw?.['first']?.['second']?.['third']?.[1]!, ...(raw?.['first']?.['second']?.['third']?.slice(2) ?? [])]",
+      )
+    })
+
+    it('Returns the raw value for intersections', () => {
+      const zodAst = secureEvaluateSchema(`z.intersection(z.object({ id: z.string() }), z.object({ a: z.string() }))`)
+
+      const mapper = new ZodToTypescriptReturnValueMapper({fieldName: 'someKey', returnTypePropertyPath})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal("\"someKey\": raw?.['first']?.['second']?.['third']!")
+    })
+
     it('Can successfully parse objects', () => {
       const zodAst = secureEvaluateSchema(`z.object({ name: z.string(), age: z.number() })`)
       const mapper = new ZodToTypescriptReturnValueMapper({fieldName: 'someKey'})
