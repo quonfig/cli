@@ -25,7 +25,7 @@
 
 import {z} from 'zod'
 
-import {validateAgainstSchema} from './schema-validator.js'
+import {compileSchema, validateAgainstSchema} from './schema-validator.js'
 
 // Inlined to keep this directory self-contained for the standalone bun-compile
 // build that runs as the qfg-verify pre-receive hook in app-gitea — that build
@@ -547,6 +547,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
         const schemaKey = file.replace(/\.json$/, '')
         schemaKeys.add(schemaKey)
         schemaDocuments.set(schemaKey, result.data)
+        if (options.validateValues) validateSchemaCompiles(schemaKey, result.data, relPath, issues)
         validateKey(schemaKey, relPath, issues)
         allSchemaFiles.push({key: schemaKey, file: relPath})
         stats.schemas++
@@ -884,6 +885,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
       const schemaKey = file.replace(/\.json$/, '')
       schemaKeys.add(schemaKey)
       schemaDocuments.set(schemaKey, result.data)
+      if (options.validateValues) validateSchemaCompiles(schemaKey, result.data, relPath, issues)
       validateKey(schemaKey, relPath, issues)
       allSchemaFiles.push({key: schemaKey, file: relPath})
       continue
@@ -1040,9 +1042,9 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
  *   `provided` values are not json nodes, so they are skipped;
  * - one issue per violation, worded `Value does not match schema "<key>":
  *   <document path>.<path in value>: <message>`;
- * - a schema that does not compile is ONE error at the first json value's
- *   path, `schema <key> is invalid: <reason>`, and the walk stops. An unbound
- *   schema that does not compile is not an error here.
+ * - a schema that does not compile is reported once, on the schema file
+ *   (validateSchemaCompiles), whether or not anything is bound to it. Values
+ *   bound to it are not reported again.
  */
 function validateBoundJsonValues(
   raw: unknown,
@@ -1068,15 +1070,7 @@ function validateBoundJsonValues(
       const valuePath = docPath || 'value'
       const result = validateAgainstSchema(schema, node.value)
       if (result.ok) return false
-      if (result.kind === 'invalid-schema') {
-        issues.push({
-          file,
-          message: `${valuePath}: schema ${schemaKey} is invalid: ${result.reason}`,
-          severity: 'error',
-          suggestion: `Fix the schema "${schemaKey}" so it compiles as JSON Schema draft 2020-12 or draft-07`,
-        })
-        return true
-      }
+      if (result.kind === 'invalid-schema') return true
 
       for (const violation of result.violations) {
         issues.push({
@@ -1093,6 +1087,27 @@ function validateBoundJsonValues(
   }
 
   walk(raw, '')
+}
+
+/**
+ * A schema that does not compile is an error on the schema file, bound or not.
+ * Gated on `validateValues` with the value checks, so the pre-receive hook
+ * leaves it off until phase 1b.
+ */
+function validateSchemaCompiles(
+  schemaKey: string,
+  schema: Record<string, unknown>,
+  file: string,
+  issues: ValidationIssue[],
+): void {
+  const compiled = compileSchema(schema)
+  if (compiled.ok) return
+  issues.push({
+    file,
+    message: `schema ${schemaKey} is invalid: ${compiled.reason}`,
+    severity: 'error',
+    suggestion: `Fix the schema "${schemaKey}" so it compiles as JSON Schema draft 2020-12 or draft-07`,
+  })
 }
 
 /** Same as app-quonfig schema-json.ts joinSchemaPath: `[n]` attaches without a dot. */

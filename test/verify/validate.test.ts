@@ -1494,7 +1494,7 @@ describe('schema-bound JSON value validation (qfg-phcv)', () => {
     ])
   })
 
-  it('a bound schema that does not compile is ONE error at the first json value; an unbound one is not an error', () => {
+  it('a schema that does not compile is ONE error on the schema file, bound or not', () => {
     const map = files({
       'schemas/broken.json': JSON.stringify({type: 'object', properties: {level: {enum: []}}}),
       'schemas/unbound-broken.json': JSON.stringify({type: 'object', properties: {level: {enum: []}}}),
@@ -1505,8 +1505,16 @@ describe('schema-bound JSON value validation (qfg-phcv)', () => {
       }),
     })
     expect(errorsBothPaths(map)).to.deep.equal([
-      `configs/uses-broken.json: default.rules[0].value: schema broken is invalid: enum must have non-empty array`,
+      `schemas/broken.json: schema broken is invalid: enum must have non-empty array`,
+      `schemas/unbound-broken.json: schema unbound-broken is invalid: enum must have non-empty array`,
     ])
+  })
+
+  it('does not compile schemas when value validation is off (hook mode until phase 1b)', () => {
+    const map = files({
+      'schemas/unbound-broken.json': JSON.stringify({type: 'object', properties: {level: {enum: []}}}),
+    })
+    expect(errorsBothPaths(map, false)).to.deep.equal([])
   })
 
   it('a missing schema is only the existing reference error', () => {
