@@ -4,6 +4,14 @@ import {$ZodFunctionArgs, $ZodFunctionOut, $ZodType, util} from 'zod/v4/core'
 import * as introspect from '../zod-introspection.js'
 
 export abstract class ZodBaseMapper {
+  /**
+   * Resolves the fixed tuple item at `index`. Mappers that emit value accessors override this to
+   * resolve the item at its indexed path rather than at the tuple's own path.
+   */
+  protected resolveTupleItem(item: $ZodType, _index: number): string {
+    return this.resolveType(item)
+  }
+
   resolveType(type: $ZodType): string {
     // Check for meta description first and allow implementers to handle it
     const metaDescription = introspect.getMetaDescription(type)
@@ -113,7 +121,7 @@ export abstract class ZodBaseMapper {
 
     if (introspect.isTuple(type)) {
       const items = introspect.getTupleItems(type)
-      const itemsStr = items.map((item) => this.resolveType(item))
+      const itemsStr = items.map((item, index) => this.resolveTupleItem(item, index))
       const rest = introspect.getTupleRest(type)
       return this.tuple(itemsStr, rest ? this.resolveType(rest) : undefined)
     }

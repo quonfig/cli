@@ -311,6 +311,30 @@ describe('ZodToTypescriptReturnValueMapper', () => {
       )
     })
 
+    it('Accesses object tuple items at their index, fixed and rest', () => {
+      const zodAst = secureEvaluateSchema(`z.tuple([z.object({ a: z.string() })]).rest(z.object({ a: z.string() }))`)
+
+      const mapper = new ZodToTypescriptReturnValueMapper({fieldName: 'items', returnTypePropertyPath: ['items']})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal(`"items": [{ "a": raw?.['items']?.[0]?.['a']! }, ...(raw?.['items']?.slice(1) ?? [])]`)
+    })
+
+    it('Accesses nested array tuple items at their index', () => {
+      const zodAst = secureEvaluateSchema(
+        `z.tuple([z.array(z.string()), z.tuple([z.string()]).rest(z.string())]).rest(z.array(z.string()))`,
+      )
+
+      const mapper = new ZodToTypescriptReturnValueMapper({fieldName: 'items', returnTypePropertyPath: ['items']})
+
+      const rendered = mapper.renderField(zodAst.schema!)
+
+      expect(rendered).to.equal(
+        `"items": [raw?.['items']?.[0]!, [raw?.['items']?.[1]?.[0]!, ...(raw?.['items']?.[1]?.slice(1) ?? [])], ...(raw?.['items']?.slice(2) ?? [])]`,
+      )
+    })
+
     it('Returns the raw value for intersections', () => {
       const zodAst = secureEvaluateSchema(`z.intersection(z.object({ id: z.string() }), z.object({ a: z.string() }))`)
 

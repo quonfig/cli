@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {$ZodType} from 'zod/v4/core'
 
 import {ZodTypeSupported} from '../types.js'
 import {ZodBaseMapper} from './zod-base-mapper.js'
@@ -7,9 +8,13 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
   private fieldName: string | undefined
   private FUNCTION_ARGUMENTS_NAME = 'params'
   private metaDescription: string | undefined = undefined
-  private returnTypePropertyPath: string[]
+  // Strings are property names, numbers are tuple indexes
+  private returnTypePropertyPath: (number | string)[]
 
-  constructor({fieldName, returnTypePropertyPath}: {fieldName?: string; returnTypePropertyPath?: string[]} = {}) {
+  constructor({
+    fieldName,
+    returnTypePropertyPath,
+  }: {fieldName?: string; returnTypePropertyPath?: (number | string)[]} = {}) {
     super()
     this.fieldName = fieldName
     this.returnTypePropertyPath = returnTypePropertyPath ?? []
@@ -135,24 +140,24 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
     return result
   }
 
+  protected resolveTupleItem(item: $ZodType, index: number): string {
+    const mapper = new ZodToTypescriptReturnValueMapper({
+      returnTypePropertyPath: [...this.returnTypePropertyPath, index],
+    })
+    return mapper.resolveType(item)
+  }
+
   string() {
     return `raw${this.printPropertyPath()}`
   }
 
   tuple(wrappedTypes: string[], rest?: string) {
-    const tupleNavigation = wrappedTypes.map((wt, index) => {
-      let massagedWrappedType = wt
-
-      if (massagedWrappedType !== 'raw') {
-        // Remove trailing ! from the wrapped type
-        massagedWrappedType = massagedWrappedType.replace(/!$/, '')
-      }
-
-      return `${massagedWrappedType}?.[${index}]!`
-    })
+    // Each fixed item was already resolved at its own index by resolveTupleItem
+    const tupleNavigation = [...wrappedTypes]
 
     if (rest !== undefined) {
-      // Pass the remaining items through untouched; truncating to the fixed items would drop data at runtime
+      // Pass the remaining items through untouched; truncating to the fixed items would drop data at runtime.
+      // Mustache is never extracted inside arrays, so the rest needs no per-item mapping.
       const path = this.printPropertyPath().replace(/!$/, '')
       tupleNavigation.push(`...(raw${path}?.slice(${wrappedTypes.length}) ?? [])`)
     }
@@ -184,13 +189,16 @@ export class ZodToTypescriptReturnValueMapper extends ZodBaseMapper {
     return resolveType()
   }
 
-  private printPath(paths: string[]): string {
+  private printPath(paths: (number | string)[]): string {
     if (paths.length === 0) {
       return ''
     }
 
     // Always safe navigate the path to ensure we don't throw an error if the property doesn't exist
-    const path = paths.reduce((acc, part) => `${acc}?.['${part}']`, '')
+    const path = paths.reduce<string>(
+      (acc, part) => (typeof part === 'number' ? `${acc}?.[${part}]` : `${acc}?.['${part}']`),
+      '',
+    )
 
     // To satisfy TypeScript's type system, tell it the value is always defined
     return `${path}!`

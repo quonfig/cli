@@ -922,5 +922,48 @@ describe('NodeTypeScriptGenerator', () => {
         `"rubric": [raw?.['rubric']?.[0]!, raw?.['rubric']?.[1]!, ...(raw?.['rubric']?.slice(2) ?? [])]`,
       )
     })
+
+    it('accesses object items of a minItems array at their index', () => {
+      const configFile: ConfigFile = {
+        configs: [
+          {
+            configType: 'CONFIG',
+            key: 'greeting',
+            rows: [
+              {
+                values: [
+                  {value: {json: {json: JSON.stringify({greeting: 'Hi {{name}}', items: [{a: 'x'}, {a: 'y'}]})}}},
+                ],
+              },
+            ],
+            schemaKey: 'greeting-schema',
+            valueType: 'JSON',
+          },
+        ],
+        schemas: [
+          {
+            path: 'schemas/greeting-schema.json',
+            schema: {
+              properties: {
+                greeting: {type: 'string'},
+                items: {
+                  items: {properties: {a: {type: 'string'}}, required: ['a'], type: 'object'},
+                  minItems: 1,
+                  type: 'array',
+                },
+              },
+              type: 'object',
+            },
+          },
+        ],
+      }
+
+      const generator = new NodeTypeScriptGenerator({configFile, log: mockLog})
+
+      const result = generator.generate()
+
+      expect(result).to.include(`"items": [{ "a": raw?.['items']?.[0]?.['a']! }, ...(raw?.['items']?.slice(1) ?? [])]`)
+      expect(result).to.not.include(`raw?.['items']?.['a']`)
+    })
   })
 })
