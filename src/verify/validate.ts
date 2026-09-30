@@ -19,6 +19,8 @@
  *  - Schema-bound JSON values match their schema, and every schema compiles
  *    (Ajv, opt-in via `validateValues`, which the CLI and the pre-receive
  *    hook both set; see validateBoundJsonValues)
+ *  - Warning: a schema map whose integer keys an app save would move to the
+ *    front (same gate; see warnMapKeyOrder)
  *  - Rule structure (criteria + value present)
  *  - Value type consistency
  *  - Weighted values non-empty and consistent
@@ -26,6 +28,7 @@
 
 import {z} from 'zod'
 
+import {findMapKeyOrderWarnings, navigate, type OrderedNode, scanOrderedJson} from './map-key-order.js'
 import {compileSchema, validateAgainstSchema} from './schema-validator.js'
 
 // Inlined to keep this directory self-contained for the standalone bun-compile
@@ -745,7 +748,10 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
         }
       }
 
-      if (options.validateValues) validateBoundJsonValues(parsed, config, schemaDocuments, relPath, issues)
+      if (options.validateValues) {
+        validateBoundJsonValues(parsed, config, schemaDocuments, relPath, issues)
+        warnMapKeyOrder(raw, parsed, config, schemaDocuments, relPath, issues)
+      }
 
       // Check environment IDs referenced in config exist in quonfig.json
       if (declaredEnvIds.size > 0) {
@@ -1009,7 +1015,10 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
       })
     }
 
-    if (options.validateValues) validateBoundJsonValues(raw, config, schemaDocuments, relPath, issues)
+    if (options.validateValues) {
+      validateBoundJsonValues(raw, config, schemaDocuments, relPath, issues)
+      warnMapKeyOrder(files.get(relPath) ?? '', raw, config, schemaDocuments, relPath, issues)
+    }
 
     // Check environment IDs referenced in config exist in quonfig.json
     if (declaredEnvIds.size > 0) {
@@ -1094,6 +1103,71 @@ function validateBoundJsonValues(
   }
 
   walk(raw, '')
+}
+
+/**
+ * Warn when a schema map (an object under `additionalProperties`) has integer
+ * keys that are not first, ascending (qfg-e87r.21). The app saves with
+ * JSON.stringify, which moves them there, so a hand-written file gets a
+ * one-time key-order diff. Same scope as validateBoundJsonValues. Always a
+ * warning: it never fails verify or rejects a push.
+ */
+function warnMapKeyOrder(
+  text: string,
+  raw: unknown,
+  config: z.infer<typeof StoredConfigSchema>,
+  schemaDocuments: Map<string, Record<string, unknown>>,
+  file: string,
+  issues: ValidationIssue[],
+): void {
+  if (config.type !== 'config' || config.valueType !== 'json' || !config.schemaKey) return
+  const schema = schemaDocuments.get(config.schemaKey)
+  if (!schema) return
+
+  // The file is scanned for its real key order at most once, and only if a
+  // map with an integer key exists.
+  let ordered: null | OrderedNode | undefined = null
+  const orderedDocument = (): OrderedNode | undefined => {
+    if (ordered === null) ordered = scanOrderedJson(text)
+    return ordered
+  }
+
+  const walk = (node: unknown, segments: (number | string)[], docPath: string): void => {
+    if (Array.isArray(node)) {
+      for (const [index, child] of node.entries()) walk(child, [...segments, index], `${docPath}[${index}]`)
+      return
+    }
+
+    if (typeof node !== 'object' || node === null) return
+    const record = node as Record<string, unknown>
+    if (record.type === 'json' && 'value' in record) {
+      const valueSegments = [...segments, 'value']
+      const warnings = findMapKeyOrderWarnings(
+        schema,
+        record.value,
+        () => {
+          const doc = orderedDocument()
+          return doc && navigate(doc, valueSegments)
+        },
+        docPath || 'value',
+      )
+      for (const warning of warnings) {
+        const keys = warning.integerKeys.map((k) => `"${k}"`).join(', ')
+        issues.push({
+          file,
+          message: `map at ${warning.path} has integer keys (${keys}) that aren't first, in ascending order. Saving from the app moves them to the front. Reorder them here to avoid a one-time diff.`,
+          severity: 'warning',
+        })
+      }
+
+      return
+    }
+
+    for (const [key, child] of Object.entries(record))
+      walk(child, [...segments, key], docPath ? `${docPath}.${key}` : key)
+  }
+
+  walk(raw, [], '')
 }
 
 /**

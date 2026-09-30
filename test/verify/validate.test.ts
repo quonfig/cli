@@ -1697,3 +1697,97 @@ describe('reference cycle detection (qfg-9dxb.11)', () => {
     })
   })
 })
+
+describe('integer map key order warning (qfg-e87r.21)', () => {
+  // Tenant id -> list of hidden iors. Keys are chosen by the author.
+  const mapSchema = {
+    type: 'object',
+    properties: {
+      hiddenIorsByTenant: {type: 'object', additionalProperties: {type: 'integer'}},
+      fixed: {type: 'object', properties: {b: {type: 'integer'}, a: {type: 'integer'}, 5: {type: 'integer'}}},
+      nested: {
+        type: 'object',
+        additionalProperties: {type: 'object', additionalProperties: {type: 'integer'}},
+      },
+    },
+  }
+
+  /** Build the config file TEXT by hand: JSON.stringify would reorder integer keys already. */
+  function configText(valueText: string): string {
+    return `{
+  "key": "tenant-map",
+  "type": "config",
+  "valueType": "json",
+  "schemaKey": "tenants",
+  "default": {"rules": [{"criteria": [{"operator": "ALWAYS_TRUE"}], "value": {"type": "json", "value": ${valueText}}}]},
+  "environments": [],
+  "variants": []
+}`
+  }
+
+  function warnings(valueText: string): string[] {
+    const map = new Map<string, string>([
+      ['configs/tenant-map.json', configText(valueText)],
+      ['quonfig.json', JSON.stringify({environments: []})],
+      ['schemas/tenants.json', JSON.stringify(mapSchema)],
+    ])
+    const fromMap = validateFileMap(map, {validateValues: true})
+    expect(fromMap.valid, JSON.stringify(fromMap.issues)).to.be.true
+    const messages = fromMap.issues.filter((i) => i.severity === 'warning').map((i) => `${i.file}: ${i.message}`)
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-verify-keyorder-'))
+    try {
+      for (const [rel, content] of map) {
+        fs.mkdirSync(path.join(dir, path.dirname(rel)), {recursive: true})
+        fs.writeFileSync(path.join(dir, rel), content)
+      }
+
+      const fromDisk = validateWorkspace(dir, {validateValues: true})
+      expect(fromDisk.valid).to.be.true
+      expect(
+        fromDisk.issues.filter((i) => i.severity === 'warning').map((i) => `${i.file}: ${i.message}`),
+      ).to.deep.equal(messages)
+    } finally {
+      fs.rmSync(dir, {force: true, recursive: true})
+    }
+
+    return messages
+  }
+
+  it('warns when an integer key is not first', () => {
+    expect(warnings('{"hiddenIorsByTenant": {"b": 2, "a": 1, "5": 0}}')).to.deep.equal([
+      'configs/tenant-map.json: map at default.rules[0].value.hiddenIorsByTenant has integer keys ("5") that aren\'t first, in ascending order. Saving from the app moves them to the front. Reorder them here to avoid a one-time diff.',
+    ])
+  })
+
+  it('does not warn when integer keys are already first', () => {
+    expect(warnings('{"hiddenIorsByTenant": {"5": 0, "b": 2, "a": 1}}')).to.deep.equal([])
+  })
+
+  it('warns when integer keys are first but not ascending', () => {
+    const result = warnings('{"hiddenIorsByTenant": {"10": 1, "5": 0, "a": 2}}')
+    expect(result).to.have.length(1)
+    expect(result[0]).to.include('("10", "5")')
+  })
+
+  it('does not warn for a map with no integer keys', () => {
+    expect(warnings('{"hiddenIorsByTenant": {"b": 2, "a": 1}}')).to.deep.equal([])
+  })
+
+  it('does not treat "007", "-1", "1.5", "5a" or 4294967295 as integer keys', () => {
+    expect(
+      warnings('{"hiddenIorsByTenant": {"b": 2, "007": 1, "-1": 0, "1.5": 3, "5a": 4, "4294967295": 5}}'),
+    ).to.deep.equal([])
+  })
+
+  it('warns on a nested map with the right path', () => {
+    expect(warnings('{"nested": {"acme": {"x": 1, "3": 2}, "7": {"1": 1}}}')).to.deep.equal([
+      'configs/tenant-map.json: map at default.rules[0].value.nested has integer keys ("7") that aren\'t first, in ascending order. Saving from the app moves them to the front. Reorder them here to avoid a one-time diff.',
+      'configs/tenant-map.json: map at default.rules[0].value.nested.acme has integer keys ("3") that aren\'t first, in ascending order. Saving from the app moves them to the front. Reorder them here to avoid a one-time diff.',
+    ])
+  })
+
+  it('never warns on an object whose keys are fixed by the schema', () => {
+    expect(warnings('{"fixed": {"b": 2, "a": 1, "5": 0}}')).to.deep.equal([])
+  })
+})
