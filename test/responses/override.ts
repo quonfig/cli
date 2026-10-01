@@ -92,6 +92,12 @@ const FLAGS: Record<string, any> = {
     },
   }),
   'feature.no-override': buildFlag({key: 'feature.no-override', valueType: 'bool'}),
+  // qfg-2agi.3: a duration-typed flag; overrides are typed from valueType.
+  'feature.timeout': buildFlag({
+    key: 'feature.timeout',
+    valueType: 'duration',
+    rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'duration', value: 'PT30S'}}],
+  }),
 }
 
 // Track stale-SHA retry behavior: first call rejects, second accepts.

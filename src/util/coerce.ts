@@ -4,15 +4,40 @@ import {ConfigValueType, durationToMilliseconds} from '@quonfig/node'
 const TRUE_VALUES = new Set(['true', '1', 't'])
 const BOOLEAN_VALUES = new Set([...TRUE_VALUES, 'false', '0', 'f'])
 
-// Strict ISO 8601 duration: at least one of D/H/M/S must be present (i.e. bare "P"
-// or "PT" alone are rejected). Mirrors the lenient pattern in @quonfig/node but
-// adds anchors and a non-empty check.
-const ISO_DURATION_PATTERN = /^P(?:\d+(?:\.\d+)?D)?(?:T(?:\d+(?:\.\d+)?H)?(?:\d+(?:\.\d+)?M)?(?:\d+(?:\.\d+)?S)?)?$/
+// The ONE duration grammar (qfg-2agi.29), shared by qfg create, set-default,
+// override and verify. Fixture of record: integration-test-data
+// tests/duration/grammar.yaml (test/util/duration-grammar.test.ts holds this
+// function to it).
+//
+//   ^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$
+//
+// plus: at least one component, no dangling T, a fraction only on S with at
+// most 9 digits, total magnitude <= P36500D. [0-9] (not \d) and the whole
+// string anchored so ports to other regex engines stay strict.
+// JS \d is already ASCII-only; [0-9] is kept so a copy into Python/.NET is safe.
+/* eslint-disable unicorn/better-regex */
+const ISO_DURATION_PATTERN =
+  /^P(?:(?<d>[0-9]+)D)?(?:T(?:(?<h>[0-9]+)H)?(?:(?<m>[0-9]+)M)?(?:(?<s>[0-9]+)(?:\.(?<f>[0-9]{1,9}))?S)?)?$/
+/* eslint-enable unicorn/better-regex */
 
-const isValidIsoDuration = (value: string): boolean => {
-  if (!ISO_DURATION_PATTERN.test(value)) return false
-  // Reject "P", "PT" — pattern allows them but they have no components.
-  return value !== 'P' && value !== 'PT'
+export const DURATION_FORMAT_HINT =
+  'Expected an ISO 8601 duration such as PT30S, PT5M, PT1H30M or P1DT6H (days, hours, minutes, seconds; a fraction only on seconds; at most P36500D).'
+
+const NANOS_PER_SECOND = 1_000_000_000n
+const MAX_DURATION_NANOS = 36_500n * 86_400n * NANOS_PER_SECOND
+
+export const isValidIsoDuration = (value: string): boolean => {
+  const match = ISO_DURATION_PATTERN.exec(value)
+  if (!match?.groups) return false
+  const {d, f, h, m, s} = match.groups
+  // At least one component; a T must be followed by at least one of H/M/S.
+  if (d === undefined && h === undefined && m === undefined && s === undefined) return false
+  if (value.includes('T') && h === undefined && m === undefined && s === undefined) return false
+  // Exact integer arithmetic: huge digit strings cannot overflow past the cap.
+  const nanos =
+    (BigInt(d ?? 0) * 86_400n + BigInt(h ?? 0) * 3600n + BigInt(m ?? 0) * 60n + BigInt(s ?? 0)) * NANOS_PER_SECOND +
+    BigInt((f ?? '').padEnd(9, '0'))
+  return nanos <= MAX_DURATION_NANOS
 }
 
 type ConfigValueWithConfigValueType = [ConfigValue, ConfigValueType]
@@ -79,9 +104,7 @@ export const coerceIntoType = (type: string, value: string): ConfigValueWithConf
       // durationToMilliseconds() returns 0 on no-match instead of throwing, so
       // we anchor-check the format ourselves before delegating.
       if (!isValidIsoDuration(value)) {
-        throw new TypeError(
-          `Invalid default value for duration: ${value}. Expected ISO 8601 duration like PT30S, PT5M, PT1H30M.`,
-        )
+        throw new TypeError(`Invalid default value for duration: ${value}. ${DURATION_FORMAT_HINT}`)
       }
 
       const millis = durationToMilliseconds(value)

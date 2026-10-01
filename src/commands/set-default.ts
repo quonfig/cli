@@ -7,6 +7,7 @@ import getConfirmation, {confirmFlag} from '../ui/get-confirmation.js'
 import getEnvironment from '../ui/get-environment.js'
 import getString from '../ui/get-string.js'
 import autocomplete from '../util/autocomplete.js'
+import {DURATION_FORMAT_HINT, isValidIsoDuration} from '../util/coerce.js'
 import {checkmark} from '../util/color.js'
 import {mapConfigValueToDto} from '../util/config-value-dto.js'
 import {makeConfidentialValue} from '../util/encryption.js'
@@ -378,6 +379,14 @@ To see all current values and rules for a flag:
           }
           case 'string': {
             variantValue = value
+
+            break
+          }
+          case 'duration': {
+            // Stored verbatim as the ISO 8601 string; no conversions (qfg-2agi.3).
+            if (!isValidIsoDuration(value)) {
+              return this.err(`Invalid value for duration: ${value}. ${DURATION_FORMAT_HINT}`)
+            }
 
             break
           }

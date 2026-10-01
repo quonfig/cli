@@ -75,6 +75,37 @@ describe('override', () => {
       })
   })
 
+  // qfg-2agi.3: on a duration flag the override is typed from the declared
+  // valueType and validated against the shared grammar. No conversions.
+  describe('duration', () => {
+    test
+      .stdout()
+      .command(['override', 'feature.timeout', 'PT90S', '--env=Development'])
+      .it('types a duration override from the flag valueType', () => {
+        expect(overrideResponses.lastFindOrCreateInput.value).to.deep.equal({type: 'duration', value: 'PT90S'})
+      })
+
+    for (const bad of ['P1DT', '30s', '42']) {
+      test
+        .stdout()
+        .command(['override', 'feature.timeout', bad, '--env=Development'])
+        .catch((error) => {
+          expect(error.message).to.contain(`Invalid value for duration: ${bad}`)
+          expect(overrideResponses.findOrCreateCallCount).to.equal(0)
+        })
+        .it(`rejects ${bad} on a duration flag without writing`, () => {
+          // Error assertion done in catch block
+        })
+    }
+
+    test
+      .stdout()
+      .command(['override', 'feature.simple', 'PT90S', '--env=Development'])
+      .it('leaves a non-duration flag on inference (PT90S stays a string)', () => {
+        expect(overrideResponses.lastFindOrCreateInput.value).to.deep.equal({type: 'string', value: 'PT90S'})
+      })
+  })
+
   describe('idempotency (acceptance #10)', () => {
     test
       .stdout()

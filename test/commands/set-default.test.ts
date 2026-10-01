@@ -416,6 +416,33 @@ describe('set-default', () => {
       })
   })
 
+  // qfg-2agi.3: set-default validates durations against the shared grammar
+  // (integration-test-data tests/duration/grammar.yaml) and never converts.
+  describe('duration', () => {
+    test
+      .stdout()
+      .command(['set-default', 'my.timeout', '--environment=Staging', '--value=PT90S', '--confirm'])
+      .it('writes a grammar-valid ISO 8601 duration as {type: duration}', (ctx) => {
+        expect(ctx.stdout).to.contain('Set Staging fallback to `PT90S`')
+        const env = configsUpdateCapture.body?.json?.config?.environments?.find((e: any) => e.id === 'Staging')
+        expect(env.rules.at(-1).value).to.deep.equal({type: 'duration', value: 'PT90S'})
+      })
+
+    for (const bad of ['P1DT', '30s', 'PT0.5H', 'P36501D']) {
+      test
+        .stderr()
+        .command(['set-default', 'my.timeout', '--environment=Staging', `--value=${bad}`, '--confirm'])
+        .catch((error) => {
+          expect(error.message).to.contain(`Invalid value for duration: ${bad}`)
+          expect(error.message).to.contain('PT30S')
+          expect(configsUpdateCapture.body).to.equal(null)
+        })
+        .it(`rejects ${bad} without writing and shows the expected format`, () => {
+          // Error assertion done in catch block
+        })
+    }
+  })
+
   describe('parsing errors', () => {
     test
       .command(['set-default', '--no-interactive'])

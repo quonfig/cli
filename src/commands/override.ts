@@ -1,6 +1,7 @@
 import {Args, Flags} from '@oclif/core'
 
 import {APICommand} from '../index.js'
+import {DURATION_FORMAT_HINT, isValidIsoDuration} from '../util/coerce.js'
 import {checkmark} from '../util/color.js'
 import {loadTokens} from '../util/token-storage.js'
 import type {JsonObj} from '../result.js'
@@ -75,6 +76,22 @@ function inferValue(raw: string): RuleValue {
   }
 
   return {type: 'string', value: raw}
+}
+
+/**
+ * Type the override from the flag's declared valueType where inference cannot
+ * (qfg-2agi.3): a duration flag gets {type: 'duration'} and the value must
+ * match the shared grammar. No conversions. Every other valueType keeps
+ * inferValue. Returns an error string for invalid input.
+ */
+function typeOverrideValue(raw: string, valueType: string | undefined): RuleValue | string {
+  if (valueType?.toLowerCase() === 'duration') {
+    return isValidIsoDuration(raw)
+      ? {type: 'duration', value: raw}
+      : `Invalid value for duration: ${raw}. ${DURATION_FORMAT_HINT}`
+  }
+
+  return inferValue(raw)
 }
 
 /**
@@ -332,10 +349,14 @@ Examples
   }
 
   private async runSet(opts: {env: string; key: string; rawValue: string; userEmail: string}): Promise<JsonObj | void> {
-    const value = inferValue(opts.rawValue)
     const flag = await this.fetchFlag(opts.key)
     if (!flag) {
       return this.err(`Flag ${opts.key} not found.`)
+    }
+
+    const value = typeOverrideValue(opts.rawValue, flag.valueType)
+    if (typeof value === 'string') {
+      return this.err(value)
     }
 
     const existing = findExistingOverride(flag, opts.env, opts.userEmail)

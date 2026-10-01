@@ -101,6 +101,15 @@ const metadataResponse = {
       name: 'Targeting Only Flag',
       description: 'A boolean flag whose Development block holds a targeting rule and NO catch-all',
     },
+    {
+      key: 'my.timeout',
+      type: 'config',
+      valueType: 'duration',
+      version: 1,
+      id: 1011,
+      name: 'Timeout',
+      description: 'A duration config (qfg-2agi.3)',
+    },
   ],
 }
 
@@ -319,6 +328,19 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
         commitSha: 'abc003',
         environments: [],
         default: {rules: [{criteria: [], value: {type: 'int', value: 42}}]},
+      },
+    })
+  }
+
+  if (key === 'my.timeout') {
+    return HttpResponse.json({
+      json: {
+        key: 'my.timeout',
+        type: 'config',
+        valueType: 'duration',
+        commitSha: 'abc006',
+        environments: [],
+        default: {rules: [{criteria: [], value: {type: 'duration', value: 'PT30S'}}]},
       },
     })
   }
