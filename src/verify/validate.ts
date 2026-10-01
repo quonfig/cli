@@ -30,6 +30,7 @@ import {z} from 'zod'
 
 import {findMapKeyOrderWarnings, navigate, type OrderedNode, scanOrderedJson} from './map-key-order.js'
 import {compileSchema, validateAgainstSchema} from './schema-validator.js'
+import {DURATION_FORMAT_HINT, isValidIsoDuration, parseDoubleValue, parseIntValue} from './value-grammar.js'
 
 // Inlined to keep this directory self-contained for the standalone bun-compile
 // build that runs as the qfg-verify pre-receive hook in app-gitea — that build
@@ -79,8 +80,34 @@ const LogLevelSchema = z.enum(LOG_LEVELS)
 
 const BoolValueSchema = z.object({type: z.literal('bool'), value: z.boolean()})
 const StringValueSchema = z.object({type: z.literal('string'), value: z.string()})
-const IntValueSchema = z.object({type: z.literal('int'), value: z.union([z.number(), z.string()])})
-const DoubleValueSchema = z.object({type: z.literal('double'), value: z.union([z.number(), z.string()])})
+// Value grammars (qfg-e87r.30): the same definitions qfg create / set-default /
+// override use (value-grammar.ts). Issues carry params.valueGrammar so the
+// reporter can add the config key (formatSchemaIssue).
+const grammarIssue = (ctx: z.RefinementCtx, message: string) =>
+  ctx.addIssue({code: 'custom', message, params: {valueGrammar: true}})
+
+const IntValueSchema = z.object({
+  type: z.literal('int'),
+  value: z.union([z.number(), z.string()]).superRefine((value, ctx) => {
+    const ok = typeof value === 'number' ? Number.isSafeInteger(value) : parseIntValue(value) !== undefined
+    if (!ok)
+      grammarIssue(
+        ctx,
+        `invalid int ${JSON.stringify(value)}. Expected a whole number (optional -, ASCII digits) within +/-(2^53-1).`,
+      )
+  }),
+})
+const DoubleValueSchema = z.object({
+  type: z.literal('double'),
+  value: z.union([z.number(), z.string()]).superRefine((value, ctx) => {
+    const ok = typeof value === 'number' ? Number.isFinite(value) : parseDoubleValue(value) !== undefined
+    if (!ok)
+      grammarIssue(
+        ctx,
+        `invalid double ${JSON.stringify(value)}. Expected a finite decimal number with an optional exponent, such as 2.5, .5 or -1.5e3.`,
+      )
+  }),
+})
 const JsonValueSchema = z.object({
   type: z.literal('json'),
   value: z.any().refine((v) => typeof v !== 'string', {
@@ -89,7 +116,13 @@ const JsonValueSchema = z.object({
   }),
 })
 const StringListValueSchema = z.object({type: z.literal('string_list'), value: z.array(z.string())})
-const DurationValueSchema = z.object({type: z.literal('duration'), value: z.string()})
+const DurationValueSchema = z.object({
+  type: z.literal('duration'),
+  value: z.string().superRefine((value, ctx) => {
+    if (!isValidIsoDuration(value))
+      grammarIssue(ctx, `invalid duration ${JSON.stringify(value)}. ${DURATION_FORMAT_HINT}`)
+  }),
+})
 const LogLevelValueSchema = z.object({type: z.literal('log_level'), value: LogLevelSchema})
 const SchemaValueSchema = z.object({
   type: z.literal('schema'),
@@ -181,6 +214,18 @@ const StoredConfigSchema = z
   .passthrough() // Allow extra fields (tags, schemaUsageMode, etc.)
 
 const SchemaDocumentSchema = z.object({}).passthrough()
+
+/**
+ * `Schema: <path> - <message>`. A value-grammar issue (duration / int /
+ * double) also names the config key, so the hook's error says which config
+ * holds the bad value, not just which file (qfg-e87r.30).
+ */
+function formatSchemaIssue(issue: z.core.$ZodIssue, parsed: unknown): string {
+  const base = `Schema: ${issue.path.join('.')} - ${issue.message}`
+  const isGrammar = issue.code === 'custom' && (issue as {params?: {valueGrammar?: boolean}}).params?.valueGrammar
+  const key = typeof parsed === 'object' && parsed !== null ? (parsed as {key?: unknown}).key : undefined
+  return isGrammar && typeof key === 'string' ? `${base} (config "${key}")` : base
+}
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -566,7 +611,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
         for (const issue of result.error.issues) {
           issues.push({
             file: relPath,
-            message: `Schema: ${issue.path.join('.')} - ${issue.message}`,
+            message: formatSchemaIssue(issue, parsed),
             severity: 'error',
           })
         }
@@ -909,7 +954,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
       for (const issue of result.error.issues) {
         issues.push({
           file: relPath,
-          message: `Schema: ${issue.path.join('.')} - ${issue.message}`,
+          message: formatSchemaIssue(issue, parsed),
           severity: 'error',
         })
       }
