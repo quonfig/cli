@@ -110,6 +110,15 @@ const metadataResponse = {
       name: 'Timeout',
       description: 'A duration config (qfg-2agi.3)',
     },
+    {
+      key: 'my.ratio',
+      type: 'config',
+      valueType: 'double',
+      version: 1,
+      id: 1012,
+      name: 'Ratio',
+      description: 'A double config (qfg-2agi.23)',
+    },
   ],
 }
 
@@ -341,6 +350,19 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
         commitSha: 'abc006',
         environments: [],
         default: {rules: [{criteria: [], value: {type: 'duration', value: 'PT30S'}}]},
+      },
+    })
+  }
+
+  if (key === 'my.ratio') {
+    return HttpResponse.json({
+      json: {
+        key: 'my.ratio',
+        type: 'config',
+        valueType: 'double',
+        commitSha: 'abc007',
+        environments: [],
+        default: {rules: [{criteria: [], value: {type: 'double', value: 0.5}}]},
       },
     })
   }

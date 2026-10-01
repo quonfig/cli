@@ -7,7 +7,7 @@ import getConfirmation, {confirmFlag} from '../ui/get-confirmation.js'
 import getEnvironment from '../ui/get-environment.js'
 import getString from '../ui/get-string.js'
 import autocomplete from '../util/autocomplete.js'
-import {DURATION_FORMAT_HINT, isValidIsoDuration} from '../util/coerce.js'
+import {DURATION_FORMAT_HINT, isValidIsoDuration, parseDoubleValue, parseIntValue} from '../util/coerce.js'
 import {checkmark} from '../util/color.js'
 import {mapConfigValueToDto} from '../util/config-value-dto.js'
 import {makeConfidentialValue} from '../util/encryption.js'
@@ -356,15 +356,19 @@ To see all current values and rules for a flag:
             break
           }
           case 'int': {
-            variantValue = Number.parseInt(value, 10)
-            if (Number.isNaN(variantValue)) {
+            // Shared strict grammar with qfg create (qfg-2agi.23).
+            variantValue = parseIntValue(value)
+            if (variantValue === undefined) {
               return this.err(`Invalid default value for int: ${value}`)
             }
 
             break
           }
           case 'double': {
-            variantValue = Number.parseFloat(value)
+            variantValue = parseDoubleValue(value)
+            if (variantValue === undefined) {
+              return this.err(`Invalid default value for double: ${value}`)
+            }
 
             break
           }

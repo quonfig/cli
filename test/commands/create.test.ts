@@ -187,6 +187,31 @@ describe('create', () => {
         // Error assertion done in catch block
       })
 
+    // qfg-2agi.23: one strict int grammar (optional '-', ASCII digits, within
+    // +/-(2^53-1) so the JSON number round-trips). BigInt() used to accept
+    // ' ' -> 0, '0x10' -> 16 and '99999999999999999999' -> 1e20.
+    for (const bad of [' ', '0x10', '99999999999999999999', '12abc', '1.5', '1e3', '+5', '9007199254740992']) {
+      test
+        .command(['create', 'brand.new.int', '--type=int', `--value=${bad}`])
+        .catch((error) => {
+          expect(error.message).to.contain(`Invalid default value for int: ${bad}`)
+          expect(createResponses.capturedCreateConfigInput).to.equal(null)
+        })
+        .it(`rejects int value ${JSON.stringify(bad)} without writing`, () => {
+          // Error assertion done in catch block
+        })
+    }
+
+    test
+      .stdout()
+      .command(['create', 'brand.new.int', '--type=int', '--value=-9007199254740991'])
+      .it('writes the most negative safe int exactly', () => {
+        expect(createResponses.capturedCreateConfigInput?.config?.defaultValue).to.deep.equal({
+          type: 'int',
+          value: -9_007_199_254_740_991,
+        })
+      })
+
     test
       .stdout()
       .command(['create', 'int.from.env', '--type=int', '--env-var=MY_INT'])
@@ -218,6 +243,30 @@ describe('create', () => {
       })
       .it('returns an error if the value is not a double', () => {
         // Error assertion done in catch block
+      })
+
+    // qfg-2agi.23: parseFloat accepted '1.5abc' -> 1.5; a double must be a
+    // whole finite decimal number.
+    for (const bad of ['1.5abc', 'NaN', 'Infinity', '-Infinity', '1e400', ' ', '0x10', '1.2.3']) {
+      test
+        .command(['create', 'brand.new.double', '--type=double', `--value=${bad}`])
+        .catch((error) => {
+          expect(error.message).to.contain(`Invalid default value for double: ${bad}`)
+          expect(createResponses.capturedCreateConfigInput).to.equal(null)
+        })
+        .it(`rejects double value ${JSON.stringify(bad)} without writing`, () => {
+          // Error assertion done in catch block
+        })
+    }
+
+    test
+      .stdout()
+      .command(['create', 'brand.new.double', '--type=double', '--value=-1.5e3'])
+      .it('accepts exponent notation', () => {
+        expect(createResponses.capturedCreateConfigInput?.config?.defaultValue).to.deep.equal({
+          type: 'double',
+          value: -1500,
+        })
       })
   })
 

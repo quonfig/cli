@@ -443,6 +443,53 @@ describe('set-default', () => {
     }
   })
 
+  // qfg-2agi.23: int and double share one strict grammar with qfg create.
+  // parseInt used to write '12abc' as 12 and '1.9' as 1; parseFloat let
+  // 'abc' through as NaN (-> null -> server 400) and '1.5abc' as 1.5.
+  describe('int and double', () => {
+    test
+      .stdout()
+      .command(['set-default', 'jeffreys.test.int', '--environment=Staging', '--value=-12', '--confirm'])
+      .it('writes a valid int as a JSON number', () => {
+        const env = configsUpdateCapture.body?.json?.config?.environments?.find((e: any) => e.id === 'Staging')
+        expect(env.rules.at(-1).value).to.deep.equal({type: 'int', value: -12})
+      })
+
+    for (const bad of ['12abc', '1.9', ' ', '0x10', '99999999999999999999', '1e3', '9007199254740992']) {
+      test
+        .stderr()
+        .command(['set-default', 'jeffreys.test.int', '--environment=Staging', `--value=${bad}`, '--confirm'])
+        .catch((error) => {
+          expect(error.message).to.contain(`Invalid default value for int: ${bad}`)
+          expect(configsUpdateCapture.body).to.equal(null)
+        })
+        .it(`rejects int ${JSON.stringify(bad)} without writing`, () => {
+          // Error assertion done in catch block
+        })
+    }
+
+    test
+      .stdout()
+      .command(['set-default', 'my.ratio', '--environment=Staging', '--value=2.5e-1', '--confirm'])
+      .it('writes a valid double as a JSON number', () => {
+        const env = configsUpdateCapture.body?.json?.config?.environments?.find((e: any) => e.id === 'Staging')
+        expect(env.rules.at(-1).value).to.deep.equal({type: 'double', value: 0.25})
+      })
+
+    for (const bad of ['abc', 'NaN', '1.5abc', 'Infinity', '1e400', ' ']) {
+      test
+        .stderr()
+        .command(['set-default', 'my.ratio', '--environment=Staging', `--value=${bad}`, '--confirm'])
+        .catch((error) => {
+          expect(error.message).to.contain(`Invalid default value for double: ${bad}`)
+          expect(configsUpdateCapture.body).to.equal(null)
+        })
+        .it(`rejects double ${JSON.stringify(bad)} without writing`, () => {
+          // Error assertion done in catch block
+        })
+    }
+  })
+
   describe('parsing errors', () => {
     test
       .command(['set-default', '--no-interactive'])

@@ -40,6 +40,29 @@ export const isValidIsoDuration = (value: string): boolean => {
   return nanos <= MAX_DURATION_NANOS
 }
 
+// The ONE int/double input grammar (qfg-2agi.23), shared by qfg create and
+// set-default. Strict whole-string matches with ASCII digits only: no
+// surrounding whitespace, no hex, no trailing junk ('12abc'), no NaN/Infinity.
+// An int must stay within +/-(2^53-1) because it is written as a JSON number
+// and anything larger silently loses precision. Returns undefined when the
+// input is not valid.
+/* eslint-disable unicorn/better-regex */
+const INT_PATTERN = /^-?[0-9]+$/
+const DOUBLE_PATTERN = /^-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$/
+/* eslint-enable unicorn/better-regex */
+
+export const parseIntValue = (value: string): number | undefined => {
+  if (!INT_PATTERN.test(value)) return undefined
+  const int = Number(value)
+  return Number.isSafeInteger(int) ? int : undefined
+}
+
+export const parseDoubleValue = (value: string): number | undefined => {
+  if (!DOUBLE_PATTERN.test(value)) return undefined
+  const double = Number(value)
+  return Number.isFinite(double) ? double : undefined
+}
+
 type ConfigValueWithConfigValueType = [ConfigValue, ConfigValueType]
 
 export const TYPE_MAPPING: Record<string, ConfigValueType> = {
@@ -60,20 +83,18 @@ export const coerceIntoType = (type: string, value: string): ConfigValueWithConf
     }
 
     case 'int': {
-      try {
-        const bigInt = BigInt(value)
-        const int = Number(bigInt)
-
-        return [{int}, TYPE_MAPPING[type]]
-      } catch {
+      const int = parseIntValue(value)
+      if (int === undefined) {
         throw new TypeError(`Invalid default value for int: ${value}`)
       }
+
+      return [{int}, TYPE_MAPPING[type]]
     }
 
     case 'double': {
-      const double = Number.parseFloat(value)
+      const double = parseDoubleValue(value)
 
-      if (Number.isNaN(double)) {
+      if (double === undefined) {
         throw new TypeError(`Invalid default value for double: ${value}`)
       }
 
