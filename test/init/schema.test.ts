@@ -42,7 +42,7 @@ describe('storedConfigJsonSchema key property (qfg-hbuy.9)', () => {
 describe('storedConfigJsonSchema duration value description (qfg-2agi.25)', () => {
   const descriptions = (
     JSON.stringify(storedConfigJsonSchema()).match(/"description":"(?:[^"\\]|\\.)*"/g) ?? []
-  ).filter((d) => /duration/i.test(d) && /ISO|Go-style/i.test(d))
+  ).filter((d) => /duration/i.test(d) && /iso|go-style/i.test(d))
 
   it('documents ISO 8601 durations and no Go-style examples', () => {
     expect(descriptions.length).to.be.greaterThan(0)
