@@ -80,7 +80,11 @@ const durationValue = {
   type: 'object' as const,
   properties: {
     type: {const: 'duration'},
-    value: {type: 'string' as const, description: 'Go-style duration (e.g. "30s", "5m", "1h30m")'},
+    value: {
+      type: 'string' as const,
+      description:
+        'ISO 8601 duration (e.g. "PT30S", "PT5M", "PT1H30M", "P1DT6H"): optional days, then T and hours/minutes/seconds; only seconds may have a fraction',
+    },
   },
   required: ['type', 'value'],
   additionalProperties: false,

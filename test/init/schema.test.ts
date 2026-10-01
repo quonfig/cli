@@ -36,3 +36,20 @@ describe('storedConfigJsonSchema key property (qfg-hbuy.9)', () => {
     expect(re.test('feature@v2')).to.equal(false)
   })
 })
+
+// qfg-2agi.25: the duration value's description must teach the ISO 8601
+// grammar the SDKs parse, not Go-style strings ("30s") that SDKs read as 0.
+describe('storedConfigJsonSchema duration value description (qfg-2agi.25)', () => {
+  const descriptions = (
+    JSON.stringify(storedConfigJsonSchema()).match(/"description":"(?:[^"\\]|\\.)*"/g) ?? []
+  ).filter((d) => /duration/i.test(d) && /ISO|Go-style/i.test(d))
+
+  it('documents ISO 8601 durations and no Go-style examples', () => {
+    expect(descriptions.length).to.be.greaterThan(0)
+    for (const d of descriptions) {
+      expect(d).to.not.match(/Go-style|\b30s\b|\b5m\b|1h30m/)
+      expect(d).to.include('PT30S')
+      expect(d).to.include('P1DT6H')
+    }
+  })
+})
