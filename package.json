@@ -94,8 +94,7 @@
     }
   },
   "scripts": {
-    "prebuild": "node scripts/generate-version.mjs",
-    "build": "shx rm -rf dist && tsc -b",
+    "build": "node scripts/generate-version.mjs && shx rm -rf dist && tsc -b",
     "lint": "eslint --cache=true \"**/*.{ts,md,json}\"",
     "lint:fix": "eslint --cache=true --fix \"**/*.{ts,md,json}\"",
     "postpack": "shx rm -f oclif.manifest.json",

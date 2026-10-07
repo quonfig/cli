@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+Recommended semver: patch.
+
+- **fix(build): `yarn build` regenerates `src/version.ts` from `package.json`.** The generator (`scripts/generate-version.mjs`) ran from a `prebuild` hook, and Yarn 4 does not run `pre*` scripts, so `yarn build` (CI and the release workflow) never refreshed the version the CLI reports; it was only right because release commits edited `src/version.ts` by hand. `build` now runs the generator itself, `prebuild` is gone, and a test asserts `src/version.ts` equals the `package.json` version. No behaviour change in 0.2.3, whose stamp is already correct. (qfg-goi1.2.18)
+
 ## 0.2.3 - 2026-10-02
 
 - **fix(verify): `qfg verify` and the pre-receive hook enforce the duration, int and double grammars.** A `duration` value was any string (`30s`, `PT-5S` and `banana` all passed), and `int`/`double` were any number or string. Every value of those types (default rules, environment rules, weighted values, variants) must now pass the same grammar `qfg create`, `set-default` and `override` use: a duration is an ISO 8601 duration (fraction on seconds only, no dangling `T`, at most `P36500D`, so `P1DT` and `PT0.5H` are rejected); an int is a whole number within +/-(2^53-1) (a JSON number or a digit string); a double is finite. The error names the value path, the bad value, the expected format and the config key. The grammar now lives in `src/verify/value-grammar.ts` (no imports, so the standalone hook build includes it) and `util/coerce.ts` re-exports it. (qfg-e87r.30)
