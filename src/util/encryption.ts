@@ -46,7 +46,9 @@ export function decrypt(encryptedString: string, keyStringHex: string): string {
   const ivBytes = forge.util.hexToBytes(ivPart)
   const tagBytes = forge.util.hexToBytes(authTagPart)
 
-  // Create decipher
+  // Create decipher. node-forge AES-GCM with the IV passed to start() below, not
+  // Node's deprecated IV-less crypto.createDecipher that this rule targets.
+  // nosemgrep: javascript.node-crypto.security.create-de-cipher-no-iv.create-de-cipher-no-iv
   const decipher = forge.cipher.createDecipher('AES-GCM', keyBytes)
   decipher.start({
     iv: ivBytes,
