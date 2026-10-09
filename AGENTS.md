@@ -45,7 +45,8 @@ When asked "this flag is done, take it out", "clean up the X feature flag",
 "retire this flag", or you spot a `readyForCleanup=true` flag, walk the
 `qfg cleanup` lifecycle rather than jumping straight to `qfg delete`. The
 CLI gathers signals (telemetry, current rules, resolved value) and hands
-the actual code-removal work to the `qfg-flag-cleanup` Claude skill —
+the actual code-removal work to the coding agent via the public Quonfig agent
+skill (`qfg agent install-skill`; its `references/retire-a-flag.md`) —
 mirroring how `qfg migrate my-code` defers to a skill.
 
 Full lifecycle:
@@ -65,7 +66,7 @@ qfg cleanup status my.flag --json
 qfg cleanup remove my.flag     # writes .qf/cleanup/<key>.json, prints skill hint
 qfg cleanup remove my.flag --force   # bypass the evals_2d>0 safety gate
 
-# 5. Invoke the qfg-flag-cleanup Claude skill — it reads the payload, asks
+# 5. Ask the agent to retire the flag with the quonfig skill — it reads the payload, asks
 #    "which branch wins?", inlines the chosen value across call sites, runs
 #    formatter + tests, and opens one PR per repo.
 
@@ -81,7 +82,8 @@ Key rules:
 
 - `cleanup list` and `cleanup status` are pure-read; safe to run any time.
 - `cleanup remove` writes a payload only — it never edits source files. The
-  qfg-flag-cleanup skill owns the code edits and opens the PR.
+  quonfig agent skill (references/retire-a-flag.md) owns the code edits and
+  opens the PR.
 - `cleanup remove` refuses if the flag had any evals in the last 2 days
   unless you pass `--force`. The 2-day window absorbs SDK flush latency.
 - `cleanup verify` uses a stricter trailing-7-day window than `remove` on

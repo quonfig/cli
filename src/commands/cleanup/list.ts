@@ -93,7 +93,8 @@ Pass --json for the structured object (rows[]). Each row carries the columns
 above plus the raw eval counts your agent can reason about itself.
 
 Once you've picked a candidate, run \`qfg cleanup status <key>\` for the
-drill-in or hand off the removal to the qfg-flag-cleanup Claude skill.`
+drill-in, or \`qfg cleanup remove <key>\` to hand the removal to your coding agent
+with the Quonfig agent skill.`
 
   static examples = ['<%= config.bin %> <%= command.id %>', '<%= config.bin %> <%= command.id %> --json']
 

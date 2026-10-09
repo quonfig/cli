@@ -435,14 +435,15 @@ DESCRIPTION
 
   The cleanup workflow turns a flag's "Ready for cleanup" marker into an end-to-end
   removal flow: surface the flags that are safe to retire, hand the actual code
-  removal to the qfg-flag-cleanup Claude skill, then delete the flag definition
-  once the call sites are gone.
+  removal to your coding agent with the Quonfig agent skill (install it with
+  `qfg agent install-skill`), then delete the flag definition once the call
+  sites are gone.
 
   Lifecycle (high-level):
   1. Owner flips readyForCleanup=true in the UI            (already exists)
   2. qfg cleanup list                                       see candidates + telemetry
   3. qfg cleanup status <key>                               drill into one flag
-  4. qfg cleanup remove <key>                               handoff to the cleanup skill
+  4. qfg cleanup remove <key>                               handoff to the agent skill
   5. PR merges, SDK redeploys, telemetry confirms 0 evals
   6. qfg cleanup verify <key>                               (optional) confirm safe
   7. qfg delete <key>                                       remove the flag definition
@@ -493,7 +494,8 @@ DESCRIPTION
   above plus the raw eval counts your agent can reason about itself.
 
   Once you've picked a candidate, run `qfg cleanup status <key>` for the
-  drill-in or hand off the removal to the qfg-flag-cleanup Claude skill.
+  drill-in, or `qfg cleanup remove <key>` to hand the removal to your coding agent
+  with the Quonfig agent skill.
 
 EXAMPLES
   $ qfg cleanup list
@@ -505,7 +507,7 @@ _See code: [src/commands/cleanup/list.ts](https://github.com/quonfig/cli/blob/v0
 
 ## `qfg cleanup remove [NAME]`
 
-Write a cleanup payload for a ready-for-cleanup flag and hand off to the qfg-flag-cleanup Claude skill.
+Write a cleanup payload for a ready-for-cleanup flag and hand off to the Quonfig agent skill.
 
 ```
 USAGE
@@ -525,14 +527,16 @@ GLOBAL FLAGS
       --verbose            Verbose output
 
 DESCRIPTION
-  Write a cleanup payload for a ready-for-cleanup flag and hand off to the qfg-flag-cleanup Claude skill.
+  Write a cleanup payload for a ready-for-cleanup flag and hand off to the Quonfig agent skill.
 
   Modeled on `qfg migrate my-code` — this command never edits source files
   itself. It validates that the flag is marked readyForCleanup=true, refuses to
   proceed if there are still evals_2d > 0 (use --force to override), writes
   `.qf/cleanup/<key>.json` describing the flag's current rule shape +
-  telemetry, and prints instructions to invoke the qfg-flag-cleanup skill which
-  asks the engineer which value should "win" and applies the inlining.
+  telemetry, and prints how to have your coding agent remove the call sites with
+  the quonfig agent skill (its references/retire-a-flag.md), which asks the
+  engineer which value should "win" and applies the inlining. Install the skill
+  with `qfg agent install-skill` or `claude plugin install quonfig@quonfig`.
 
   The payload deliberately does NOT suggest a winning value; that's the
   engineer's call. Run `qfg cleanup status <key>` first if you want to inspect
@@ -572,13 +576,13 @@ DESCRIPTION
   Drill into one ready-for-cleanup flag — show telemetry across all environments and the current rule shape.
 
   Use this after `qfg cleanup list` to inspect a specific flag before handing
-  removal off to the qfg-flag-cleanup Claude skill. The eval counts come from
+  removal off to the Quonfig agent skill. The eval counts come from
   analytics.configSparklines (the same backing data the per-flag sparklines on
   the flag detail page use), summed into 24h/2d/7d/30d windows so you can decide
   whether it's safe to retire.
 
   Pass --json for the structured object including the full rule shape per
-  environment — the cleanup skill consumes this directly.
+  environment — the agent skill consumes this directly.
 
 EXAMPLES
   $ qfg cleanup status my.flag.key

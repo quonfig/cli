@@ -5,14 +5,15 @@ export default class Cleanup extends BaseCommand {
 
 The cleanup workflow turns a flag's "Ready for cleanup" marker into an end-to-end
 removal flow: surface the flags that are safe to retire, hand the actual code
-removal to the qfg-flag-cleanup Claude skill, then delete the flag definition
-once the call sites are gone.
+removal to your coding agent with the Quonfig agent skill (install it with
+\`qfg agent install-skill\`), then delete the flag definition once the call
+sites are gone.
 
 Lifecycle (high-level):
   1. Owner flips readyForCleanup=true in the UI            (already exists)
   2. qfg cleanup list                                       see candidates + telemetry
   3. qfg cleanup status <key>                               drill into one flag
-  4. qfg cleanup remove <key>                               handoff to the cleanup skill
+  4. qfg cleanup remove <key>                               handoff to the agent skill
   5. PR merges, SDK redeploys, telemetry confirms 0 evals
   6. qfg cleanup verify <key>                               (optional) confirm safe
   7. qfg delete <key>                                       remove the flag definition`

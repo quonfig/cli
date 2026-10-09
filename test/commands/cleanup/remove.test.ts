@@ -91,7 +91,9 @@ describe('cleanup remove', () => {
       expect(payload.grepPatterns).to.be.an('array').that.is.not.empty
       expect(payload.grepPatterns).to.include('isFeatureEnabled')
       expect(payload.grepPatterns).to.include('get')
-      expect(payload.skill).to.equal('qfg-flag-cleanup')
+      // The public Quonfig agent skill (qfg agent install-skill), not the
+      // internal qfg-flag-cleanup skill customers never had.
+      expect(payload.skill).to.equal('quonfig')
       expect(payload.forced).to.equal(false)
     })
 
@@ -114,8 +116,15 @@ describe('cleanup remove', () => {
   test
     .stdout()
     .command(['cleanup remove', quietFlagKey])
-    .it('prints next-step instructions referencing the qfg-flag-cleanup skill and the payload path', (ctx) => {
-      expect(ctx.stdout).to.contain('qfg-flag-cleanup')
+    .it('prints next-step instructions referencing the quonfig agent skill and the payload path', (ctx) => {
+      // Customers have the public quonfig skill (its references/retire-a-flag.md
+      // covers this workflow), not the internal /qfg-flag-cleanup skill.
+      expect(ctx.stdout).not.to.contain('qfg-flag-cleanup')
+      expect(ctx.stdout).to.contain('quonfig agent skill')
+      expect(ctx.stdout).to.contain('references/retire-a-flag.md')
+      // How to get the skill if the repo does not have it yet.
+      expect(ctx.stdout).to.contain('qfg agent install-skill')
+      expect(ctx.stdout).to.contain('claude plugin install quonfig@quonfig')
       expect(ctx.stdout).to.contain('.qf/cleanup')
       expect(ctx.stdout).to.contain(quietFlagKey)
     })
@@ -153,7 +162,7 @@ describe('cleanup remove', () => {
     .command(['cleanup remove', quietFlagKey, '--json'])
     .it('--json output mirrors the on-disk payload', (ctx) => {
       const json = JSON.parse(ctx.stdout)
-      expect(json.skill).to.equal('qfg-flag-cleanup')
+      expect(json.skill).to.equal('quonfig')
       expect(json.payloadPath).to.match(/\.qf\/cleanup\/.+\.json$/)
       expect(json.key).to.equal(quietFlagKey)
     })

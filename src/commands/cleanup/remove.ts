@@ -2,12 +2,16 @@ import {Flags} from '@oclif/core'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import {SKILL_NAME} from '../../agent/skill-bundle.generated.js'
 import {APICommand} from '../../index.js'
 import {JsonObj} from '../../result.js'
 import {getAppUrl} from '../../util/domain-urls.js'
 import nameArg from '../../util/name-arg.js'
 
-const SKILL_NAME = 'qfg-flag-cleanup'
+// The public Quonfig agent skill (github.com/quonfig/skills, installed with
+// `qfg agent install-skill` or the Claude Code plugin). Its
+// references/retire-a-flag.md is the code-removal half of this workflow.
+const SKILL_REFERENCE = 'references/retire-a-flag.md'
 const GITIGNORE_ENTRY = '.qf/cleanup/'
 
 // SDK client method names worth grepping for in the customer's codebase.
@@ -186,14 +190,16 @@ function ensureGitignoreEntry(cwd: string): void {
 export default class CleanupRemove extends APICommand {
   static args = {...nameArg}
 
-  static description = `Write a cleanup payload for a ready-for-cleanup flag and hand off to the qfg-flag-cleanup Claude skill.
+  static description = `Write a cleanup payload for a ready-for-cleanup flag and hand off to the Quonfig agent skill.
 
 Modeled on \`qfg migrate my-code\` — this command never edits source files
 itself. It validates that the flag is marked readyForCleanup=true, refuses to
 proceed if there are still evals_2d > 0 (use --force to override), writes
 \`.qf/cleanup/<key>.json\` describing the flag's current rule shape +
-telemetry, and prints instructions to invoke the qfg-flag-cleanup skill which
-asks the engineer which value should "win" and applies the inlining.
+telemetry, and prints how to have your coding agent remove the call sites with
+the quonfig agent skill (its references/retire-a-flag.md), which asks the
+engineer which value should "win" and applies the inlining. Install the skill
+with \`qfg agent install-skill\` or \`claude plugin install quonfig@quonfig\`.
 
 The payload deliberately does NOT suggest a winning value; that's the
 engineer's call. Run \`qfg cleanup status <key>\` first if you want to inspect
@@ -291,9 +297,14 @@ telemetry before retiring.`
     this.log(`Payload:      ${relPayloadPath}`)
     this.log(`Evals (2d):   ${totals.evals_2d}${payload.forced ? ' (--force overrode the safety gate)' : ''}`)
     this.log('')
-    this.log(`To remove this flag's call sites, invoke Claude with the ${SKILL_NAME} skill:`)
+    this.log(`To remove this flag's call sites, ask your coding agent to retire it with the quonfig agent skill`)
+    this.log(`(${SKILL_REFERENCE} covers this workflow), e.g. in Claude Code:`)
     this.log('')
-    this.log(`  claude "/${SKILL_NAME} ${key}"`)
+    this.log(`  claude "Retire the Quonfig flag ${key} using ${relPayloadPath}"`)
+    this.log('')
+    this.log(`No quonfig skill in this repo yet? Install it first:`)
+    this.log(`  qfg agent install-skill                    # writes .claude/skills/quonfig/`)
+    this.log(`  # or: claude plugin marketplace add quonfig/skills && claude plugin install quonfig@quonfig`)
     this.log('')
     this.log(`The skill will:`)
     this.log(`  1. Read ${relPayloadPath}`)

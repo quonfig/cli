@@ -87,13 +87,13 @@ export default class CleanupStatus extends APICommand {
   static description = `Drill into one ready-for-cleanup flag — show telemetry across all environments and the current rule shape.
 
 Use this after \`qfg cleanup list\` to inspect a specific flag before handing
-removal off to the qfg-flag-cleanup Claude skill. The eval counts come from
+removal off to the Quonfig agent skill. The eval counts come from
 analytics.configSparklines (the same backing data the per-flag sparklines on
 the flag detail page use), summed into 24h/2d/7d/30d windows so you can decide
 whether it's safe to retire.
 
 Pass --json for the structured object including the full rule shape per
-environment — the cleanup skill consumes this directly.`
+environment — the agent skill consumes this directly.`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.flag.key',
