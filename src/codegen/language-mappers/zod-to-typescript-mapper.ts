@@ -41,9 +41,11 @@ export class ZodToTypescriptMapper extends ZodBaseMapper {
 
   function(args: string, returns: string) {
     // When in raw mode, we return a string type for functions,
-    // as this is what comes back from the server directly
+    // as this is what comes back from the server directly. Optionality is
+    // carried by the optional() wrapper (`?` on a field), never by the
+    // template itself (qfg-v7s8).
     if (this.target === 'raw') {
-      return 'string | undefined'
+      return 'string'
     }
 
     return `(...params: ${args}) => ${returns}`

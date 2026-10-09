@@ -136,7 +136,7 @@ describe('NodeTypeScriptGenerator', () => {
       // prettier-ignore
       declare module "@quonfig/node" {
         export interface NodeServerConfigurationRaw {
-          "config1": string | undefined
+          "config1": string
         }
 
         export interface NodeServerConfigurationAccessor {

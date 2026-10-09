@@ -294,7 +294,7 @@ describe('ZodToTypescriptMapper', () => {
 
         const rendered = mapper.renderField(zodAst.schema!)
 
-        expect(rendered).to.equal('"someKey": string | undefined')
+        expect(rendered).to.equal('"someKey": string')
       })
 
       it('Can successfully complex combinations of types', () => {
@@ -321,8 +321,23 @@ describe('ZodToTypescriptMapper', () => {
 
         // NOTE: isActive now correctly unwraps the default to get the inner boolean type
         expect(rendered).to.equal(
-          '"someKey": { "name": string; "age": number; "topLevel": string | undefined; "more": { "details": string; "count": number; "exec": string | undefined }; "tags"?: Array<string>; "isActive": boolean }',
+          '"someKey": { "name": string; "age": number; "topLevel": string; "more": { "details": string; "count": number; "exec": string }; "tags"?: Array<string>; "isActive": boolean }',
         )
+      })
+    })
+
+    describe('raw mustache strings: required vs optional (qfg-v7s8)', () => {
+      it('types a required template field as string and an optional one with ?', () => {
+        const zodAst = secureEvaluateSchema(`
+          z.object({
+            instructions: z.function({input: z.tuple([z.object({plan: z.string()})]), output: z.string()}),
+            hint: z.function({input: z.tuple([z.object({plan: z.string()})]), output: z.string()}).optional(),
+          })
+        `)
+
+        const mapper = new ZodToTypescriptMapper({fieldName: 'someKey', target: 'raw'})
+
+        expect(mapper.renderField(zodAst.schema!)).to.equal('"someKey": { "instructions": string; "hint"?: string }')
       })
     })
 

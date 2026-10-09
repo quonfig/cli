@@ -173,7 +173,7 @@ describe('ReactTypeScriptGenerator', () => {
       // prettier-ignore
       declare module "@quonfig/javascript" {
         export interface FrontEndConfigurationRaw {
-          "config1": string | undefined
+          "config1": string
         }
 
         // Force TypedFrontEndConfigurationRaw to always use our merged interface
