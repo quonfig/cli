@@ -1,4 +1,5 @@
 import {expect} from 'chai'
+import * as ts from 'typescript'
 import {z} from 'zod'
 
 import {jsonSchemaToZod} from '../../src/codegen/json-schema-to-zod.js'
@@ -8,6 +9,22 @@ import * as introspect from '../../src/codegen/zod-introspection.js'
 import {jevQuestionsSchema} from './fixtures/jev-questions-schema.js'
 
 const toTs = (schema: z.ZodTypeAny) => new ZodToTypescriptMapper().resolveType(schema)
+
+/** Type-checks `source` in memory and returns its diagnostics. */
+const typeErrors = (source: string): string[] => {
+  const fileName = 'generated.ts'
+  const options: ts.CompilerOptions = {noEmit: true, strict: true, types: []}
+  const host = ts.createCompilerHost(options)
+  const original = host.getSourceFile
+  host.getSourceFile = (name, languageVersion, ...rest) =>
+    name === fileName
+      ? ts.createSourceFile(fileName, source, languageVersion)
+      : original.call(host, name, languageVersion, ...rest)
+  const program = ts.createProgram([fileName], options, host)
+  return [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
+    .filter((d) => d.file?.fileName === fileName)
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
+}
 
 describe('jsonSchemaToZod', () => {
   it('converts object schemas with enums and literals', () => {
@@ -218,6 +235,165 @@ describe('jsonSchemaToZod', () => {
       expect(rendered).to.match(
         /"criteria"\?: { (\/\*\* [^*]+ \*\/ )?"true"\?: string; (\/\*\* [^*]+ \*\/ )?"false"\?: string }/,
       )
+    })
+  })
+
+  describe('$ref / $defs (qfg-o5rp)', () => {
+    const address = {
+      type: 'object',
+      required: ['street'],
+      properties: {street: {type: 'string'}, zip: {type: 'string'}},
+    }
+
+    it('resolves a local #/$defs ref', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        required: ['home'],
+        properties: {home: {$ref: '#/$defs/address'}, work: {$ref: '#/$defs/address'}},
+        $defs: {address},
+      })
+
+      expect(toTs(schema)).to.equal(
+        '{ "home": { "street": string; "zip"?: string }; "work"?: { "street": string; "zip"?: string } }',
+      )
+    })
+
+    it('resolves a draft-07 #/definitions ref, in array items too', () => {
+      const schema = jsonSchemaToZod({
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'array',
+        items: {$ref: '#/definitions/address'},
+        definitions: {address},
+      })
+
+      expect(toTs(schema)).to.equal('Array<{ "street": string; "zip"?: string }>')
+    })
+
+    it('follows a ref to a ref, and decodes ~0 / ~1 / percent escapes in the pointer', () => {
+      const schema = jsonSchemaToZod({
+        $ref: '#/$defs/alias',
+        $defs: {alias: {$ref: '#/$defs/a~1b~0c%20d'}, 'a/b~c d': {type: 'integer'}},
+      })
+
+      expect(toTs(schema)).to.equal('number')
+    })
+
+    it('keeps the referencing schema title/description as the field comment', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        properties: {home: {$ref: '#/$defs/address', description: 'Where they live'}},
+        $defs: {address: {...address, description: 'A postal address'}},
+      })
+
+      const home = (schema as z.ZodObject).shape.home as z.ZodTypeAny
+      expect(introspect.getMetaDescription((home as z.ZodOptional<z.ZodTypeAny>).unwrap())).to.equal('Where they live')
+    })
+
+    it('sees through $ref branches to build a discriminatedUnion', () => {
+      const schema = jsonSchemaToZod({
+        oneOf: [{$ref: '#/$defs/cat'}, {$ref: '#/$defs/dog'}],
+        $defs: {
+          cat: {type: 'object', required: ['kind'], properties: {kind: {const: 'cat'}, lives: {type: 'integer'}}},
+          dog: {type: 'object', required: ['kind'], properties: {kind: {const: 'dog'}, good: {type: 'boolean'}}},
+        },
+      })
+
+      expect(schema).to.be.instanceOf(z.ZodDiscriminatedUnion)
+      expect(toTs(schema)).to.equal('{ "kind": "cat"; "lives"?: number } | { "kind": "dog"; "good"?: boolean }')
+    })
+
+    it('types a self-referencing $defs entry as unknown at the point it recurses, with a comment', () => {
+      const schema = jsonSchemaToZod({
+        $ref: '#/$defs/node',
+        $defs: {
+          node: {
+            type: 'object',
+            required: ['value'],
+            properties: {value: {type: 'number'}, children: {type: 'array', items: {$ref: '#/$defs/node'}}},
+          },
+        },
+      })
+
+      expect(toTs(schema)).to.equal('{ "value": number; "children"?: Array<unknown> }')
+      const children = (schema as z.ZodObject).shape.children as z.ZodTypeAny
+      const item = ((children as z.ZodOptional<z.ZodTypeAny>).unwrap() as z.ZodArray).element as z.ZodTypeAny
+      expect(introspect.isUnknown(item)).to.equal(true)
+      expect(introspect.getMetaDescription(item)).to.contain('#/$defs/node')
+    })
+
+    it('types a ref back to the root (#) as unknown', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        properties: {name: {type: 'string'}, parent: {$ref: '#'}},
+      })
+
+      expect(toTs(schema)).to.equal(
+        '{ "name"?: string; /** Recursive $ref #, typed unknown at this depth. */ "parent"?: unknown }',
+      )
+    })
+
+    it('handles mutual recursion between two $defs', () => {
+      const schema = jsonSchemaToZod({
+        $ref: '#/$defs/a',
+        $defs: {
+          a: {type: 'object', properties: {b: {$ref: '#/$defs/b'}}},
+          b: {type: 'object', properties: {a: {$ref: '#/$defs/a'}}},
+        },
+      })
+
+      expect(toTs(schema)).to.equal(
+        '{ "b"?: { /** Recursive $ref #/$defs/a, typed unknown at this depth. */ "a"?: unknown } }',
+      )
+    })
+
+    it('does not fetch a remote $ref: it is typed unknown with a comment naming it', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        properties: {geo: {$ref: 'https://example.com/schemas/geo.json'}},
+      })
+
+      expect(toTs(schema)).to.match(
+        /^{ \/\*\* [^*]*https:\/\/example\.com\/schemas\/geo\.json[^*]* \*\/ "geo"\?: unknown }$/,
+      )
+    })
+
+    it('cannot close the generated comment early with a ref containing */', () => {
+      const schema = jsonSchemaToZod({type: 'object', properties: {x: {$ref: 'https://e.com/a*/b'}}})
+
+      expect(toTs(schema)).to.contain('a*\\/b')
+      expect(typeErrors(`type T = ${toTs(schema)}\nexport const v: T = {}\n`)).to.deep.equal([])
+    })
+
+    it('types a local $ref whose target is missing as unknown with a comment', () => {
+      const schema = jsonSchemaToZod({type: 'object', properties: {x: {$ref: '#/$defs/missing'}}})
+
+      const x = ((schema as z.ZodObject).shape.x as z.ZodOptional<z.ZodTypeAny>).unwrap()
+      expect(introspect.isUnknown(x)).to.equal(true)
+      expect(introspect.getMetaDescription(x)).to.contain('#/$defs/missing')
+    })
+
+    it('generates TypeScript that compiles for refs, recursion and remote refs', () => {
+      const schema = jsonSchemaToZod({
+        type: 'object',
+        required: ['home', 'tree'],
+        properties: {
+          home: {$ref: '#/$defs/address'},
+          tree: {$ref: '#/$defs/node'},
+          geo: {$ref: 'https://example.com/geo.json'},
+        },
+        $defs: {
+          address,
+          node: {type: 'object', properties: {children: {type: 'array', items: {$ref: '#/$defs/node'}}}},
+        },
+      })
+
+      const source = `type Generated = ${toTs(schema)}
+const value: Generated = {home: {street: 'Main'}, tree: {children: [{children: []}]}, geo: 1}
+export {value}
+`
+      expect(typeErrors(source)).to.deep.equal([])
+      // Not vacuous: the resolved ref really requires street.
+      expect(typeErrors(source.replace("{street: 'Main'}", '{}'))).to.have.length.greaterThan(0)
     })
   })
 })

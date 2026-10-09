@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-Recommended semver: patch.
+Recommended semver: minor (qfg-o5rp is a backward-compatible feature).
 
 - **fix(build): `yarn build` regenerates `src/version.ts` from `package.json`.** The generator (`scripts/generate-version.mjs`) ran from a `prebuild` hook, and Yarn 4 does not run `pre*` scripts, so `yarn build` (CI and the release workflow) never refreshed the version the CLI reports; it was only right because release commits edited `src/version.ts` by hand. `build` now runs the generator itself, `prebuild` is gone, and a test asserts `src/version.ts` equals the `package.json` version. No behaviour change in 0.2.3, whose stamp is already correct. (qfg-goi1.2.18)
 
 - **fix(verify): a duplicate-items violation names the rows by their 1-based number, matching the app.** A schema with `uniqueItems: true` reported Ajv's wording, `must NOT have duplicate items (items ## 3 and 1 are identical)`: 0-based, later item first, with a stray `##`. `qfg verify`, `qfg push` and the other commands that validate a workspace, plus the Quonfig Git server's pre-receive hook, now say `must NOT have duplicate items (items 2 and 4 are identical)`, the same text the Quonfig app shows. `src/verify/schema-error-reshape.ts` is re-copied from app-quonfig (it also gains the `duplicateItemIndexes` export) and the shared `schema-error-reshape.cases.json` fixture gains the `tags` case. The hook picks this up when the Quonfig Git server is rebuilt from this repository. (qfg-e87r.22)
 
 - **fix(generate): a required Mustache template is typed `string` in the Raw interface.** In `NodeServerConfigurationRaw` and `FrontEndConfigurationRaw`, every templated string was typed `string | undefined`, even when the schema lists it in `required` or it is a whole config's value; the Accessor interface already typed it as a required function. It is now `string`. An optional templated field keeps its `?` (`"hint"?: string`). Regenerating narrows these types; code that handled `undefined` still compiles. In the Jev demo this changes one line: `questions.urgent.instructions`. (qfg-v7s8)
+
+- **feat(generate): JSON Schema `$ref` is resolved within the schema (minor: generated types change).** `qfg generate` ignored `$ref`, so a property such as `{"$ref": "#/$defs/address"}` generated an empty object type (`{  }`). A local ref is now followed: a JSON pointer into the same schema document, such as `#/$defs/address` (draft 2020-12), `#/definitions/address` (draft-07), or `#` for the whole schema, including a ref to a ref. A `oneOf`/`anyOf` whose branches are refs is a discriminated union when the branches it points at have a tag. A `title`, `description` or `default` next to the `$ref` overrides the target's. A recursive schema (a tree node whose `children` refer back to the node) is expanded until the ref repeats, and that occurrence is typed `unknown`, with the comment `Recursive $ref #/$defs/node, typed unknown at this depth.`: the generated types are written inline, with no named type aliases a recursive type could refer to. Nothing is fetched: a remote or relative ref (`https://...`, `other.json`), an anchor (`#name`) and a pointer to nothing are typed `unknown`, with a comment that names the ref. **Regenerating can surface compile errors** where code relied on the loose `{  }` type a ref used to produce. (qfg-o5rp)
 
 ## 0.2.3 - 2026-10-02
 

@@ -24,6 +24,103 @@ function applyMeta(schema: z.ZodTypeAny, meta: Record<string, unknown> | undefin
   return meta ? schema.meta(meta) : schema
 }
 
+/**
+ * `$ref` resolution (qfg-o5rp). Only refs local to the schema document are followed: a JSON pointer
+ * after `#` (`#/$defs/x`, `#/definitions/x`, or `#` for the root). Nothing is fetched; a remote or
+ * relative ref, an anchor (`#name`) and a pointer to nothing are typed `unknown`, with a comment.
+ *
+ * The generators print every type inline (no named type aliases), so a recursive schema cannot be
+ * written out as a `z.lazy()`: every mapper would walk it forever. Recursion stops instead at the
+ * point a ref is reached again while it is still being resolved, and that occurrence is `unknown`.
+ * `resolving` is the stack of pointers being expanded on the current path, so a ref used twice side
+ * by side (not nested) is expanded both times.
+ */
+interface RefContext {
+  resolving: string[]
+  root: unknown
+}
+
+function unresolvedRef(reason: string): z.ZodTypeAny {
+  // The reason becomes a /** */ comment in generated code; a ref containing `*/` must not end it.
+  return z.unknown().meta({description: reason.replaceAll('*/', '*\\/')})
+}
+
+function decodePointerToken(token: string): string {
+  return token.replaceAll('~1', '/').replaceAll('~0', '~')
+}
+
+/** The schema a local ref points at, or undefined when the ref is not local or its target is missing. */
+function lookupLocalRef(ref: string, root: unknown): {found: false} | {found: true; schema: unknown} {
+  if (!ref.startsWith('#')) {
+    return {found: false}
+  }
+
+  let pointer: string
+  try {
+    pointer = decodeURIComponent(ref.slice(1))
+  } catch {
+    return {found: false}
+  }
+
+  if (pointer === '') {
+    return {found: true, schema: root}
+  }
+
+  if (!pointer.startsWith('/')) {
+    return {found: false}
+  }
+
+  let current: unknown = root
+  for (const token of pointer
+    .slice(1)
+    .split('/')
+    .map((part) => decodePointerToken(part))) {
+    if (Array.isArray(current) && /^(0|[1-9]\d*)$/.test(token) && Number(token) < current.length) {
+      current = current[Number(token)]
+    } else if (isObject(current) && Object.hasOwn(current, token)) {
+      current = current[token]
+    } else {
+      return {found: false}
+    }
+  }
+
+  return {found: true, schema: current}
+}
+
+function schemaFromRef(ref: string, ctx: RefContext): z.ZodTypeAny {
+  if (!ref.startsWith('#')) {
+    return unresolvedRef(`$ref ${ref} is not local to this schema and is not fetched, so it is typed unknown.`)
+  }
+
+  if (ctx.resolving.includes(ref)) {
+    return unresolvedRef(`Recursive $ref ${ref}, typed unknown at this depth.`)
+  }
+
+  const target = lookupLocalRef(ref, ctx.root)
+  if (!target.found) {
+    return unresolvedRef(`$ref ${ref} does not point at a schema in this document, so it is typed unknown.`)
+  }
+
+  return schemaToZod(target.schema, {...ctx, resolving: [...ctx.resolving, ref]})
+}
+
+/** Follows a chain of local `$ref`s to the JSON schema it ends at (for reading a branch's shape). */
+function followLocalRefs(schema: unknown, ctx: RefContext): unknown {
+  let current = schema
+  const seen = new Set<string>()
+  while (isObject(current) && typeof current.$ref === 'string' && !seen.has(current.$ref)) {
+    seen.add(current.$ref)
+    const target = lookupLocalRef(current.$ref, ctx.root)
+    if (!target.found) {
+      return current
+    }
+
+    current = target.schema
+  }
+
+  return current
+}
+
 function literalFromEnum(values: unknown[]): z.ZodTypeAny {
   if (values.length === 0) {
     return z.never()
@@ -41,7 +138,7 @@ function literalFromEnum(values: unknown[]): z.ZodTypeAny {
   return z.union(literals as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
 }
 
-function schemaFromTypeArray(schema: JsonSchemaObject, types: unknown[]): z.ZodTypeAny {
+function schemaFromTypeArray(schema: JsonSchemaObject, types: unknown[], ctx: RefContext): z.ZodTypeAny {
   const nonNullTypes = types.filter((item) => item !== 'null')
   const includesNull = nonNullTypes.length !== types.length
 
@@ -50,17 +147,17 @@ function schemaFromTypeArray(schema: JsonSchemaObject, types: unknown[]): z.ZodT
   }
 
   if (nonNullTypes.length === 1) {
-    const resolved = schemaToZod({...schema, type: nonNullTypes[0]})
+    const resolved = schemaToZod({...schema, type: nonNullTypes[0]}, ctx)
     return includesNull ? resolved.nullable() : resolved
   }
 
   const resolved = z.union(
-    nonNullTypes.map((type) => schemaToZod({...schema, type})) as [z.ZodTypeAny, ...z.ZodTypeAny[]],
+    nonNullTypes.map((type) => schemaToZod({...schema, type}, ctx)) as [z.ZodTypeAny, ...z.ZodTypeAny[]],
   )
   return includesNull ? resolved.nullable() : resolved
 }
 
-function schemaFromObject(schema: JsonSchemaObject): z.ZodTypeAny {
+function schemaFromObject(schema: JsonSchemaObject, ctx: RefContext): z.ZodTypeAny {
   const properties = isObject(schema.properties) ? schema.properties : {}
   const required = new Set<string>(
     Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === 'string') : [],
@@ -68,7 +165,7 @@ function schemaFromObject(schema: JsonSchemaObject): z.ZodTypeAny {
   const shape: Record<string, z.ZodTypeAny> = {}
 
   for (const [key, value] of Object.entries(properties)) {
-    const propertySchema = schemaToZod(value)
+    const propertySchema = schemaToZod(value, ctx)
     shape[key] = required.has(key) ? propertySchema : propertySchema.optional()
   }
 
@@ -79,7 +176,7 @@ function schemaFromObject(schema: JsonSchemaObject): z.ZodTypeAny {
   }
 
   if (isObject(schema.additionalProperties) && Object.keys(properties).length === 0) {
-    return z.record(z.string(), schemaToZod(schema.additionalProperties))
+    return z.record(z.string(), schemaToZod(schema.additionalProperties, ctx))
   }
 
   return base
@@ -154,18 +251,19 @@ function findUnionTag(branches: unknown[]): string | undefined {
   return candidates.length === 1 ? candidates[0] : undefined
 }
 
-function schemaFromUnion(branches: unknown[]): z.ZodTypeAny {
+function schemaFromUnion(branches: unknown[], ctx: RefContext): z.ZodTypeAny {
   if (branches.length === 0) {
     return z.never()
   }
 
-  const options = branches.map((item) => schemaToZod(item))
+  const options = branches.map((item) => schemaToZod(item, ctx))
 
   if (options.length === 1) {
     return options[0]
   }
 
-  const tag = findUnionTag(branches)
+  // Tag detection reads the branch JSON, so look through a `$ref` branch to the schema it names.
+  const tag = findUnionTag(branches.map((branch) => followLocalRefs(branch, ctx)))
 
   // discriminatedUnion needs every option to be a plain object schema (no default/other wrapper)
   if (tag && options.every((option) => option instanceof z.ZodObject)) {
@@ -202,11 +300,11 @@ function hasStructuralBranch(branches: unknown[]): boolean {
  * oneOf/anyOf, checked before `type` so a union next to `type: "object"` (or no type) isn't lost.
  * Sibling `properties` are kept as an intersection with the union.
  */
-function schemaFromCombinator(schema: JsonSchemaObject, branches: unknown[]): z.ZodTypeAny {
-  const union = schemaFromUnion(branches)
+function schemaFromCombinator(schema: JsonSchemaObject, branches: unknown[], ctx: RefContext): z.ZodTypeAny {
+  const union = schemaFromUnion(branches, ctx)
   // schemaFromObject reads only properties/required/additionalProperties, so the combinator isn't re-entered
   if (isObject(schema.properties) && Object.keys(schema.properties).length > 0) {
-    return z.intersection(schemaFromObject(schema), union)
+    return z.intersection(schemaFromObject(schema, ctx), union)
   }
 
   return union
@@ -214,13 +312,13 @@ function schemaFromCombinator(schema: JsonSchemaObject, branches: unknown[]): z.
 
 const MAX_TUPLE_MIN_ITEMS = 8
 
-function schemaFromArray(schema: JsonSchemaObject): z.ZodTypeAny {
+function schemaFromArray(schema: JsonSchemaObject, ctx: RefContext): z.ZodTypeAny {
   if (Array.isArray(schema.prefixItems)) {
-    const items = schema.prefixItems.map((item) => schemaToZod(item))
+    const items = schema.prefixItems.map((item) => schemaToZod(item, ctx))
     return z.tuple(items as [z.ZodTypeAny, ...z.ZodTypeAny[]])
   }
 
-  const item = schema.items === undefined ? z.any() : schemaToZod(schema.items)
+  const item = schema.items === undefined ? z.any() : schemaToZod(schema.items, ctx)
   const {maxItems, minItems} = schema
 
   // `minItems: n` with no upper bound is a tuple of n items plus a rest: [T, T, ...T[]].
@@ -239,7 +337,7 @@ function schemaFromArray(schema: JsonSchemaObject): z.ZodTypeAny {
   return z.array(item)
 }
 
-function schemaToZod(schema: unknown): z.ZodTypeAny {
+function schemaToZod(schema: unknown, ctx: RefContext): z.ZodTypeAny {
   if (!isObject(schema)) {
     return z.any()
   }
@@ -248,16 +346,19 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
 
   let result: z.ZodTypeAny
 
-  if (Array.isArray(schema.enum)) {
+  if (typeof schema.$ref === 'string') {
+    // The referencing schema's own title/description/default (applied below) win over the target's.
+    result = schemaFromRef(schema.$ref, ctx)
+  } else if (Array.isArray(schema.enum)) {
     result = literalFromEnum(schema.enum)
   } else if (schema.const !== undefined) {
     result = z.literal(schema.const as string | number | boolean | null)
   } else if (Array.isArray(schema.oneOf) && hasStructuralBranch(schema.oneOf)) {
-    result = schemaFromCombinator(schema, schema.oneOf)
+    result = schemaFromCombinator(schema, schema.oneOf, ctx)
   } else if (Array.isArray(schema.anyOf) && hasStructuralBranch(schema.anyOf)) {
-    result = schemaFromCombinator(schema, schema.anyOf)
+    result = schemaFromCombinator(schema, schema.anyOf, ctx)
   } else if (Array.isArray(schema.type)) {
-    result = schemaFromTypeArray(schema, schema.type)
+    result = schemaFromTypeArray(schema, schema.type, ctx)
   } else {
     switch (schema.type) {
       case 'string': {
@@ -286,14 +387,14 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
       }
 
       case 'array': {
-        result = schemaFromArray(schema)
+        result = schemaFromArray(schema, ctx)
         break
       }
 
       case 'object':
       case undefined: {
         if (schema.properties || schema.additionalProperties !== undefined || schema.required) {
-          result = schemaFromObject(schema)
+          result = schemaFromObject(schema, ctx)
         } else {
           result = z.object({})
         }
@@ -302,7 +403,7 @@ function schemaToZod(schema: unknown): z.ZodTypeAny {
 
       default: {
         if (Array.isArray(schema.allOf) && schema.allOf.length === 1) {
-          result = schemaToZod(schema.allOf[0])
+          result = schemaToZod(schema.allOf[0], ctx)
           break
         }
 
@@ -349,5 +450,6 @@ export function isLegacySchemaWrapper(schema: unknown): boolean {
 }
 
 export function jsonSchemaToZod(schema: unknown): z.ZodTypeAny {
-  return schemaToZod(schema)
+  // The document root is pointer '#'; it is "being resolved" from the start, so `$ref: "#"` is recursion.
+  return schemaToZod(schema, {resolving: ['#'], root: schema})
 }
