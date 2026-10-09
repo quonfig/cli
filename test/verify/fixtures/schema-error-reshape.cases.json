@@ -74,6 +74,16 @@
     },
     "untagged": {
       "oneOf": [{"type": "string"}, {"type": "integer"}]
+    },
+    "tags": {
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
     }
   },
   "cases": [
@@ -186,6 +196,17 @@
         {"path": "", "message": "must be string"},
         {"path": "", "message": "must be integer"},
         {"path": "", "message": "must match exactly one schema in oneOf"}
+      ]
+    },
+    {
+      "name": "duplicate items name rows by their 1-based number, lower first",
+      "schema": "tags",
+      "value": {"tags": ["x", "low", "y", "low"]},
+      "violations": [
+        {
+          "path": "tags",
+          "message": "must NOT have duplicate items (items 2 and 4 are identical)"
+        }
       ]
     }
   ]

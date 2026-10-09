@@ -234,6 +234,28 @@ export function reshapeOneOfErrors<E extends SchemaErrorLike>(
   return result
 }
 
+/**
+ * `uniqueItems` wording. Ajv says `(items ## 3 and 1 are identical)`:
+ * 0-based, later item first, with a stray `##`. Lists are numbered from 1
+ * everywhere the user reads them, so name the pair by row number, lower
+ * first: `(items 2 and 4 are identical)`.
+ */
+function duplicateItemsMessage(first: number, second: number): string {
+  const [a, b] = [first, second].sort((x, y) => x - y)
+  return `must NOT have duplicate items (items ${a + 1} and ${b + 1} are identical)`
+}
+
+const DUPLICATE_ITEMS_MESSAGE = /^must NOT have duplicate items \(items (\d+) and (\d+) are identical\)$/
+
+/**
+ * The two 0-based indexes a duplicate-items violation names, lower first,
+ * or undefined for any other message. Lets a caller mark both rows.
+ */
+export function duplicateItemIndexes(message: string): [number, number] | undefined {
+  const match = DUPLICATE_ITEMS_MESSAGE.exec(message)
+  return match ? [Number(match[1]) - 1, Number(match[2]) - 1] : undefined
+}
+
 function stringifyAllowed(entry: unknown): string {
   return typeof entry === 'string' ? entry : JSON.stringify(entry)
 }
@@ -250,6 +272,10 @@ export function describeSchemaError(error: SchemaErrorLike): string | undefined 
     case 'enum':
       return Array.isArray(params.allowedValues)
         ? `${message}: ${params.allowedValues.map(stringifyAllowed).join(', ')}`
+        : message
+    case 'uniqueItems':
+      return typeof params.i === 'number' && typeof params.j === 'number'
+        ? duplicateItemsMessage(params.i, params.j)
         : message
     case 'propertyNames':
       // The nested keyword error (which carries `propertyName`) says why.

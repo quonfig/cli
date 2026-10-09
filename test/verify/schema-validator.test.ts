@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {schemaErrorsToViolations} from '../../src/verify/schema-error-reshape.js'
+import {duplicateItemIndexes, schemaErrorsToViolations} from '../../src/verify/schema-error-reshape.js'
 import {validateAgainstSchema} from '../../src/verify/schema-validator.js'
 
 /**
@@ -67,5 +67,11 @@ describe('verify schema validator (qfg-phcv)', () => {
 
   it('schemaErrorsToViolations never returns an empty list', () => {
     expect(schemaErrorsToViolations([], {}, {})).to.deep.equal([{message: 'does not match the schema', path: ''}])
+  })
+
+  it('duplicateItemIndexes reads the 0-based pair back from the duplicate-items message (qfg-e87r.14)', () => {
+    expect(duplicateItemIndexes('must NOT have duplicate items (items 2 and 4 are identical)')).to.deep.equal([1, 3])
+    expect(duplicateItemIndexes('must NOT have duplicate items (items ## 3 and 1 are identical)')).to.equal(undefined)
+    expect(duplicateItemIndexes('must be string')).to.equal(undefined)
   })
 })
