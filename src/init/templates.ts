@@ -6,6 +6,18 @@
  * hand-edit them.
  */
 
+import {SKILL_FILES} from '../agent/skill-bundle.generated.js'
+
+/**
+ * The qfg-vs-MCP steering and "setting a value keeps targeting" rules are
+ * shared with the Quonfig agent skill (github.com/quonfig/skills,
+ * references/writes.md). The skill is the single source; the cli vendors it
+ * at build time (scripts/sync-agent-skill.mjs) and AGENTS.md embeds it here.
+ */
+const SHARED_WRITES_SECTION = SKILL_FILES.find((f) => f.path === 'references/writes.md')!
+  .content.trim()
+  .replaceAll(/^## /gm, '### ')
+
 const MANAGED_HEADER = '<!-- Managed by `qfg init` — do not edit manually. Run `qfg init` to update. -->'
 
 // ── README.md ──────────────────────────────────────────────────────────
@@ -203,48 +215,19 @@ This is a Quonfig workspace repository. See \`CLAUDE.md\` for the complete schem
 5. Files must be in the correct directory for their \`type\`.
 6. See \`CLAUDE.md\` for the full list of value types, operators, and constraints.
 
-## \`qfg\` or the Quonfig MCP?
+## Hosted workspaces: \`qfg\`, the MCP, and how writes behave
 
 Only relevant if this workspace is *also* hosted on a Quonfig account. On the
 fully-local path, editing the JSON in this repo is the whole story.
 
-- **This repo is checked out and you have a shell** -> use \`qfg\`. The files are
-  already on disk, so reading them costs nothing.
-- **Slack, claude.ai, or anywhere without a checkout** -> use the Quonfig MCP
-  server. It reads and writes the hosted workspace directly. Do not try to shell
-  out to \`qfg\` from a surface that has no repo.
+${SHARED_WRITES_SECTION}
 
-Both surfaces cover the same everyday loop — create a flag or config, change what
-an environment serves, set a log level. (\`qfg\` has all of it today; the MCP's
-create/config/log-level verbs land with its v2 write surface.)
+## Application repos
 
-## Setting a value KEEPS that environment's targeting rules
-
-Both surfaces write the same way, so learn it once:
-
-\`qfg set-default\` (alias \`toggle\`), \`qfg set-rollout\`, and the MCP
-\`set_flag\`/\`set_config\` verbs replace exactly ONE rule — the environment's
-**fallback**, the unconditional rule at the end of its rule list that decides
-what users receive when no targeting rule matches. Every targeting rule above
-it is kept, and both surfaces report how many. An environment with no rules of
-its own has them copied from default first, so inherited targeting is kept too.
-
-| Surface | By default | To set the value for EVERYONE |
-|---------|------------|-------------------------------|
-| \`qfg set-default\` / \`qfg set-rollout\` | Keeps targeting; reports "Kept N targeting rule(s)" | add \`--replace-targeting\` |
-| MCP \`set_flag\` / \`set_config\` | Keeps targeting; reports the kept count in its result | send \`replaceTargeting: true\` |
-
-Setting the value for everyone DELETES that environment's targeting rules. They
-stay in git history, and the write returns a \`previousCommitSha\` to restore from.
-
-**Still read before you write.** \`qfg info <key>\` (or MCP \`get_flag\`) shows the
-rules your value is about to sit next to. For anything a fallback cannot express —
-multi-rule targeting, reordering, editing one targeting rule — edit the JSON
-directly or use MCP \`set_document\`.
-
-\`qfg log-level --target ...\` and MCP \`set_log_level\` are **surgical** in the same
-way: they upsert the level for the loggers you name and leave every other rule in
-place.
+This file covers the workspace (config) repo. In an application repo that
+*reads* these flags through a Quonfig SDK, install the Quonfig agent skill:
+\`qfg agent install-skill\` (or \`claude plugin install quonfig@quonfig\`).
+It covers SDK setup, creating and rolling out flags, and the MCP tools.
 `
 }
 
