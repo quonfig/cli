@@ -1,8 +1,6 @@
 # Changelog
 
-## Unreleased
-
-Recommended semver: minor (new commands and a backward-compatible codegen feature, qfg-o5rp; no breaking changes).
+## 0.3.0 - 2026-10-09
 
 - **feat(contexts): `qfg contexts search CONTEXT_TYPE QUERY` finds a context's key from a name.** Targeting rules should match a customer or user by its key (`organization.key`, `user.key`), not a slug or email, and there was no way to look a key up from the CLI. `qfg contexts search organization formhealth` searches the contexts your SDKs have reported through telemetry, matching the query against each context's key and properties, and prints a KEY / NAME / EMAIL table of the matches, most recently seen first (`--environment` narrows to one environment, `--limit` caps the matches at 1-100, default 20, and `--json` prints `{contexts: [{key, name, email?}]}`, where `name` is the context's own `name` property or null and `email` appears only when the context reported one). Only telemetry-reported contexts are searchable, so an empty result says the key is unknown rather than suggesting a slug. Only the key, `name` and `email` come back, never the context's other properties, and a missing name is left blank rather than filled in from another property. `qfg set-default --help` and the `qfg config-schema` criterion reference now say to target by key and point at the new command. Needs the Quonfig app's `contexts.searchKeys` endpoint (app-quonfig 56ae2cf). (qfg-dpzk.2)
 
