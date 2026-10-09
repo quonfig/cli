@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-Recommended semver: minor (qfg-o5rp is a backward-compatible feature).
+Recommended semver: minor (new commands and a backward-compatible codegen feature, qfg-o5rp; no breaking changes).
+
+- **feat(contexts): `qfg contexts search CONTEXT_TYPE QUERY` finds a context's key from a name.** Targeting rules should match a customer or user by its key (`organization.key`, `user.key`), not a slug or email, and there was no way to look a key up from the CLI. `qfg contexts search organization formhealth` searches the contexts your SDKs have reported through telemetry, matching the query against each context's key and properties, and prints the key and display name of each match, most recently seen first (`--environment` narrows to one environment, `--limit` caps the matches at 1-100, default 20, and `--json` prints `{contexts: [{key, name}]}`). Only telemetry-reported contexts are searchable, so an empty result says the key is unknown rather than suggesting a slug. Only the key and display name come back, never the context's other properties. `qfg set-default --help` and the `qfg config-schema` criterion reference now say to target by key and point at the new command. Needs the Quonfig app's `contexts.searchKeys` endpoint (app-quonfig 56ae2cf). (qfg-dpzk.2)
 
 - **fix(build): `yarn build` regenerates `src/version.ts` from `package.json`.** The generator (`scripts/generate-version.mjs`) ran from a `prebuild` hook, and Yarn 4 does not run `pre*` scripts, so `yarn build` (CI and the release workflow) never refreshed the version the CLI reports; it was only right because release commits edited `src/version.ts` by hand. `build` now runs the generator itself, `prebuild` is gone, and a test asserts `src/version.ts` equals the `package.json` version. No behaviour change in 0.2.3, whose stamp is already correct. (qfg-goi1.2.18)
 

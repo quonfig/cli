@@ -132,6 +132,8 @@ script doesn't need to know which env it's running in.
 * [`qfg cleanup status [NAME]`](#qfg-cleanup-status-name)
 * [`qfg cleanup verify [NAME]`](#qfg-cleanup-verify-name)
 * [`qfg config-schema`](#qfg-config-schema)
+* [`qfg contexts`](#qfg-contexts)
+* [`qfg contexts search CONTEXTTYPE QUERY`](#qfg-contexts-search-contexttype-query)
 * [`qfg create NAME`](#qfg-create-name)
 * [`qfg delete NAME`](#qfg-delete-name)
 * [`qfg flag info [NAME]`](#qfg-flag-info-name)
@@ -614,6 +616,78 @@ EXAMPLES
 ```
 
 _See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.2.3/src/commands/config-schema.ts)_
+
+## `qfg contexts`
+
+Look up contexts (organizations, users, ...) your SDKs have reported, to target them by key.
+
+```
+USAGE
+  $ qfg contexts [--json] [--interactive] [--no-color] [--verbose]
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Look up contexts (organizations, users, ...) your SDKs have reported, to target them by key.
+
+EXAMPLES
+  $ qfg contexts search organization formhealth
+```
+
+_See code: [src/commands/contexts.ts](https://github.com/quonfig/cli/blob/v0.2.3/src/commands/contexts.ts)_
+
+## `qfg contexts search CONTEXTTYPE QUERY`
+
+Find a context's key from a name, to target it in a rule.
+
+```
+USAGE
+  $ qfg contexts search CONTEXTTYPE QUERY [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+    [--environment <value>] [--limit <value>]
+
+ARGUMENTS
+  CONTEXTTYPE  Context type to search, e.g. organization or user (the part before ".key" in a rule)
+  QUERY        Case-insensitive text matched against each context key and its reported properties (e.g. a name)
+
+FLAGS
+  --environment=<value>  Only contexts reported from this environment (default: every environment)
+  --limit=<value>        [default: 20] Maximum number of matches (1-100)
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  Find a context's key from a name, to target it in a rule.
+
+  Targeting rules should match a context by its KEY (<contextType>.key, e.g.
+  organization.key or user.key), not by a slug, email or name. This searches the
+  contexts your SDKs have reported through telemetry, matching the query against
+  each context's key and properties, and prints the key and display name of each
+  match, most recently seen first.
+
+  Only contexts your SDKs have reported are searchable. If nothing matches, the key
+  is unknown: get it from whoever owns that customer rather than targeting a slug
+  or email instead.
+
+  Pass a key as the query to see its display name.
+
+EXAMPLES
+  $ qfg contexts search organization formhealth
+
+  $ qfg contexts search user barry@example.com --environment production
+
+  $ qfg contexts search organization formhealth --json
+```
+
+_See code: [src/commands/contexts/search.ts](https://github.com/quonfig/cli/blob/v0.2.3/src/commands/contexts/search.ts)_
 
 ## `qfg create NAME`
 
@@ -1959,6 +2033,10 @@ DESCRIPTION
   To see all current values and rules for a flag:
   qfg info my.flag
 
+  To target specific organizations or users, write rules on their KEY
+  (organization.key, user.key), not a slug or email; find a key from a name with:
+  qfg contexts search organization formhealth
+
 ALIASES
   $ qfg toggle
 
@@ -2157,6 +2235,10 @@ DESCRIPTION
 
   To see all current values and rules for a flag:
   qfg info my.flag
+
+  To target specific organizations or users, write rules on their KEY
+  (organization.key, user.key), not a slug or email; find a key from a name with:
+  qfg contexts search organization formhealth
 
 ALIASES
   $ qfg toggle

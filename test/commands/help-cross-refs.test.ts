@@ -15,3 +15,15 @@ describe('--help cross-refs to qfg cleanup (qfg-olm2.2)', () => {
     expect(REFERENCE).to.match(/qfg cleanup/)
   })
 })
+
+describe('--help steers targeting at <contextType>.key (qfg-dpzk.2)', () => {
+  it('config-schema reference says to target by key and names qfg contexts search', () => {
+    expect(REFERENCE).to.match(/organization\.key/)
+    expect(REFERENCE).to.match(/qfg contexts search/)
+  })
+
+  it('set-default description points at qfg contexts search for targeting', async () => {
+    const {default: SetDefault} = await import('../../src/commands/set-default.js')
+    expect(SetDefault.description ?? '').to.match(/qfg contexts search/)
+  })
+})

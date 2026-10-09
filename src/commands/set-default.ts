@@ -51,7 +51,11 @@ To set a percentage rollout (gradual rollout / A/B test / canary deploy) instead
   qfg set-rollout my.flag --environment production --true-percent 20
 
 To see all current values and rules for a flag:
-  qfg info my.flag`
+  qfg info my.flag
+
+To target specific organizations or users, write rules on their KEY
+(organization.key, user.key), not a slug or email; find a key from a name with:
+  qfg contexts search organization formhealth`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.flag.name                                          # prompts for value and env',

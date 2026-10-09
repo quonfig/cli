@@ -92,6 +92,9 @@ CRITERION FIELDS
 Each criterion object has:
   operator        (required) — see operator table below
   propertyName    (required for PROP_* operators) — user property, e.g. "user.key", "user.plan"
+                  To target specific customers or users, match on the context KEY
+                  ("organization.key", "user.key"), not a slug, email or name.
+                  Find a key from a name with: qfg contexts search organization <name>
   valueToMatch    (required for all except ALWAYS_TRUE / IS_PRESENT / IS_NOT_PRESENT) — typed value to compare against
 
 ────────────────────────────────────────────────────────────
