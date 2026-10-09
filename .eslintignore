@@ -14,3 +14,5 @@ test/migrate/fixtures/**/raw/
 # fires on big numeric IDs but JSON disallows the separator, so the rule would
 # auto-fix to invalid JSON.
 test/migrate/fixtures/**/expected/
+# Vendored from github.com/quonfig/skills by scripts/sync-agent-skill.mjs; --check compares bytes.
+src/agent/skill-bundle.generated.ts

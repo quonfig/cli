@@ -125,6 +125,7 @@ script doesn't need to know which env it's running in.
 * [`qfg activity feed`](#qfg-activity-feed)
 * [`qfg activity history [NAME]`](#qfg-activity-history-name)
 * [`qfg activity restore [NAME]`](#qfg-activity-restore-name)
+* [`qfg agent install-skill`](#qfg-agent-install-skill)
 * [`qfg audit-log [NAME]`](#qfg-audit-log-name)
 * [`qfg cleanup`](#qfg-cleanup)
 * [`qfg cleanup list`](#qfg-cleanup-list)
@@ -341,6 +342,51 @@ EXAMPLES
 ```
 
 _See code: [src/commands/activity/restore.ts](https://github.com/quonfig/cli/blob/v0.2.3/src/commands/activity/restore.ts)_
+
+## `qfg agent install-skill`
+
+Install the Quonfig agent skill into this repo so coding agents use Quonfig correctly.
+
+```
+USAGE
+  $ qfg agent install-skill [--json] [--interactive] [--no-color] [--verbose] [--add-pointer] [--dir <value>] [--force]
+
+FLAGS
+  --add-pointer  Also append a one-line pointer to the skill in ./AGENTS.md (created if missing)
+  --dir=<value>  [default: .claude/skills] Skills directory to install into, relative to the current directory
+  --force        Overwrite skill files you have edited locally
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Install the Quonfig agent skill into this repo so coding agents use Quonfig correctly.
+
+  Writes .claude/skills/quonfig/ (SKILL.md + references/) — the same files as
+  `claude plugin install quonfig@quonfig` from github.com/quonfig/skills, embedded
+  in this qfg build (no network). Claude Code picks the skill up automatically;
+  for Codex, Cursor and other agents that read AGENTS.md, add --add-pointer.
+
+  Safe to re-run: files still as qfg wrote them are upgraded in place, files you
+  edited are left alone (the command fails and lists them) unless you pass --force.
+
+  This skill is for APPLICATION repos (SDK + qfg + MCP usage). A workspace repo
+  created by `qfg init` has its own AGENTS.md/CLAUDE.md for editing config JSON.
+
+EXAMPLES
+  $ qfg agent install-skill
+
+  $ qfg agent install-skill --add-pointer
+
+  $ qfg agent install-skill --dir .agents/skills
+
+  $ qfg agent install-skill --force
+```
+
+_See code: [src/commands/agent/install-skill.ts](https://github.com/quonfig/cli/blob/v0.2.3/src/commands/agent/install-skill.ts)_
 
 ## `qfg audit-log [NAME]`
 
