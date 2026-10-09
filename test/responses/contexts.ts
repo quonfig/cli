@@ -6,14 +6,17 @@ import {getApiBase} from '../test-domain-helper.js'
 /**
  * Mock responses for `qfg contexts search` (qfg-dpzk.2).
  *
- * The server's contexts.searchKeys procedure returns `{contexts: [{key, name}]}`
- * (the same shape as public GET /v1/contexts); the oRPC HTTP transport wraps it
- * in `{json: ...}`.
+ * The server's contexts.searchKeys procedure returns
+ * `{contexts: [{key, name, email?}]}` (the same shape as public GET
+ * /v1/contexts): `name` is the context's own name property or null, and
+ * `email` is present only when the context has one. The oRPC HTTP transport
+ * wraps it in `{json: ...}`.
  */
 
 export const CONTEXT_MATCHES = [
-  {key: 'org_formhealth', name: 'Form Health'},
-  {key: 'org_formhealth_eu', name: null},
+  {email: 'ops@formhealth.example', key: 'org_formhealth', name: 'Form Health'},
+  {email: 'eu@formhealth.example', key: 'org_formhealth_eu', name: null},
+  {key: 'org_formhealth_bare', name: null},
 ]
 
 /** Queries the mock answers with an empty result. */

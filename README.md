@@ -716,14 +716,17 @@ DESCRIPTION
   Targeting rules should match a context by its KEY (<contextType>.key, e.g.
   organization.key or user.key), not by a slug, email or name. This searches the
   contexts your SDKs have reported through telemetry, matching the query against
-  each context's key and properties, and prints the key and display name of each
-  match, most recently seen first.
+  each context's key and properties, and prints each match's key, its name and
+  its email (blank when the context reported none), most recently seen first.
 
   Only contexts your SDKs have reported are searchable. If nothing matches, the key
   is unknown: get it from whoever owns that customer rather than targeting a slug
   or email instead.
 
-  Pass a key as the query to see its display name.
+  Pass a key as the query to see its name and email.
+
+  --json prints {contexts: [{key, name, email?}]}: name is null when the context
+  reported no name, and email is present only when it reported one.
 
 EXAMPLES
   $ qfg contexts search organization formhealth

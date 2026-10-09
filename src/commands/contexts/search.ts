@@ -4,7 +4,13 @@ import type {JsonObj} from '../../result.js'
 
 import {APICommand} from '../../index.js'
 
+/**
+ * One match from contexts.searchKeys: the key, the context's own `name`
+ * property (null when it reported none) and its `email` property, present
+ * only when the context reported one. Nothing else comes back.
+ */
 interface ContextMatch {
+  email?: string
   key: string
   name: null | string
 }
@@ -26,14 +32,17 @@ export default class ContextsSearch extends APICommand {
 Targeting rules should match a context by its KEY (<contextType>.key, e.g.
 organization.key or user.key), not by a slug, email or name. This searches the
 contexts your SDKs have reported through telemetry, matching the query against
-each context's key and properties, and prints the key and display name of each
-match, most recently seen first.
+each context's key and properties, and prints each match's key, its name and
+its email (blank when the context reported none), most recently seen first.
 
 Only contexts your SDKs have reported are searchable. If nothing matches, the key
 is unknown: get it from whoever owns that customer rather than targeting a slug
 or email instead.
 
-Pass a key as the query to see its display name.`
+Pass a key as the query to see its name and email.
+
+--json prints {contexts: [{key, name, email?}]}: name is null when the context
+reported no name, and email is present only when it reported one.`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> organization formhealth',
@@ -82,10 +91,13 @@ Pass a key as the query to see its display name.`
       return {contexts: []}
     }
 
-    const width = Math.max(...contexts.map((c) => c.key.length), 3)
-    const lines = [`${'KEY'.padEnd(width)}  NAME`]
+    const keyWidth = Math.max(...contexts.map((c) => c.key.length), 'KEY'.length)
+    const nameWidth = Math.max(...contexts.map((c) => (c.name ?? '').length), 'NAME'.length)
+    const row = (key: string, name: string, email: string) =>
+      `${key.padEnd(keyWidth)}  ${name.padEnd(nameWidth)}  ${email}`.trimEnd()
+    const lines = [row('KEY', 'NAME', 'EMAIL')]
     for (const context of contexts) {
-      lines.push(`${context.key.padEnd(width)}  ${context.name ?? '(no name reported)'}`)
+      lines.push(row(context.key, context.name ?? '', context.email ?? ''))
     }
 
     lines.push('', `Target these in a rule with propertyName "${args.contextType}.key".`)

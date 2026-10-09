@@ -25,13 +25,31 @@ describe('contexts search (qfg-dpzk.2)', () => {
   test
     .stdout()
     .command(['contexts search', 'organization', 'formhealth'])
-    .it('prints each match as key + display name and the targeting property', (ctx) => {
+    .it('prints each match key and name and the targeting property', (ctx) => {
       expect(ctx.stdout).to.contain('org_formhealth')
       expect(ctx.stdout).to.contain('Form Health')
-      // A match with no display name still prints its key.
+      // A match with no name still prints its key.
       expect(ctx.stdout).to.contain('org_formhealth_eu')
       // Tells the user what to put in the rule.
       expect(ctx.stdout).to.contain('organization.key')
+    })
+
+  test
+    .stdout()
+    .command(['contexts search', 'organization', 'formhealth'])
+    .it('prints a KEY / NAME / EMAIL table, leaving a missing name or email blank', (ctx) => {
+      const lines = ctx.stdout.split('\n')
+      const header = lines.find((line) => line.startsWith('KEY'))
+      expect(header).to.match(/^KEY\s+NAME\s+EMAIL$/)
+      const row = (key: string) => lines.find((line) => line.startsWith(`${key} `) || line === key)
+      expect(row('org_formhealth')).to.match(/^org_formhealth\s+Form Health\s+ops@formhealth\.example$/)
+      // No name: the NAME column is blank, the email still lines up under EMAIL.
+      const eu = row('org_formhealth_eu')!
+      expect(eu).to.match(/^org_formhealth_eu\s+eu@formhealth\.example$/)
+      expect(eu.indexOf('eu@formhealth.example')).to.equal(header!.indexOf('EMAIL'))
+      // Neither: just the key, nothing invented from other properties.
+      expect(row('org_formhealth_bare')).to.equal('org_formhealth_bare')
+      expect(ctx.stdout).not.to.contain('no name reported')
     })
 
   test
@@ -51,9 +69,11 @@ describe('contexts search (qfg-dpzk.2)', () => {
   test
     .stdout()
     .command(['contexts search', 'organization', 'formhealth', '--json'])
-    .it('passes the server response through with --json', (ctx) => {
+    .it('passes the {key, name, email?} shape through with --json', (ctx) => {
       const payload = JSON.parse(ctx.stdout)
       expect(payload.contexts).to.deep.equal(CONTEXT_MATCHES)
+      // email stays absent (not null, not "") when the server omitted it.
+      expect(payload.contexts[2]).not.to.have.property('email')
     })
 
   test
