@@ -1,5 +1,23 @@
+# Dependabot version updates (SOC 2 SSDLC, qfg-66ko.3). Weekly; minor and
+# patch bumps are grouped into one PR per ecosystem, majors are ignored for
+# npm (see below). Security updates are enabled in the repo settings and are
+# not grouped here.
 version: 2
 updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'saturday'
+    labels:
+      - 'dependencies'
+    commit-message:
+      # no release for CI-only changes
+      prefix: chore(ci)
+    groups:
+      github-actions-minor-patch:
+        update-types: ['minor', 'patch']
+
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
@@ -16,6 +34,9 @@ updates:
       prefix: fix(deps)
       # no release for dev-deps
       prefix-development: chore(dev-deps)
+    groups:
+      npm-minor-patch:
+        update-types: ['minor', 'patch']
     ignore:
       - dependency-name: '@salesforce/dev-scripts'
       - dependency-name: '*'
