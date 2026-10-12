@@ -115,18 +115,18 @@ OPERATOR REFERENCE
   PROP_LESS_THAN_OR_EQUAL          int or double
   PROP_GREATER_THAN                int or double
   PROP_GREATER_THAN_OR_EQUAL       int or double
-  PROP_SEMVER_LESS_THAN            string               semver comparison; valueToMatch is a semver string like "4.0.9"
-  PROP_SEMVER_EQUAL                string               semver comparison; valueToMatch is a semver string like "4.0.9"
-  PROP_SEMVER_GREATER_THAN         string               semver comparison; valueToMatch is a semver string like "4.0.9"
-  PROP_BEFORE                      string (ISO 8601)    date/time comparison
-  PROP_AFTER                       string (ISO 8601)
+  PROP_SEMVER_LESS_THAN            string               semver comparison; SemVer 2.0 like "4.0.9" or "1.0.0-beta.1"; "4" / "4.1" read as 4.0.0 / 4.1.0; no "v"
+  PROP_SEMVER_EQUAL                string               semver comparison; same version grammar
+  PROP_SEMVER_GREATER_THAN         string               semver comparison; same version grammar
+  PROP_BEFORE                      int or string        epoch ms (int) or RFC3339 with Z/offset, e.g. "2025-01-01T00:00:00Z"; no date-only
+  PROP_AFTER                       int or string        same timestamp grammar
   PROP_MATCHES                     string               regex match
   PROP_DOES_NOT_MATCH              string
   IS_PRESENT                       (none)               propertyName is set on the evaluation context (no valueToMatch)
   IS_NOT_PRESENT                   (none)               propertyName is missing from the evaluation context (no valueToMatch)
   IN_SEG                           string               value = segment key (no propertyName needed)
   NOT_IN_SEG                       string               value = segment key (no propertyName needed)
-  IN_INT_RANGE                     int_range            value = {min, max}
+  IN_INT_RANGE                     int_range            value = {"start": 0, "end": 10}; [start, end); omit a bound for unbounded
   LOOKUP_KEY_IN                    string_list          matches if SDK lookup key is in the list
   LOOKUP_KEY_NOT_IN                string_list
 

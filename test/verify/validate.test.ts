@@ -1791,3 +1791,132 @@ describe('integer map key order warning (qfg-e87r.21)', () => {
     expect(warnings('{"fixed": {"b": 2, "a": 1, "5": 0}}')).to.deep.equal([])
   })
 })
+
+describe('operator value shapes (qfg-goi1.5.9)', () => {
+  function flagWith(criterion: Record<string, unknown>): Map<string, string> {
+    const flag = {
+      key: 'gated-feature',
+      type: 'feature_flag',
+      valueType: 'bool',
+      default: {
+        rules: [
+          {criteria: [criterion], value: {type: 'bool', value: true}},
+          {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+        ],
+      },
+      environments: [],
+      variants: [],
+    }
+    return new Map<string, string>([['feature-flags/gated-feature.json', JSON.stringify(flag)]])
+  }
+
+  const accepts = (criterion: Record<string, unknown>) => {
+    const result = validateFileMap(flagWith(criterion))
+    expect(result.valid, JSON.stringify(result.issues)).to.be.true
+  }
+
+  const rejects = (criterion: Record<string, unknown>, fragment: string) => {
+    const result = validateFileMap(flagWith(criterion))
+    expect(result.valid, `expected rejection for ${JSON.stringify(criterion)}`).to.be.false
+    const hit = result.issues.some((i) => i.severity === 'error' && i.message.includes(fragment))
+    expect(hit, JSON.stringify(result.issues)).to.be.true
+  }
+
+  describe('PROP_BEFORE / PROP_AFTER date grammar', () => {
+    const date = (operator: string, valueToMatch: unknown) => ({operator, propertyName: 'user.created', valueToMatch})
+
+    it('accepts an int epoch-ms number (what the app UI writes)', () => {
+      accepts(date('PROP_AFTER', {type: 'int', value: 1_793_454_660_000}))
+    })
+
+    it('accepts an int stored as an all-digit string (Reforge-migrated prod form)', () => {
+      accepts(date('PROP_AFTER', {type: 'int', value: '1772625600000'}))
+    })
+
+    it('accepts a double epoch-ms number', () => {
+      accepts(date('PROP_BEFORE', {type: 'double', value: 1_730_419_200_000}))
+    })
+
+    it('accepts RFC3339 strings with Z, a numeric offset, or fractional seconds', () => {
+      accepts(date('PROP_BEFORE', {type: 'string', value: '2050-01-01T00:00:00Z'}))
+      accepts(date('PROP_BEFORE', {type: 'string', value: '2024-11-01T02:00:00+02:00'}))
+      accepts(date('PROP_BEFORE', {type: 'string', value: '2024-11-01T00:00:00.123Z'}))
+    })
+
+    it('accepts an all-digit string', () => {
+      accepts(date('PROP_AFTER', {type: 'string', value: '1730419200000'}))
+    })
+
+    for (const bad of ['2024-01-01', '2024-01-01T00:00:00', 'Jan 1 2020', '2024-01-01 00:00:00Z', 'soon', '']) {
+      it(`rejects the string ${JSON.stringify(bad)}`, () => {
+        rejects(date('PROP_BEFORE', {type: 'string', value: bad}), 'PROP_BEFORE')
+      })
+    }
+
+    it('rejects an impossible calendar date', () => {
+      rejects(date('PROP_BEFORE', {type: 'string', value: '2024-13-45T00:00:00Z'}), 'PROP_BEFORE')
+    })
+
+    it('rejects non-scalar value types', () => {
+      rejects(date('PROP_AFTER', {type: 'string_list', value: ['2050-01-01T00:00:00Z']}), 'PROP_AFTER')
+      rejects(date('PROP_AFTER', {type: 'bool', value: true}), 'PROP_AFTER')
+    })
+  })
+
+  describe('IN_INT_RANGE shape', () => {
+    const range = (value: unknown, type = 'int_range') => ({
+      operator: 'IN_INT_RANGE',
+      propertyName: 'user.age',
+      valueToMatch: {type, value},
+    })
+
+    it('accepts {start, end}, {start} and {end} with integers', () => {
+      accepts(range({start: 0, end: 10}))
+      accepts(range({start: 0}))
+      accepts(range({end: 10}))
+    })
+
+    it('accepts integer bounds stored as digit strings (proto int64 JSON form)', () => {
+      accepts(range({start: '1772625600000', end: '1772712000000'}))
+    })
+
+    it('rejects {min, max}, which no SDK reads', () => {
+      rejects(range({min: 0, max: 10}), 'IN_INT_RANGE')
+    })
+
+    it('rejects an empty object, unknown keys and non-integer bounds', () => {
+      rejects(range({}), 'IN_INT_RANGE')
+      rejects(range({start: 0, extra: 1}), 'IN_INT_RANGE')
+      rejects(range({start: 1.5}), 'IN_INT_RANGE')
+      rejects(range({start: 'soon'}), 'IN_INT_RANGE')
+    })
+
+    it('rejects a value that is not an int_range', () => {
+      rejects(range(5, 'int'), 'IN_INT_RANGE')
+    })
+  })
+
+  describe('PROP_SEMVER_* version grammar', () => {
+    const semver = (value: unknown, type = 'string') => ({
+      operator: 'PROP_SEMVER_GREATER_THAN',
+      propertyName: 'device.appVersion',
+      valueToMatch: {type, value},
+    })
+
+    for (const good of ['4.0.18', '1.0.0-beta.1', '1.0.0+build.5', '1.0.0-rc.1+sha.abc', '2', '2.0']) {
+      it(`accepts ${JSON.stringify(good)}`, () => {
+        accepts(semver(good))
+      })
+    }
+
+    for (const bad of ['v2.0.0', '1.2.3.4', '01.2.3', '1.2.3-', 'latest', '']) {
+      it(`rejects ${JSON.stringify(bad)}`, () => {
+        rejects(semver(bad), 'PROP_SEMVER_GREATER_THAN')
+      })
+    }
+
+    it('rejects a list value', () => {
+      rejects(semver(['1.0.0'], 'string_list'), 'PROP_SEMVER_GREATER_THAN')
+    })
+  })
+})
