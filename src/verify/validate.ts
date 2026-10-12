@@ -30,7 +30,18 @@ import {z} from 'zod'
 
 import {findMapKeyOrderWarnings, navigate, type OrderedNode, scanOrderedJson} from './map-key-order.js'
 import {compileSchema, validateAgainstSchema} from './schema-validator.js'
-import {DURATION_FORMAT_HINT, isValidIsoDuration, parseDoubleValue, parseIntValue} from './value-grammar.js'
+import {
+  DURATION_FORMAT_HINT,
+  INT_RANGE_FORMAT_HINT,
+  isValidIntRange,
+  isValidIsoDuration,
+  isValidSemver,
+  isValidTimestamp,
+  parseDoubleValue,
+  parseIntValue,
+  SEMVER_FORMAT_HINT,
+  TIMESTAMP_FORMAT_HINT,
+} from './value-grammar.js'
 
 // Inlined to keep this directory self-contained for the standalone bun-compile
 // build that runs as the qfg-verify pre-receive hook in app-gitea — that build
@@ -164,10 +175,16 @@ const WeightedValuesSchema = z.object({
 
 const RuleValueSchema = z.union([ValueSchema, WeightedValuesSchema])
 
+// IN_INT_RANGE's valueToMatch (qfg-goi1.5.9). Criterion-only: a config value
+// can never be an int_range. Its shape is checked per operator below.
+const IntRangeValueSchema = z.object({type: z.literal('int_range'), value: z.unknown()})
+
+const CriterionValueSchema = z.discriminatedUnion('type', [...ValueSchema.options, IntRangeValueSchema])
+
 const CriterionSchema = z.object({
   propertyName: z.string().optional(),
   operator: OperatorSchema,
-  valueToMatch: ValueSchema.optional(),
+  valueToMatch: CriterionValueSchema.optional(),
 })
 
 const ConfigRuleSchema = z.object({
@@ -1507,6 +1524,56 @@ function validateRules(
           severity: 'error',
         })
       }
+
+      const shapeIssue = criterionValueShapeIssue(criterion)
+      if (shapeIssue) {
+        issues.push({
+          file,
+          message: `${critCtx}: operator "${criterion.operator}" ${shapeIssue.problem}`,
+          severity: 'error',
+          suggestion: shapeIssue.hint,
+        })
+      }
+    }
+  }
+}
+
+/**
+ * The value shapes every SDK agrees to evaluate (qfg-goi1.5 R3-R5, Q5). A value
+ * outside them is not an error in any SDK at eval time: the rule just never
+ * matches, silently, and before qfg-goi1.5 some SDKs matched it anyway. Rejecting
+ * at write time is the only place a human sees the mistake.
+ */
+function criterionValueShapeIssue(
+  criterion: z.infer<typeof CriterionSchema>,
+): undefined | {hint: string; problem: string} {
+  const vtm = criterion.valueToMatch
+  if (!vtm) return undefined
+  const shown = JSON.stringify(vtm.value)
+  switch (criterion.operator) {
+    case 'IN_INT_RANGE': {
+      if (vtm.type !== 'int_range' || !isValidIntRange(vtm.value))
+        return {hint: INT_RANGE_FORMAT_HINT, problem: `needs an int_range value; got ${vtm.type} ${shown}`}
+      return undefined
+    }
+
+    case 'PROP_AFTER':
+    case 'PROP_BEFORE': {
+      if (!['double', 'int', 'string'].includes(vtm.type) || !isValidTimestamp(vtm.value))
+        return {hint: TIMESTAMP_FORMAT_HINT, problem: `needs a timestamp; got ${vtm.type} ${shown}`}
+      return undefined
+    }
+
+    case 'PROP_SEMVER_EQUAL':
+    case 'PROP_SEMVER_GREATER_THAN':
+    case 'PROP_SEMVER_LESS_THAN': {
+      if (vtm.type !== 'string' || !isValidSemver(vtm.value))
+        return {hint: SEMVER_FORMAT_HINT, problem: `needs a version string; got ${vtm.type} ${shown}`}
+      return undefined
+    }
+
+    default: {
+      return undefined
     }
   }
 }
