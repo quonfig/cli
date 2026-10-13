@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-10-12
 
 - **feat(verify): `qfg verify` and the Git server's pre-receive hook check the value of every date, version and int-range rule.** A value no SDK can evaluate used to be accepted and then never matched, silently, and some SDKs matched it anyway. Now a push is rejected with the rule's path and the expected format when: a `PROP_BEFORE` / `PROP_AFTER` value is not epoch milliseconds (a number or an all-digit string) or an RFC3339 timestamp with `Z` or an offset (`"2025-01-01"`, `"2025-01-01T00:00:00"` and free-form dates are rejected); a `PROP_SEMVER_*` value is not a SemVer 2.0 version or an abbreviated `4` / `4.1` (`"v4.0.0"` is rejected); an `IN_INT_RANGE` value is not `{"start": int, "end": int}` with at least one bound (`{min, max}` is rejected). These are the shapes every Quonfig SDK will evaluate identically (qfg-goi1.5). A scan of every production workspace found no stored rule these checks reject. The hook picks this up when the Quonfig Git server is rebuilt from this repository. (qfg-goi1.5.9)
 
