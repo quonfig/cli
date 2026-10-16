@@ -176,6 +176,81 @@ describe('migrate/quonfig-target', () => {
     })
   })
 
+  describe('ruleset.buildRule — negated clauses AND an IS_PRESENT guard (qfg-goi1.5.10, Q6b)', () => {
+    // LaunchDarkly never matches a context that lacks the clause attribute, even
+    // for a negated clause. Quonfig's negated operators DO match a missing
+    // attribute (Q6a, kept), so the migrator ANDs IS_PRESENT in front of every
+    // negated property clause to keep LD's semantics.
+    const NEGATED: Array<[string, string]> = [
+      ['in', 'PROP_IS_NOT_ONE_OF'],
+      ['contains', 'PROP_DOES_NOT_CONTAIN_ONE_OF'],
+      ['startsWith', 'PROP_DOES_NOT_START_WITH_ONE_OF'],
+      ['endsWith', 'PROP_DOES_NOT_END_WITH_ONE_OF'],
+      ['matches', 'PROP_DOES_NOT_MATCH'],
+    ]
+
+    for (const [op, operator] of NEGATED) {
+      it(`negated "${op}" becomes IS_PRESENT AND ${operator} on the same property`, () => {
+        const rule = buildRule(
+          [{attribute: 'role', negate: true, op, values: ['admin']}],
+          {type: 'string', value: 'treatment'},
+          ctx(),
+        )
+        expect(rule!.criteria).to.have.length(2)
+        expect(rule!.criteria[0]).to.deep.equal({operator: 'IS_PRESENT', propertyName: 'user.role'})
+        expect(rule!.criteria[1].operator).to.equal(operator)
+        expect(rule!.criteria[1].propertyName).to.equal('user.role')
+      })
+    }
+
+    it('uses the context-kind-qualified property name for the guard', () => {
+      const rule = buildRule(
+        [{attribute: 'plan', contextKind: 'organization', negate: true, op: 'in', values: ['free']}],
+        {type: 'string', value: 'treatment'},
+        ctx(),
+      )
+      expect(rule!.criteria[0]).to.deep.equal({operator: 'IS_PRESENT', propertyName: 'organization.plan'})
+    })
+
+    it('leaves a positive clause unchanged (no guard)', () => {
+      const rule = buildRule(
+        [{attribute: 'role', op: 'in', values: ['admin']}],
+        {type: 'string', value: 'treatment'},
+        ctx(),
+      )
+      expect(rule!.criteria).to.deep.equal([
+        {operator: 'PROP_IS_ONE_OF', propertyName: 'user.role', valueToMatch: {type: 'string_list', value: ['admin']}},
+      ])
+    })
+
+    it('does not guard a negated segmentMatch (NOT_IN_SEG has no property)', () => {
+      const rule = buildRule(
+        [{attribute: 'segmentMatch', negate: true, op: 'segmentMatch', values: ['beta-users']}],
+        {type: 'string', value: 'treatment'},
+        ctx(),
+      )
+      expect(rule!.criteria).to.deep.equal([
+        {operator: 'NOT_IN_SEG', valueToMatch: {type: 'string', value: 'beta-users'}},
+      ])
+    })
+
+    it('guards only the negated clause in a mixed AND, keeping clause order', () => {
+      const rule = buildRule(
+        [
+          {attribute: 'email', op: 'endsWith', values: ['@acme.com']},
+          {attribute: 'role', negate: true, op: 'in', values: ['admin']},
+        ],
+        {type: 'string', value: 'treatment'},
+        ctx(),
+      )
+      expect(rule!.criteria.map((c) => [c.operator, c.propertyName])).to.deep.equal([
+        ['PROP_ENDS_WITH_ONE_OF', 'user.email'],
+        ['IS_PRESENT', 'user.role'],
+        ['PROP_IS_NOT_ONE_OF', 'user.role'],
+      ])
+    })
+  })
+
   describe('ruleset.rolloutToWeightedValues', () => {
     it('converts weights and reports re-bucketing', () => {
       const report = new ConversionReport()
