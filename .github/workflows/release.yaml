@@ -27,7 +27,7 @@ jobs:
       is-prerelease: ${{ steps.check.outputs.is-prerelease }}
       npm-tag: ${{ steps.check.outputs.npm-tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: Check if version needs publishing
@@ -74,7 +74,7 @@ jobs:
     outputs:
       published-version: ${{ needs.check-version.outputs.current-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           submodules: recursive
@@ -126,7 +126,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: enable corepack
