@@ -39,8 +39,10 @@ export type QuonfigOperator =
 export type OperatorMapping = {operator: QuonfigOperator} | {reason: string; skip: true}
 
 /**
- * Operators that have a direct negated form in Quonfig. `negate: true` simply
- * selects the negated operator — semantics-preserving, always converted.
+ * Operators that have a direct negated form in Quonfig. `negate: true` selects
+ * the negated operator and always converts. LD never matches a context missing
+ * the attribute, so `clauseToCriteria` (ruleset.ts) ANDs an IS_PRESENT guard in
+ * front of each negated property operator to keep that (qfg-goi1.5.10).
  */
 const NEGATABLE: Record<string, {negated: QuonfigOperator; plain: QuonfigOperator}> = {
   contains: {negated: 'PROP_DOES_NOT_CONTAIN_ONE_OF', plain: 'PROP_CONTAINS_ONE_OF'},

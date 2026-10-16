@@ -207,6 +207,30 @@ export function clauseToCriterion(clause: SourceClause, ctx: RulesetContext): Qu
 }
 
 /**
+ * Map one provider clause to the Quonfig criteria it ANDs into a rule, or
+ * `null` when the clause cannot be mapped (see `clauseToCriterion`).
+ *
+ * A negated property clause (`in`, `contains`, `startsWith`, `endsWith`,
+ * `matches` with `negate: true`) gets an `IS_PRESENT` guard on the same
+ * property ANDed in front of it (qfg-goi1.5.10, operator-semantics Q6b).
+ * LaunchDarkly never matches a context that lacks the clause attribute, negated
+ * or not; Quonfig's negated operators do match a missing attribute (Q6a, kept),
+ * so without the guard a migrated rule would broaden to every context missing
+ * the attribute. Negated `segmentMatch` (NOT_IN_SEG) has no property and is not
+ * guarded. This only shapes NEW migrations; already-migrated workspaces are
+ * never rewritten.
+ */
+export function clauseToCriteria(clause: SourceClause, ctx: RulesetContext): QuonfigCriterion[] | null {
+  const criterion = clauseToCriterion(clause, ctx)
+  if (criterion === null) return null
+  if (clause.negate && criterion.propertyName !== undefined) {
+    return [{operator: 'IS_PRESENT', propertyName: criterion.propertyName}, criterion]
+  }
+
+  return [criterion]
+}
+
+/**
  * Build a Quonfig rule from a provider rule's clauses (AND semantics) plus its
  * served value. Returns `null` when any clause cannot be mapped — the rule is
  * dropped wholesale and reported, rather than silently broadened.
@@ -214,9 +238,9 @@ export function clauseToCriterion(clause: SourceClause, ctx: RulesetContext): Qu
 export function buildRule(clauses: SourceClause[], value: QuonfigRuleValue, ctx: RulesetContext): QuonfigRule | null {
   const criteria: QuonfigCriterion[] = []
   for (const clause of clauses) {
-    const criterion = clauseToCriterion(clause, ctx)
-    if (criterion === null) return null
-    criteria.push(criterion)
+    const mapped = clauseToCriteria(clause, ctx)
+    if (mapped === null) return null
+    criteria.push(...mapped)
   }
 
   // A rule with no clauses matches everyone — represent that as ALWAYS_TRUE.
