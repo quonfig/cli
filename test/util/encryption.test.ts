@@ -1,3 +1,4 @@
+import {encryption} from '@quonfig/node'
 import {expect} from 'chai'
 
 import {decrypt} from '../../src/util/encryption.js'
@@ -38,7 +39,19 @@ describe('encryption utils', () => {
     it('should throw error for authentication tag verification failure', () => {
       // Modified encrypted string with wrong tag - using zeros for the tag part
       const badEncrypted = '652cf03ad4e252bb9b69c9--03bbdb754d1923b2a3c5bfc3--00000000000000000000000000000000'
-      expect(() => decrypt(badEncrypted, encryptionKey)).to.throw()
+      expect(() => decrypt(badEncrypted, encryptionKey)).to.throw('Authentication tag verification failed')
+    })
+
+    it('should throw when decrypting with the wrong key', () => {
+      const wrongKey = 'f'.repeat(64)
+      expect(() => decrypt(encryptedValue, wrongKey)).to.throw('Authentication tag verification failed')
+    })
+
+    it('should round-trip values encrypted by @quonfig/node (including multi-byte UTF-8)', () => {
+      for (const value of ['hello', 'test-secret', 'caf\u00E9 \u2603 \u{1F680}', 'x'.repeat(1000)]) {
+        const ciphertext = encryption.encrypt(value, encryptionKey)
+        expect(decrypt(ciphertext, encryptionKey)).to.equal(value)
+      }
     })
   })
 })

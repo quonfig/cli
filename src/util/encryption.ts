@@ -1,5 +1,5 @@
 import {encryption} from '@quonfig/node'
-import forge from 'node-forge'
+import {createDecipheriv} from 'node:crypto'
 
 import type {APICommand} from '../index.js'
 import type {Secret} from './secret-flags.js'
@@ -40,31 +40,19 @@ export function decrypt(encryptedString: string, keyStringHex: string): string {
     return ''
   }
 
-  // Convert hex strings to bytes
-  const keyBytes = forge.util.hexToBytes(keyStringHex)
-  const encryptedBytes = forge.util.hexToBytes(encryptedDataPart)
-  const ivBytes = forge.util.hexToBytes(ivPart)
-  const tagBytes = forge.util.hexToBytes(authTagPart)
+  const key = Buffer.from(keyStringHex, 'hex')
+  const encryptedData = Buffer.from(encryptedDataPart, 'hex')
+  const iv = Buffer.from(ivPart, 'hex')
+  const authTag = Buffer.from(authTagPart, 'hex')
 
-  // Create decipher. node-forge AES-GCM with the IV passed to start() below, not
-  // Node's deprecated IV-less crypto.createDecipher that this rule targets.
-  // nosemgrep: javascript.node-crypto.security.create-de-cipher-no-iv.create-de-cipher-no-iv
-  const decipher = forge.cipher.createDecipher('AES-GCM', keyBytes)
-  decipher.start({
-    iv: ivBytes,
-    tag: forge.util.createBuffer(tagBytes),
-    tagLength: TAG_LENGTH * 8, // tagLength is in bits
-  })
+  const decipher = createDecipheriv('aes-256-gcm', key, iv, {authTagLength: TAG_LENGTH})
 
-  // Decrypt the data
-  decipher.update(forge.util.createBuffer(encryptedBytes))
-  const success = decipher.finish()
-
-  if (!success) {
+  try {
+    decipher.setAuthTag(authTag)
+    return Buffer.concat([decipher.update(encryptedData), decipher.final()]).toString('utf8')
+  } catch {
     throw new Error('Authentication tag verification failed')
   }
-
-  return decipher.output.toString()
 }
 
 /**
