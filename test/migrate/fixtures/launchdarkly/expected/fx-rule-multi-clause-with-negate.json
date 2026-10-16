@@ -48,6 +48,10 @@
               }
             },
             {
+              "operator": "IS_PRESENT",
+              "propertyName": "user.role"
+            },
+            {
               "operator": "PROP_IS_NOT_ONE_OF",
               "propertyName": "user.role",
               "valueToMatch": {

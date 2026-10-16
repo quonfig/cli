@@ -138,3 +138,43 @@ describe('migrate/sources/launchdarkly — converter sdk-node round-trip', () =>
     })
   })
 })
+
+describe('migrate/sources/launchdarkly — negated clause vs missing attribute round-trip (qfg-goi1.5.10, Q6b)', () => {
+  // fx-rule-multi-clause-with-negate (test env): rule `email endsWith @acme.com
+  // AND NOT role in [admin]` -> true. The fixture's fallthrough is also true, so
+  // flip it to false here to make the rule observable. LaunchDarkly does NOT
+  // match a context with no `role` (a clause on a missing attribute is false,
+  // negated or not), so that context falls through to false. Without the
+  // IS_PRESENT guard Quonfig's PROP_IS_NOT_ONE_OF would match it and serve true.
+  let datadir: string
+
+  before(() => {
+    const flag = loadRawFlag('fx-rule-multi-clause-with-negate')
+    const testEnv = flag.environments.test as {fallthrough: {variation: number}}
+    testEnv.fallthrough = {variation: 1}
+    datadir = mkdtempSync(join(tmpdir(), 'ld-roundtrip-negate-'))
+    writeFileSync(join(datadir, 'quonfig.json'), JSON.stringify({environments: ENVIRONMENTS}, null, 2) + '\n')
+    mkdirSync(join(datadir, 'feature-flags'), {recursive: true})
+    const quonfig = translateFlag(flag, new ConversionReport())
+    writeFileSync(join(datadir, flagOutputPath(flag.key)), JSON.stringify(quonfig, null, 2) + '\n')
+  })
+
+  after(() => {
+    rmSync(datadir, {force: true, recursive: true})
+  })
+
+  it('a context missing the negated attribute does not match the rule (LD parity)', async () => {
+    const q = await makeClient(datadir, 'test')
+    expect(q.getBool('fx-rule-multi-clause-with-negate', {user: {email: 'a@acme.com', key: 'u1'}})).to.equal(false)
+  })
+
+  it('a context with a non-matching value for the negated attribute still matches', async () => {
+    const q = await makeClient(datadir, 'test')
+    expect(
+      q.getBool('fx-rule-multi-clause-with-negate', {user: {email: 'a@acme.com', key: 'u1', role: 'member'}}),
+    ).to.equal(true)
+    expect(
+      q.getBool('fx-rule-multi-clause-with-negate', {user: {email: 'a@acme.com', key: 'u2', role: 'admin'}}),
+    ).to.equal(false)
+  })
+})

@@ -257,6 +257,23 @@ describe('migrate/sources/launchdarkly/translate', () => {
       ])
     })
 
+    it('ANDs IS_PRESENT onto a negated segment-rule clause (qfg-goi1.5.10, Q6b)', () => {
+      const seg: LDSegment = {
+        key: 'seg-non-admins',
+        rules: [{clauses: [{attribute: 'role', negate: true, op: 'in', values: ['admin']}]}],
+      }
+      const out = translateSegment(seg, new ConversionReport())
+      const rules = (out.default as {rules: Array<{criteria: unknown[]; value: unknown}>}).rules
+      expect(rules[0].criteria).to.deep.equal([
+        {operator: 'IS_PRESENT', propertyName: 'user.role'},
+        {
+          operator: 'PROP_IS_NOT_ONE_OF',
+          propertyName: 'user.role',
+          valueToMatch: {type: 'string_list', value: ['admin']},
+        },
+      ])
+    })
+
     it('reports an unbounded (big/synced) segment as having unexportable membership', () => {
       const report = new ConversionReport()
       const seg: LDSegment = {key: 'seg-big-synced', unbounded: true, unboundedContextKind: 'user'}

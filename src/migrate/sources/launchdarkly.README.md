@@ -28,7 +28,11 @@ and the native schema-gap epics layer on after — see plan §10.
   handling. v1 skips the clause and names the exact flag + clause in
   `MIGRATION_REPORT.md`. Negated `in` / `contains` / `startsWith` / `endsWith` /
   `matches` / `segmentMatch` are unaffected — they have direct negated operators
-  and always convert.
+  and always convert. Each negated property clause also gets an `IS_PRESENT`
+  criterion on the same property ANDed in front of it, because LaunchDarkly
+  never matches a context missing the attribute while Quonfig's negated
+  operators do (qfg-goi1.5.10, operator-semantics Q6b). `NOT_IN_SEG` has no
+  property and is not guarded.
 - **D8 — generalized source API key.** `--source-api-key` (env
   `QUONFIG_MIGRATE_API_KEY`, plus per-provider `LAUNCHDARKLY_API_KEY`) is the
   forward-looking flag; `--api-key` / `LAUNCH_API_KEY` stay as deprecated aliases

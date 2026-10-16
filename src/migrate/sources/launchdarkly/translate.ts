@@ -12,7 +12,7 @@
 import {resolveKey} from '../../key-rewriter.js'
 import {ConversionReport} from '../../quonfig-target/report.js'
 import {
-  clauseToCriterion,
+  clauseToCriteria,
   collapseEnvironment,
   type QuonfigCriterion,
   type QuonfigRule,
@@ -285,9 +285,9 @@ function buildSegmentRule(
   // get the exact same operator handling (and whole-rule-drop) as flag rules.
   const criteria: QuonfigCriterion[] = []
   for (const clause of rule.clauses) {
-    const criterion = clauseToCriterion(clause, ctx)
-    if (criterion === null) return null
-    criteria.push(criterion)
+    const mapped = clauseToCriteria(clause, ctx)
+    if (mapped === null) return null
+    criteria.push(...mapped)
   }
 
   const value =
