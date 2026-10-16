@@ -14,7 +14,3 @@ id = "GHSA-ch52-4w7c-c8xp"
 ignoreUntil = 2027-01-07
 reason = "http-cache-semantics <=4.2.0 shared-cache max-stale disclosure, no fixed release yet. Only pulled in by npm-registry HTTP clients (make-fetch-happen under npm/node-gyp, cacheable-request under the update-check plugin), each a private per-user cache; no shared multi-user HTTP cache. Tracked in qfg-66ko.8."
 
-[[IgnoredVulns]]
-id = "GHSA-86w9-cpqp-85rv"
-ignoreUntil = 2027-01-07
-reason = "node-forge <=1.4.0 RSA PKCS#1 v1.5 signature verification flaw, no fixed release yet. The cli only uses forge AES-GCM decryption and hex utils (src/util/encryption.ts), never RSA signature verification. Tracked in qfg-66ko.8."

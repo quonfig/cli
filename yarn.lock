@@ -1632,7 +1632,6 @@ __metadata:
     "@types/mocha": "npm:^10.0.10"
     "@types/mustache": "npm:^4.2.5"
     "@types/node": "npm:^18"
-    "@types/node-forge": "npm:^1.3.14"
     acorn: "npm:^8.10.0"
     acorn-walk: "npm:^8.3.5"
     ajv: "npm:^8.20.0"
@@ -1652,7 +1651,6 @@ __metadata:
     mocha: "npm:^11.7.5"
     msw: "npm:^2.14.6"
     mustache: "npm:^4.2.0"
-    node-forge: "npm:^1.4.0"
     oclif: "npm:^4.23.7"
     prettier: "npm:^3.8.3"
     shx: "npm:^0.3.4"
@@ -2003,15 +2001,6 @@ __metadata:
   dependencies:
     "@types/node": "npm:*"
   checksum: 10c0/944730fd7b398c5078de3c3d4d0afeec8584283bc694da1803fdfca14149ea385e18b1b774326f1601baf53898ce6d121a952c51eb62d188ef6fcc41f725c0dc
-  languageName: node
-  linkType: hard
-
-"@types/node-forge@npm:^1.3.14":
-  version: 1.3.14
-  resolution: "@types/node-forge@npm:1.3.14"
-  dependencies:
-    "@types/node": "npm:*"
-  checksum: 10c0/da6158fd34fa7652aa7f8164508f97a76b558724ab292f13c257e39d54d95d4d77604e8fb14dc454a867f1aeec7af70118294889195ec4400cecbb8a5c77a212
   languageName: node
   linkType: hard
 
@@ -6145,13 +6134,6 @@ __metadata:
     json-stringify-safe: "npm:^5.0.1"
     propagate: "npm:^2.0.0"
   checksum: 10c0/94249a294176a6e521bbb763c214de4aa6b6ab63dff1e299aaaf455886a465d38906891d7f24570d94a43b1e376c239c54d89ff7697124bc57ef188006acc25e
-  languageName: node
-  linkType: hard
-
-"node-forge@npm:^1.4.0":
-  version: 1.4.0
-  resolution: "node-forge@npm:1.4.0"
-  checksum: 10c0/67330a5f1f95257a4c8a93b7d555abe87b5f15e350123aa396c97a21a8ca94f9c6549008eb2c73668a91e0d7e3a905785acbd8f8bd0751c29401292011f8f8e1
   languageName: node
   linkType: hard
 
