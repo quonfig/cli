@@ -87,7 +87,7 @@ jobs:
           corepack enable
           corepack prepare yarn@4.11.0 --activate
       - name: cache yarn dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.yarn/cache
           key: ${{ runner.os }}-yarn-${{ hashfiles('**/yarn.lock') }}
