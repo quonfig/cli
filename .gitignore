@@ -24,3 +24,6 @@ test-*.sh
 _verify_build/
 quonfig.*.config.json
 .qfg-friction.log
+
+# direnv: local only. Copy .envrc.example to .envrc.
+.envrc
