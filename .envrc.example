@@ -1,0 +1,5 @@
+# Copy to .envrc (gitignored) and fill in. direnv loads it automatically.
+export QUONFIG_DOMAIN=quonfig-staging.com
+# Test-only key that decrypts the integration-test-data fixtures. Get it from
+# the QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY repo secret or a teammate.
+export QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY=replace-me
