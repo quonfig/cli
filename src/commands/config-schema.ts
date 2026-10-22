@@ -3,6 +3,7 @@ import {Flags} from '@oclif/core'
 import {BaseCommand} from '../index.js'
 import {JsonObj} from '../result.js'
 import {storedConfigJsonSchema} from '../init/schema.js'
+import {REGEX_V1_DOCS_URL} from '../verify/regex-dialect.js'
 
 export const REFERENCE = `
 ────────────────────────────────────────────────────────────
@@ -120,8 +121,8 @@ OPERATOR REFERENCE
   PROP_SEMVER_GREATER_THAN         string               semver comparison; same version grammar
   PROP_BEFORE                      int or string        epoch ms (int) or RFC3339 with Z/offset, e.g. "2025-01-01T00:00:00Z"; no date-only
   PROP_AFTER                       int or string        same timestamp grammar
-  PROP_MATCHES                     string               regex match
-  PROP_DOES_NOT_MATCH              string
+  PROP_MATCHES                     string               regex search (unanchored); Quonfig regex v1 only, see below
+  PROP_DOES_NOT_MATCH              string               same regex dialect
   IS_PRESENT                       (none)               propertyName is set on the evaluation context (no valueToMatch)
   IS_NOT_PRESENT                   (none)               propertyName is missing from the evaluation context (no valueToMatch)
   IN_SEG                           string               value = segment key (no propertyName needed)
@@ -129,6 +130,12 @@ OPERATOR REFERENCE
   IN_INT_RANGE                     int_range            value = {"start": 0, "end": 10}; [start, end); omit a bound for unbounded
   LOOKUP_KEY_IN                    string_list          matches if SDK lookup key is in the list
   LOOKUP_KEY_NOT_IN                string_list
+
+Regex (PROP_MATCHES / PROP_DOES_NOT_MATCH) must be Quonfig regex v1, or qfg verify and push reject it:
+  literals . ^ $ | ( ) (?: ) [...] [^...], * + ? {n} {n,} {n,m} (<= 1000, optionally lazy), escapes \\<punct> (not \\_) \\t \\n \\r \\f \\x00-\\x7F.
+  No lookaround, named groups, (?i), backrefs or \\d \\w \\s \\b (use [0-9], [A-Za-z0-9_], [ \\t\\r\\n\\f\\x0B]);
+  no quantified group holding a quantifier or |, at most 2 of * + {n,}, at most 256 chars.
+  Docs: ${REGEX_V1_DOCS_URL}
 
 valueToMatch format: { "type": "<type>", "value": <value> }
   string_list  →  { "type": "string_list", "value": ["a", "b"] }

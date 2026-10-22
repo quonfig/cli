@@ -9,6 +9,7 @@
  * topology composes them differently.
  */
 
+import {checkRegexV1} from '../../verify/regex-dialect.js'
 import {resolveKey} from '../key-rewriter.js'
 import type {ConversionReport} from './report.js'
 import {type QuonfigOperator, mapLaunchDarklyOperator} from './operators.js'
@@ -127,62 +128,20 @@ export function normalizeAttribute(contextKind: string | undefined, attribute: s
   return `${kind}.${dotted}`
 }
 
-/**
- * Quonfig regex v1 safety caps (plan 2026-10-12-regex-write-time-check.md §2,
- * Q3): pattern length <= 256 and at most 2 unbounded quantifiers.
- */
-const REGEX_V1_MAX_LENGTH = 256
-const REGEX_V1_MAX_UNBOUNDED = 2
 /** Upper bound on rules one LD rule may fan out into when patterns are split. */
 const MAX_SPLIT_RULES = 16
-
-/**
- * Count the unbounded quantifiers (`*`, `+`, `{n,}`) in a pattern, skipping
- * escapes and character classes. Possessive/odd forms only over-count, which
- * errs toward splitting — never toward an out-of-cap join.
- */
-function countUnboundedQuantifiers(pattern: string): number {
-  let count = 0
-  let inClass = false
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i]
-    if (ch === '\\') {
-      i++
-      continue
-    }
-
-    if (inClass) {
-      if (ch === ']') inClass = false
-      continue
-    }
-
-    if (ch === '[') {
-      inClass = true
-      // A leading `]` (or `^]`) is a literal inside the class.
-      if (pattern[i + 1] === '^') i++
-      if (pattern[i + 1] === ']') i++
-      continue
-    }
-
-    if (ch === '*' || ch === '+') count++
-    else if (ch === '{' && /^{\d+,}/.test(pattern.slice(i))) count++
-  }
-
-  return count
-}
 
 /**
  * Join several regex patterns into one alternation `(?:a)|(?:b)` (qfg-ktkr.6).
  * Each alternative is wrapped in a non-capturing group so anchors and inner
  * `|` stay scoped to their own pattern. The join adds no quantified group, so
- * it stays inside the v1 safety rule as long as the length and
- * unbounded-quantifier caps hold; returns `null` when they would not.
+ * it stays inside the v1 safety rule as long as every pattern is in v1 and
+ * the length and unbounded-quantifier caps hold; returns `null` otherwise
+ * (qfg-ktkr.2: the full checkRegexV1, not just the caps).
  */
 export function joinRegexAlternation(patterns: string[]): null | string {
   const joined = patterns.map((p) => `(?:${p})`).join('|')
-  if (joined.length > REGEX_V1_MAX_LENGTH) return null
-  if (countUnboundedQuantifiers(joined) > REGEX_V1_MAX_UNBOUNDED) return null
-  return joined
+  return checkRegexV1(joined) === null ? joined : null
 }
 
 /** A multi-value `matches` clause whose patterns cannot be joined within v1. */
@@ -309,6 +268,22 @@ export function clauseToCriterion(clause: SourceClause, ctx: RulesetContext): Qu
       ? {operator}
       : {operator, propertyName: normalizeAttribute(clause.contextKind, clause.attribute)}
   criterion.valueToMatch = valueToMatchFor(operator, clause, ctx)
+  // qfg-ktkr.2: a pattern outside Quonfig regex v1 would be refused by
+  // `qfg verify` and the Git hook, so drop the rule and report why instead of
+  // writing a file nobody can push.
+  if ((operator === 'PROP_MATCHES' || operator === 'PROP_DOES_NOT_MATCH') && criterion.valueToMatch) {
+    const pattern = String(criterion.valueToMatch.value)
+    const violation = checkRegexV1(pattern)
+    if (violation) {
+      ctx.report.add(
+        'skipped-rule',
+        ctx.sourceKey,
+        `regex clause on "${clause.attribute}" skipped: pattern "${pattern}" is outside Quonfig regex v1 (${violation.reason}). ${violation.hint}`,
+      )
+      return null
+    }
+  }
+
   return criterion
 }
 

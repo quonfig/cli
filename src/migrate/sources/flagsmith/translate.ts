@@ -16,6 +16,7 @@
  * argument supplied by the caller (the `flagsmith.ts` source).
  */
 
+import {checkRegexV1} from '../../../verify/regex-dialect.js'
 import {resolveKey} from '../../key-rewriter.js'
 import type {ConversionReport} from '../../quonfig-target/report.js'
 import type {QuonfigOperator} from '../../quonfig-target/operators.js'
@@ -331,6 +332,17 @@ export function mapCondition(condition: FlagsmithSegmentCondition): ConditionMap
     }
 
     case 'REGEX': {
+      // qfg-ktkr.2: a pattern outside Quonfig regex v1 would be refused by
+      // `qfg verify` and the Git hook; drop the rule with the reason instead.
+      const pattern = String(value ?? '')
+      const violation = checkRegexV1(pattern)
+      if (violation) {
+        return {
+          drop: true,
+          reason: `pattern "${pattern}" is outside Quonfig regex v1 (${violation.reason}). ${violation.hint}`,
+        }
+      }
+
       return {
         criterion: {
           operator: 'PROP_MATCHES',
