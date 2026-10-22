@@ -127,6 +127,108 @@ export function normalizeAttribute(contextKind: string | undefined, attribute: s
   return `${kind}.${dotted}`
 }
 
+/**
+ * Quonfig regex v1 safety caps (plan 2026-10-12-regex-write-time-check.md §2,
+ * Q3): pattern length <= 256 and at most 2 unbounded quantifiers.
+ */
+const REGEX_V1_MAX_LENGTH = 256
+const REGEX_V1_MAX_UNBOUNDED = 2
+/** Upper bound on rules one LD rule may fan out into when patterns are split. */
+const MAX_SPLIT_RULES = 16
+
+/**
+ * Count the unbounded quantifiers (`*`, `+`, `{n,}`) in a pattern, skipping
+ * escapes and character classes. Possessive/odd forms only over-count, which
+ * errs toward splitting — never toward an out-of-cap join.
+ */
+function countUnboundedQuantifiers(pattern: string): number {
+  let count = 0
+  let inClass = false
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i]
+    if (ch === '\\') {
+      i++
+      continue
+    }
+
+    if (inClass) {
+      if (ch === ']') inClass = false
+      continue
+    }
+
+    if (ch === '[') {
+      inClass = true
+      // A leading `]` (or `^]`) is a literal inside the class.
+      if (pattern[i + 1] === '^') i++
+      if (pattern[i + 1] === ']') i++
+      continue
+    }
+
+    if (ch === '*' || ch === '+') count++
+    else if (ch === '{' && /^{\d+,}/.test(pattern.slice(i))) count++
+  }
+
+  return count
+}
+
+/**
+ * Join several regex patterns into one alternation `(?:a)|(?:b)` (qfg-ktkr.6).
+ * Each alternative is wrapped in a non-capturing group so anchors and inner
+ * `|` stay scoped to their own pattern. The join adds no quantified group, so
+ * it stays inside the v1 safety rule as long as the length and
+ * unbounded-quantifier caps hold; returns `null` when they would not.
+ */
+export function joinRegexAlternation(patterns: string[]): null | string {
+  const joined = patterns.map((p) => `(?:${p})`).join('|')
+  if (joined.length > REGEX_V1_MAX_LENGTH) return null
+  if (countUnboundedQuantifiers(joined) > REGEX_V1_MAX_UNBOUNDED) return null
+  return joined
+}
+
+/** A multi-value `matches` clause whose patterns cannot be joined within v1. */
+function isUnjoinableMatches(clause: SourceClause): boolean {
+  return clause.op === 'matches' && clause.values.length > 1 && joinRegexAlternation(clause.values.map(String)) === null
+}
+
+/**
+ * Expand a provider rule's clauses into the OR-alternatives of clause lists
+ * that preserve LaunchDarkly semantics (qfg-ktkr.6). LD ORs a clause's values;
+ * Quonfig has no within-rule OR, so a multi-value `matches` clause whose
+ * patterns cannot be joined within the v1 caps is:
+ *  - negated (matches none): split into single-pattern negated clauses ANDed
+ *    in the same rule;
+ *  - positive (matches any): fanned out into one alternative per pattern.
+ * Alternatives serve the same value, so first-match-wins over them is the OR.
+ * Returns `null` (rule dropped + reported) past MAX_SPLIT_RULES alternatives.
+ */
+export function expandClauses(clauses: SourceClause[], ctx: RulesetContext): null | SourceClause[][] {
+  let alternatives: SourceClause[][] = [[]]
+  for (const clause of clauses) {
+    if (!isUnjoinableMatches(clause)) {
+      for (const alt of alternatives) alt.push(clause)
+      continue
+    }
+
+    const singles = clause.values.map((v) => ({...clause, values: [v]}))
+    if (clause.negate) {
+      for (const alt of alternatives) alt.push(...singles)
+      continue
+    }
+
+    alternatives = alternatives.flatMap((alt) => singles.map((single) => [...alt, single]))
+    if (alternatives.length > MAX_SPLIT_RULES) {
+      ctx.report.add(
+        'skipped-rule',
+        ctx.sourceKey,
+        `rule dropped: its regex clauses expand to more than ${MAX_SPLIT_RULES} rules (patterns too long or too complex to join within Quonfig regex v1)`,
+      )
+      return null
+    }
+  }
+
+  return alternatives
+}
+
 /** Build a `valueToMatch` typed value for a non-presence, non-segment clause. */
 function valueToMatchFor(operator: QuonfigOperator, clause: SourceClause, ctx: RulesetContext): QuonfigValue {
   if (STRING_LIST_OPERATORS.has(operator)) {
@@ -155,6 +257,10 @@ function valueToMatchFor(operator: QuonfigOperator, clause: SourceClause, ctx: R
 
   if (operator === 'PROP_MATCHES' || operator === 'PROP_DOES_NOT_MATCH') {
     if (clause.values.length > 1) {
+      // LD ORs the patterns (qfg-ktkr.6). `expandClauses` splits any set too
+      // big to join, so this only falls back for a direct caller.
+      const joined = joinRegexAlternation(clause.values.map(String))
+      if (joined !== null) return {type: 'string', value: joined}
       ctx.report.add(
         'skipped-rule',
         ctx.sourceKey,
@@ -236,15 +342,51 @@ export function clauseToCriteria(clause: SourceClause, ctx: RulesetContext): Quo
  * dropped wholesale and reported, rather than silently broadened.
  */
 export function buildRule(clauses: SourceClause[], value: QuonfigRuleValue, ctx: RulesetContext): QuonfigRule | null {
+  const criteria = clausesToCriteria(clauses, ctx)
+  if (criteria === null) return null
+
+  // A rule with no clauses matches everyone — represent that as ALWAYS_TRUE.
+  return {criteria: criteria.length > 0 ? criteria : [ALWAYS_TRUE], value}
+}
+
+/**
+ * AND a clause list into criteria, or `null` when any clause is unmappable.
+ * An IS_PRESENT guard already in the list is not repeated (a split negated
+ * multi-pattern clause guards its property once).
+ */
+export function clausesToCriteria(clauses: SourceClause[], ctx: RulesetContext): null | QuonfigCriterion[] {
   const criteria: QuonfigCriterion[] = []
   for (const clause of clauses) {
     const mapped = clauseToCriteria(clause, ctx)
     if (mapped === null) return null
-    criteria.push(...mapped)
+    for (const c of mapped) {
+      const duplicateGuard =
+        c.operator === 'IS_PRESENT' &&
+        criteria.some((e) => e.operator === 'IS_PRESENT' && e.propertyName === c.propertyName)
+      if (!duplicateGuard) criteria.push(c)
+    }
   }
 
-  // A rule with no clauses matches everyone — represent that as ALWAYS_TRUE.
-  return {criteria: criteria.length > 0 ? criteria : [ALWAYS_TRUE], value}
+  return criteria
+}
+
+/**
+ * Build the Quonfig rules for one provider rule: `buildRule` over each
+ * alternative from `expandClauses` (qfg-ktkr.6). Usually one rule; empty when
+ * the rule is dropped (and reported).
+ */
+export function buildRules(clauses: SourceClause[], value: QuonfigRuleValue, ctx: RulesetContext): QuonfigRule[] {
+  const alternatives = expandClauses(clauses, ctx)
+  if (alternatives === null) return []
+  const rules: QuonfigRule[] = []
+  for (const alt of alternatives) {
+    const rule = buildRule(alt, value, ctx)
+    // An unmappable clause fails every alternative alike — report it once.
+    if (rule === null) return []
+    rules.push(rule)
+  }
+
+  return rules
 }
 
 /** Resolve a variation index to its typed Quonfig value. */
@@ -358,8 +500,7 @@ export function collapseEnvironment(env: SourceFlagEnvironment, ctx: RulesetCont
   for (const rule of env.rules ?? []) {
     const value =
       rule.rollout === undefined ? variationValue(rule.variation ?? 0, ctx) : rolloutToWeightedValues(rule.rollout, ctx)
-    const built = buildRule(rule.clauses, value, ctx)
-    if (built !== null) rules.push(built)
+    rules.push(...buildRules(rule.clauses, value, ctx))
   }
 
   if (env.fallthrough) {
