@@ -182,5 +182,12 @@ export async function buildPack(
 /** Commit SHAs of the `origin/*` remote-tracking refs (deduped). */
 async function originRefShas(dir: string): Promise<string[]> {
   const res = await runGit(['-C', dir, 'for-each-ref', '--format=%(objectname)', 'refs/remotes/origin'])
-  return [...new Set(res.stdout.split('\n').map((l) => l.trim()).filter((l) => l.length > 0))]
+  return [
+    ...new Set(
+      res.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0),
+    ),
+  ]
 }
