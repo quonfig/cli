@@ -12,8 +12,9 @@
 import {resolveKey} from '../../key-rewriter.js'
 import {ConversionReport} from '../../quonfig-target/report.js'
 import {
-  clauseToCriteria,
+  clausesToCriteria,
   collapseEnvironment,
+  expandClauses,
   type QuonfigCriterion,
   type QuonfigRule,
   type RulesetContext,
@@ -247,8 +248,7 @@ export function translateSegment(segment: LDSegment, report: ConversionReport): 
   }
 
   for (const rule of segment.rules ?? []) {
-    const built = buildSegmentRule(rule, ctx)
-    if (built !== null) rules.push(built)
+    rules.push(...buildSegmentRules(rule, ctx))
   }
 
   // Trailing catch-all: anyone not matched above is not in the segment.
@@ -271,23 +271,27 @@ export function translateSegment(segment: LDSegment, report: ConversionReport): 
 }
 
 /**
- * Build a Quonfig rule from a LaunchDarkly segment rule. A segment rule's
+ * Build the Quonfig rules for a LaunchDarkly segment rule. A segment rule's
  * clauses AND together and the rule means "in the segment". A rule-level
  * `weight` is a percentage of matching contexts — converted to a
- * `weighted_values` bool split (and reported as re-bucketing). Returns `null`
+ * `weighted_values` bool split (and reported as re-bucketing). Usually one
+ * rule; several when a multi-pattern `matches` is split (qfg-ktkr.6); empty
  * when a clause cannot be mapped (the whole rule is dropped — see `buildRule`).
  */
-function buildSegmentRule(
+function buildSegmentRules(
   rule: {bucketBy?: string; clauses: LDClause[]; weight?: number},
   ctx: RulesetContext,
-): QuonfigRule | null {
-  // Reuse the clause-mapping verb via a tiny inline AND loop so segment rules
-  // get the exact same operator handling (and whole-rule-drop) as flag rules.
-  const criteria: QuonfigCriterion[] = []
-  for (const clause of rule.clauses) {
-    const mapped = clauseToCriteria(clause, ctx)
-    if (mapped === null) return null
-    criteria.push(...mapped)
+): QuonfigRule[] {
+  // Reuse the clause-mapping verbs so segment rules get the exact same operator
+  // handling (whole-rule-drop, multi-pattern `matches` expansion — qfg-ktkr.6)
+  // as flag rules. Each alternative is its own "in the segment" rule.
+  const alternatives = expandClauses(rule.clauses, ctx)
+  if (alternatives === null) return []
+  const criteriaSets: QuonfigCriterion[][] = []
+  for (const alt of alternatives) {
+    const criteria = clausesToCriteria(alt, ctx)
+    if (criteria === null) return []
+    criteriaSets.push(criteria)
   }
 
   const value =
@@ -314,5 +318,5 @@ function buildSegmentRule(
     )
   }
 
-  return {criteria: criteria.length > 0 ? criteria : [ALWAYS_TRUE], value}
+  return criteriaSets.map((criteria) => ({criteria: criteria.length > 0 ? criteria : [ALWAYS_TRUE], value}))
 }
