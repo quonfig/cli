@@ -12,7 +12,8 @@ import {
 } from '../../src/verify/regex-dialect.js'
 
 // "Quonfig regex v1" (qfg-ktkr.2) is pinned in integration-test-data as
-// tests/regex/dialect.yaml (tag v2026.10.22, qfg-ktkr.1). This test holds
+// tests/regex/dialect.yaml (tag v2026.10.22.1: qfg-ktkr.1, narrowed by
+// qfg-ktkr.7). This test holds
 // src/verify/regex-dialect.ts to every accept/reject row, reason code and
 // hint in that fixture. Locally the fixture is the sibling checkout in the
 // monorepo; QUONFIG_ITD_DIR points somewhere else (e.g. a CI checkout).
@@ -24,7 +25,6 @@ type Fixture = {
   accept: string[]
   hints: Record<string, string>
   limits: Record<string, number>
-  openQuestions: string[]
   reject: {pattern: string; reason: string}[]
 }
 
@@ -36,13 +36,12 @@ const SQ = String.raw`'((?:[^']|'')*)'`
 const ROW = new RegExp(
   String.raw`^\s*-\s*\{\s*pattern:\s*${SQ}\s*(?:,\s*reason:\s*([a-z-]+)\s*)?(?:,\s*note:\s*'(?:[^']|'')*'\s*)?\}\s*$`,
 )
-const OPEN_ROW = new RegExp(String.raw`^\s*-\s*pattern:\s*${SQ}\s*$`)
 const HINT = new RegExp(String.raw`^\s+([a-z-]+):\s*${SQ}\s*$`)
 const LIMIT = /^\s+([_a-z]+):\s*(\d+)\s*$/
 const unquote = (s: string) => s.replaceAll("''", "'")
 
 function loadFixture(file: string): Fixture {
-  const fx: Fixture = {accept: [], hints: {}, limits: {}, openQuestions: [], reject: []}
+  const fx: Fixture = {accept: [], hints: {}, limits: {}, reject: []}
   let section = ''
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     if (/^\s*(#|$)/.test(line)) continue
@@ -82,10 +81,7 @@ function loadFixture(file: string): Fixture {
         break
       }
       case 'open_questions': {
-        const m = OPEN_ROW.exec(line)
-        if (m) fx.openQuestions.push(unquote(m[1]))
-
-        break
+        throw new Error(`open_questions is gone since qfg-ktkr.7; found it in ${file}`)
       }
       // No default
     }
@@ -109,7 +105,15 @@ const rejects = (pattern: string, reason: RegexV1Reason | string) => {
 describe('Quonfig regex v1 (checkRegexV1)', () => {
   // Always-on cases, so a run without the ITD checkout (CI) is not vacuous.
   describe('core cases', () => {
-    for (const p of ['a+b+', '^[0-9]{3}$', '^(foo|bar)$', '.*foo.*', '[\\x00-\\x1f]', '@example\\.com$']) {
+    for (const p of [
+      'a+b+',
+      '^[0-9]{3}$',
+      '^(foo|bar)$',
+      '.*foo.*',
+      '[\\x00-\\x1f]',
+      '@example\\.com$',
+      'a_b\\x0B\\x7F',
+    ]) {
       it(`accepts ${JSON.stringify(p)}`, () => accepts(p))
     }
 
@@ -123,13 +127,23 @@ describe('Quonfig regex v1 (checkRegexV1)', () => {
       ['.*.*.*', 'too-many-unbounded'],
       ['(abc', 'syntax'],
       ['a'.repeat(257), 'too-long'],
+      // qfg-ktkr.7: not portable, so rejected.
+      ['\\_', 'unsupported-escape'],
+      ['^\\v$', 'unsupported-escape'],
+      ['\\xe9', 'unsupported-escape'],
+      ['[\\x80-\\xff]', 'unsupported-escape'],
     ]
     for (const [p, reason] of core) {
       it(`rejects ${JSON.stringify(p.length > 40 ? p.slice(0, 20) + '...' : p)} as ${reason}`, () => rejects(p, reason))
     }
 
     it('the \\d hint carries the Q2 replacement classes', () => {
-      expect(checkRegexV1('\\d')!.hint).to.include('[0-9], [A-Za-z0-9_] or [ \\t\\r\\n\\f\\v]')
+      expect(checkRegexV1('\\d')!.hint).to.include('[0-9], [A-Za-z0-9_] or [ \\t\\r\\n\\f\\x0B]')
+    })
+
+    it('the unsupported-escape hint names the qfg-ktkr.7 replacements', () => {
+      const {hint} = checkRegexV1('\\v')!
+      expect(hint).to.include('Write _ unescaped instead of \\_, \\x0B instead of \\v')
     })
 
     it('links a stable docs anchor', () => {
@@ -173,13 +187,5 @@ describe('Quonfig regex v1 (checkRegexV1)', () => {
       it(`rejects ${JSON.stringify(pattern.length > 40 ? pattern.slice(0, 20) + '...' : pattern)} as ${reason}`, () =>
         rejects(pattern, reason))
     }
-
-    // open_questions (\_, \v, \xHH above \x7F) are pinned neither way until
-    // qfg-ktkr.7 is decided; this check follows the plan's allowed list for
-    // them. Only assert the fixture still lists them, so a decision there
-    // shows up here as a failing count to act on.
-    it('open questions are the three qfg-ktkr.7 constructs', () => {
-      expect(fx.openQuestions).to.deep.equal(['\\_', '^\\v$', '\\xe9'])
-    })
   })
 })

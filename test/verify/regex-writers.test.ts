@@ -46,7 +46,7 @@ describe('regex v1 at the cli writers (qfg-ktkr.2)', () => {
       ])
       expect(fromMap[0].message).to.include('PROP_MATCHES').and.include('nested-quantifier').and.include('(a+)+$')
       expect(fromMap[1].message).to.include('PROP_DOES_NOT_MATCH').and.include('unicode-shorthand')
-      expect(fromMap[1].suggestion).to.include('Use [0-9], [A-Za-z0-9_] or [ \\t\\r\\n\\f\\v].')
+      expect(fromMap[1].suggestion).to.include('Use [0-9], [A-Za-z0-9_] or [ \\t\\r\\n\\f\\x0B].')
       for (const e of fromMap) expect(e.suggestion).to.include(REGEX_V1_DOCS_URL)
     })
 
@@ -141,7 +141,7 @@ describe('regex v1 at the cli writers (qfg-ktkr.2)', () => {
   describe('qfg config-schema', () => {
     it('documents the dialect and links the docs section', () => {
       expect(REFERENCE).to.include('Quonfig regex v1')
-      expect(REFERENCE).to.include('\\d \\w \\s \\b (use [0-9], [A-Za-z0-9_], [ \\t\\r\\n\\f\\v])')
+      expect(REFERENCE).to.include('\\d \\w \\s \\b (use [0-9], [A-Za-z0-9_], [ \\t\\r\\n\\f\\x0B])')
       expect(REFERENCE).to.include(REGEX_V1_DOCS_URL)
     })
   })

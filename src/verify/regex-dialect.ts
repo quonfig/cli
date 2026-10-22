@@ -2,7 +2,8 @@
  * "Quonfig regex v1": the regex dialect of PROP_MATCHES and PROP_DOES_NOT_MATCH
  * (qfg-ktkr.2). Spec: project/plans/2026-10-12-regex-write-time-check.md
  * section 2, approved 2026-10-16 (qfg-goi1.10.10). Fixture of record:
- * integration-test-data tests/regex/dialect.yaml (tag v2026.10.22), which
+ * integration-test-data tests/regex/dialect.yaml (tag v2026.10.22.1; \_, \v
+ * and \x80-\xFF rejected per qfg-ktkr.7), which
  * test/verify/regex-dialect.test.ts holds this file to, row by row.
  *
  * The dialect is the intersection of what every SDK's engine (go RE2, node
@@ -59,9 +60,9 @@ export const REGEX_V1_HINTS: Record<RegexV1Reason, string> = {
   'class-syntax':
     'Inside [...] use only literals, ranges and escapes. POSIX classes such as [:digit:], a nested [, &&, --, ~~ and || are not supported. Escape a literal [ or ] as \\[ or \\], and do not start a class with ].',
   'unicode-shorthand':
-    '\\d, \\w, \\s, \\b and their negations match different characters in different SDKs. Use [0-9], [A-Za-z0-9_] or [ \\t\\r\\n\\f\\v].',
+    '\\d, \\w, \\s, \\b and their negations match different characters in different SDKs. Use [0-9], [A-Za-z0-9_] or [ \\t\\r\\n\\f\\x0B].',
   'unsupported-escape':
-    'This escape is not supported. The supported escapes are \\ followed by ASCII punctuation, \\t \\n \\r \\f \\v, and \\xHH with exactly two hex digits.',
+    'This escape is not supported. The supported escapes are \\ followed by ASCII punctuation other than _, \\t \\n \\r \\f, and \\xHH with exactly two hex digits from \\x00 to \\x7F. Write _ unescaped instead of \\_, \\x0B instead of \\v, and a character above \\x7F as the character itself.',
   'nested-quantifier':
     'A quantifier cannot apply to a group that contains a quantifier or a |, as in (a+)+ or (a|b)*. Such patterns can take exponential time. Quantify the inner part only, or use a class: [ab]* instead of (a|b)*.',
   'too-many-unbounded':
@@ -73,8 +74,11 @@ export interface RegexV1Violation {
   reason: RegexV1Reason
 }
 
-const ASCII_PUNCT = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
-const SIMPLE_ESCAPES: Record<string, number> = {f: 0x0c, n: 0x0a, r: 0x0d, t: 0x09, v: 0x0b}
+// qfg-ktkr.7: no \_ (.NET throws), no \v (java reads a vertical-whitespace
+// class), and \xHH only up to \x7F (ruby rejects \x80-\xFF).
+const ASCII_PUNCT = '!"#$%&\'()*+,-./:;<=>?@[\\]^`{|}~'
+const SIMPLE_ESCAPES: Record<string, number> = {f: 0x0c, n: 0x0a, r: 0x0d, t: 0x09}
+const MAX_HEX_ESCAPE = 0x7f
 const SHORTHANDS = 'dDwWsSbB'
 const HEX = /^[\dA-Fa-f]{2}$/
 
@@ -160,8 +164,10 @@ function scan(p: string[]): number {
     if (c === 'x') {
       const hex = (p[i + 2] ?? '') + (p[i + 3] ?? '')
       if (!HEX.test(hex)) fail('unsupported-escape')
+      const cp = Number.parseInt(hex, 16)
+      if (cp > MAX_HEX_ESCAPE) fail('unsupported-escape')
       i += 4
-      return Number.parseInt(hex, 16)
+      return cp
     }
 
     if (c.length === 1 && ASCII_PUNCT.includes(c)) {

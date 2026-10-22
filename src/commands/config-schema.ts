@@ -132,8 +132,8 @@ OPERATOR REFERENCE
   LOOKUP_KEY_NOT_IN                string_list
 
 Regex (PROP_MATCHES / PROP_DOES_NOT_MATCH) must be Quonfig regex v1, or qfg verify and push reject it:
-  literals . ^ $ | ( ) (?: ) [...] [^...], * + ? {n} {n,} {n,m} (<= 1000, optionally lazy), escapes \\<punct> \\t \\n \\r \\f \\v \\xHH.
-  No lookaround, named groups, (?i), backrefs or \\d \\w \\s \\b (use [0-9], [A-Za-z0-9_], [ \\t\\r\\n\\f\\v]);
+  literals . ^ $ | ( ) (?: ) [...] [^...], * + ? {n} {n,} {n,m} (<= 1000, optionally lazy), escapes \\<punct> (not \\_) \\t \\n \\r \\f \\x00-\\x7F.
+  No lookaround, named groups, (?i), backrefs or \\d \\w \\s \\b (use [0-9], [A-Za-z0-9_], [ \\t\\r\\n\\f\\x0B]);
   no quantified group holding a quantifier or |, at most 2 of * + {n,}, at most 256 chars.
   Docs: ${REGEX_V1_DOCS_URL}
 
