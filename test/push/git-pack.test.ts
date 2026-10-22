@@ -195,6 +195,53 @@ describe('git-pack: buildPack', () => {
     }
   })
 
+  // qfg-b1eo: a brand-new branch has no origin/<branch>, so run-push passes
+  // the zero OID as expectedSha. `^0000…` is a bad object to pack-objects;
+  // the pack must instead exclude what the server already has (origin/*).
+  it('packs only the new commits when expectedSha is the zero OID (brand-new branch)', async () => {
+    const ZERO_OID = '0000000000000000000000000000000000000000'
+    const server = tmpDir('qfg-pack-server-')
+    const src = makeRepo()
+    try {
+      run(server, 'init', '--bare', '--initial-branch=main')
+      run(src, 'remote', 'add', 'origin', server)
+      run(src, 'push', '-q', 'origin', 'main')
+      run(src, 'fetch', '-q', 'origin')
+      run(src, 'checkout', '-q', '-b', 'feature/new')
+      const newSha = commitFile(src, 'configs/a.json', '{"k":1}\n', 'add a')
+
+      const pack = await buildPack(src, ZERO_OID, newSha)
+
+      // Header bytes 8..11 hold the object count: the new commit, its tree,
+      // the configs/ subtree and the new blob — none of main's objects.
+      expect(Buffer.from(pack).readUInt32BE(8)).to.equal(4)
+
+      // The server (which has main) can ingest it and now has the tip.
+      const ingest = spawnSync('git', ['-C', server, 'index-pack', '--strict', '--stdin'], {
+        input: Buffer.from(pack),
+        encoding: 'buffer',
+      })
+      expect(ingest.status, ingest.stderr?.toString()).to.equal(0)
+      expect(spawnSync('git', ['-C', server, 'cat-file', '-e', newSha]).status).to.equal(0)
+    } finally {
+      fs.rmSync(src, {recursive: true, force: true})
+      fs.rmSync(server, {recursive: true, force: true})
+    }
+  })
+
+  it('packs the full history for the zero OID when there are no origin refs', async () => {
+    const ZERO_OID = '0000000000000000000000000000000000000000'
+    const src = makeRepo()
+    try {
+      const newSha = run(src, 'rev-parse', 'HEAD')
+      const pack = await buildPack(src, ZERO_OID, newSha)
+      // initial commit + root tree + README blob.
+      expect(Buffer.from(pack).readUInt32BE(8)).to.equal(3)
+    } finally {
+      fs.rmSync(src, {recursive: true, force: true})
+    }
+  })
+
   it('exports MAX_PACK_BYTES = 25 MiB to match the §7 open Q #7 cap', () => {
     expect(MAX_PACK_BYTES).to.equal(25 * 1024 * 1024)
   })

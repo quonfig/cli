@@ -22,6 +22,9 @@ import {spawn} from 'node:child_process'
 
 import {GIT_SAFE_ARGS, GIT_SAFE_ENV, runGit} from '../util/git-ops.js'
 
+/** `expectedSha` for a branch the server does not have yet. */
+export const ZERO_OID = '0000000000000000000000000000000000000000'
+
 /** Per §7 open Q #7 of the design plan: pack size cap of 25 MiB. */
 export const MAX_PACK_BYTES = 25 * 1024 * 1024
 
@@ -94,6 +97,16 @@ export interface BuildPackOptions {
  * from expectedSha" recipe. Buffers the entire output to memory so we
  * can enforce the §7 cap before shipping anything to the server.
  *
+ * For a brand-new branch `expectedSha` is {@link ZERO_OID}, which is not
+ * an object git can exclude (qfg-b1eo). Then the pack excludes everything
+ * reachable from the `origin/*` remote-tracking refs, i.e. what the server
+ * already has, and with no such refs it carries the full history:
+ *
+ *     printf '<newSha>\n^<origin ref sha>\n…' | git pack-objects --revs --stdout
+ *
+ * (pack-objects' stdin takes revs and `--not` only, not `--remotes`, so
+ * the refs are resolved with `git for-each-ref` first.)
+ *
  * Returns an empty `Uint8Array` when `expectedSha === newSha` — there
  * are no new commits, so `pack-objects` would either error on stdin
  * with no candidate revs or produce an empty pack. Skipping the spawn
@@ -110,6 +123,7 @@ export async function buildPack(
   }
 
   const limit = options.maxBytes ?? MAX_PACK_BYTES
+  const excludes = expectedSha === ZERO_OID ? await originRefShas(dir) : [expectedSha]
 
   return new Promise<Uint8Array>((resolve, reject) => {
     const env = {...process.env, ...GIT_SAFE_ENV}
@@ -158,8 +172,15 @@ export async function buildPack(
       resolve(new Uint8Array(out.buffer, out.byteOffset, out.byteLength))
     })
 
-    // Feed the rev-list spec on stdin: include newSha, exclude expectedSha.
-    // `--revs` tells pack-objects to read this as `git rev-list` would.
-    child.stdin.end(`${newSha}\n^${expectedSha}\n`)
+    // Feed the rev-list spec on stdin: include newSha, exclude expectedSha
+    // (or, for a new branch, the origin/* refs). `--revs` tells
+    // pack-objects to read this as `git rev-list` would.
+    child.stdin.end([newSha, ...excludes.map((sha) => `^${sha}`)].map((line) => `${line}\n`).join(''))
   })
+}
+
+/** Commit SHAs of the `origin/*` remote-tracking refs (deduped). */
+async function originRefShas(dir: string): Promise<string[]> {
+  const res = await runGit(['-C', dir, 'for-each-ref', '--format=%(objectname)', 'refs/remotes/origin'])
+  return [...new Set(res.stdout.split('\n').map((l) => l.trim()).filter((l) => l.length > 0))]
 }

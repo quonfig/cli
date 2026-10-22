@@ -26,10 +26,9 @@ import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../ut
 import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
 import {FileDelta, summarizeDiff} from './diff-summary.js'
-import type {CurrentBranchResult} from './git-pack.js'
+import {type CurrentBranchResult, ZERO_OID} from './git-pack.js'
 
 /** All-zeros object id, the git-protocol convention for "no such ref". */
-const ZERO_OID = '0000000000000000000000000000000000000000'
 
 export interface GiteaTokenMintResult {
   expiresAt: string | null
