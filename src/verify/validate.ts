@@ -30,6 +30,7 @@ import {z} from 'zod'
 
 import {findMapKeyOrderWarnings, navigate, type OrderedNode, scanOrderedJson} from './map-key-order.js'
 import {compileSchema, validateAgainstSchema} from './schema-validator.js'
+import {checkRegexV1, REGEX_V1_DOCS_URL} from './regex-dialect.js'
 import {
   DURATION_FORMAT_HINT,
   INT_RANGE_FORMAT_HINT,
@@ -1569,6 +1570,26 @@ function criterionValueShapeIssue(
     case 'PROP_SEMVER_LESS_THAN': {
       if (vtm.type !== 'string' || !isValidSemver(vtm.value))
         return {hint: SEMVER_FORMAT_HINT, problem: `needs a version string; got ${vtm.type} ${shown}`}
+      return undefined
+    }
+
+    case 'PROP_DOES_NOT_MATCH':
+    case 'PROP_MATCHES': {
+      // Quonfig regex v1 (qfg-ktkr.2): an out-of-dialect pattern compiles in
+      // some SDKs and not others (or runs in exponential time), so the rule
+      // silently diverges across SDKs. One check here covers qfg verify, the
+      // Git hook and both push engines.
+      if (vtm.type !== 'string' || typeof vtm.value !== 'string')
+        return {
+          hint: `Store the pattern as {"type": "string", "value": "<pattern>"}. See ${REGEX_V1_DOCS_URL}`,
+          problem: `needs a string pattern; got ${vtm.type} ${shown}`,
+        }
+      const violation = checkRegexV1(vtm.value)
+      if (violation)
+        return {
+          hint: `${violation.hint} See ${REGEX_V1_DOCS_URL}`,
+          problem: `pattern ${shown} is outside Quonfig regex v1 (${violation.reason})`,
+        }
       return undefined
     }
 

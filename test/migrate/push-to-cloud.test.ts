@@ -445,6 +445,70 @@ describe('pushMigrationToCloud', () => {
     expect(logSubjects(reader)).to.deep.equal(['initial'])
   })
 
+  // qfg-ktkr.2: the second push engine also runs the regex v1 check. The LD
+  // importer never emits an out-of-subset pattern (it skips the rule), so plant
+  // one straight through the source, the way a hand-edited workspace would.
+  it('refuses to push a PROP_MATCHES pattern outside Quonfig regex v1 (qfg-ktkr.2)', async () => {
+    const remote = createBareRemote(root)
+    seedRemote(remote, root)
+    const localDir = path.join(root, 'workspace')
+
+    const planted = (pattern: string) =>
+      JSON.stringify(
+        {
+          default: {
+            rules: [
+              {
+                criteria: [
+                  {
+                    operator: 'PROP_MATCHES',
+                    propertyName: 'user.email',
+                    valueToMatch: {type: 'string', value: pattern},
+                  },
+                ],
+                value: {type: 'bool', value: true},
+              },
+              {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}},
+            ],
+          },
+          environments: [],
+          key: 'flag-regex',
+          type: 'feature_flag',
+          valueType: 'bool',
+        },
+        null,
+        2,
+      ) + '\n'
+
+    const filesByKey = new Map<string, QuonfigFile[]>([
+      ['flag-regex', [{contents: planted('(a+)+$'), path: 'feature-flags/flag-regex.json'}]],
+    ])
+
+    let thrown: unknown
+    try {
+      await pushMigrationToCloud({
+        changes: [makeChange('flag-regex', 1000)],
+        environments: ['production'],
+        importState: {lastProcessedAt: 1000, source: 'fake'},
+        localDir,
+        remoteUrl: remote,
+        reportData: emptyReport(),
+        source: makeFakeSource(filesByKey),
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown, 'expected pushMigrationToCloud to throw a verify error').to.be.instanceOf(MigratorVerifyError)
+    const issues = (thrown as MigratorVerifyError).result.issues.filter((i) => i.severity === 'error')
+    expect(issues).to.have.length(1)
+    expect(issues[0].file).to.equal('feature-flags/flag-regex.json')
+    expect(issues[0].message).to.include('nested-quantifier')
+
+    const reader = cloneForRead(remote, root)
+    expect(logSubjects(reader)).to.deep.equal(['initial'])
+  })
+
   it('merges source envs into the target quonfig.json without clobbering existing envs (qfg-zfl.22)', async () => {
     const remote = createBareRemote(root)
     seedRemote(remote, root)

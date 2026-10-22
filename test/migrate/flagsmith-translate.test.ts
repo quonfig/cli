@@ -547,6 +547,11 @@ describe('migrate/sources/flagsmith/translate', () => {
       {operator: 'REGEX', property: 'email', value: '^admin@.*$'},
       {operator: 'PROP_MATCHES', propertyName: 'email', valueToMatch: {type: 'string', value: '^admin@.*$'}},
     )
+    drop(
+      'REGEX outside Quonfig regex v1 → drops with the reason (qfg-ktkr.2)',
+      {operator: 'REGEX', property: 'email', value: '^\\w+@corp\\.com$'},
+      /outside Quonfig regex v1 \(unicode-shorthand\)/,
+    )
     ok(
       'IS_SET → IS_PRESENT',
       {operator: 'IS_SET', property: 'beta_opt_in'},

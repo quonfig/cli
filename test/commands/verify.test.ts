@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import {cleanFiles, plantedFiles} from '../verify/regex-fixtures.js'
+
 describe('verify', () => {
   let tmpdir: string
   let prevCwd: string
@@ -120,5 +122,44 @@ describe('verify', () => {
           'Value does not match schema "retry": default.rules[0].value.retries: must be integer',
         ])
       })
+  })
+  // qfg-ktkr.2: the planted regex workspace (a ReDoS-shaped PROP_MATCHES and a
+  // \d PROP_DOES_NOT_MATCH) fails `qfg verify`; the in-subset twin passes.
+  describe('regex patterns outside Quonfig regex v1', () => {
+    const write = (files: Map<string, string>) => {
+      for (const [rel, content] of files) {
+        fs.mkdirSync(path.join(tmpdir, path.dirname(rel)), {recursive: true})
+        fs.writeFileSync(path.join(tmpdir, rel), content)
+      }
+    }
+
+    describe('planted', () => {
+      beforeEach(() => write(plantedFiles()))
+
+      test
+        .stdout()
+        .command(['verify', '.', '--json'])
+        .catch((error) => {
+          expect((error as {oclif?: {exit?: number}}).oclif?.exit ?? 1).to.equal(1)
+        })
+        .it('is an error for each planted pattern and exits non-zero', (ctx) => {
+          const output = JSON.parse(ctx.stdout) as {issues: Array<{message: string; severity: string}>; valid: boolean}
+          expect(output.valid).to.equal(false)
+          const errors = output.issues.filter((i) => i.severity === 'error').map((i) => i.message)
+          expect(errors).to.have.length(2)
+          expect(errors.join('\n')).to.include('nested-quantifier').and.include('unicode-shorthand')
+        })
+    })
+
+    describe('in-subset twin', () => {
+      beforeEach(() => write(cleanFiles()))
+
+      test
+        .stdout()
+        .command(['verify', '.', '--json'])
+        .it('is valid', (ctx) => {
+          expect(JSON.parse(ctx.stdout)).to.have.property('valid', true)
+        })
+    })
   })
 })
