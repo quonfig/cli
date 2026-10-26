@@ -258,6 +258,7 @@ describe('hook mode validates schema-bound values (qfg-q5f6.10)', () => {
   }
 
   let dir: string
+  let seedOid: string
   const git = (...args: string[]) => execFileSync('git', args, {cwd: dir, encoding: 'utf8'}).trim()
 
   beforeEach(() => {
@@ -265,6 +266,10 @@ describe('hook mode validates schema-bound values (qfg-q5f6.10)', () => {
     git('init', '--quiet', '--initial-branch', 'main')
     git('config', 'user.email', 'test@quonfig.test')
     git('config', 'user.name', 'test')
+    // main is append-only on every repo (qfg-jxml.29), so a push that CREATES
+    // main is rejected; these pushes fast-forward from an empty seed instead.
+    git('commit', '--quiet', '--allow-empty', '-m', 'seed')
+    seedOid = git('rev-parse', 'HEAD')
   })
 
   afterEach(() => {
@@ -282,7 +287,7 @@ describe('hook mode validates schema-bound values (qfg-q5f6.10)', () => {
     return git('rev-parse', 'HEAD')
   }
 
-  function runHook(newOid: string, oldOid = '0'.repeat(40)): {code: number; output: string} {
+  function runHook(newOid: string, oldOid = seedOid): {code: number; output: string} {
     const logs: string[] = []
     const code = runHookChecks([{newOid, oldOid, refName: 'refs/heads/main'}], {
       cwd: dir,
