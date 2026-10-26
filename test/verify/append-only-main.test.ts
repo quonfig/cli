@@ -11,12 +11,12 @@ import {hookVersion, runHookChecks} from '../../src/verify/standalone.js'
  *
  * Every update to refs/heads/main must have a NON-ZERO old oid that is an
  * ancestor of the new oid. A delete is rejected, a create (zero old oid) is
- * rejected, other refs stay rewritable. Two-key operator bypass; enforcement
- * gated by a per-repo allowlist env var that fails open to today's behaviour.
+ * rejected, other refs stay rewritable. Two-key operator bypass. Enforcement is
+ * unconditional: the QUONFIG_HOOK_FF_ENFORCE rollout switch was removed
+ * (qfg-jxml.29).
  */
 describe('append-only main (qfg-jxml.21)', () => {
   const ZERO = '0'.repeat(40)
-  const REPO = 'quonfig/our-config'
 
   type Fixture = {alt: string; bare: string; first: string; second: string}
 
@@ -90,7 +90,6 @@ describe('append-only main (qfg-jxml.21)', () => {
   const enforcingEnv = (extra: Env = {}): Env => ({
     GITEA_REPO_NAME: 'our-config',
     GITEA_REPO_USER_NAME: 'quonfig',
-    QUONFIG_HOOK_FF_ENFORCE: REPO,
     ...extra,
   })
 
@@ -252,51 +251,33 @@ describe('append-only main (qfg-jxml.21)', () => {
     })
   })
 
-  describe('rollout allowlist', () => {
-    it("does not enforce when the allowlist env var is unset (today's behaviour)", () => {
+  describe('no rollout switch (qfg-jxml.29)', () => {
+    it('enforces with no QUONFIG_HOOK_FF_ENFORCE set', () => {
       const {code} = run(mainRef(fixture.second, fixture.alt), {
         GITEA_REPO_NAME: 'our-config',
         GITEA_REPO_USER_NAME: 'quonfig',
       })
-      expect(code).to.equal(0)
+      expect(code).to.equal(1)
     })
 
-    it('does not enforce when the allowlist env var is empty', () => {
-      const {code} = run(mainRef(fixture.second, fixture.alt), enforcingEnv({QUONFIG_HOOK_FF_ENFORCE: '  '}))
-      expect(code).to.equal(0)
+    it('ignores a legacy QUONFIG_HOOK_FF_ENFORCE value that would have turned enforcement off', () => {
+      for (const value of ['', '  ', 'other/repo']) {
+        const {code} = run(mainRef(fixture.second, fixture.alt), enforcingEnv({QUONFIG_HOOK_FF_ENFORCE: value}))
+        expect(code, `QUONFIG_HOOK_FF_ENFORCE=${JSON.stringify(value)}`).to.equal(1)
+      }
     })
 
-    it('enforces on a listed repo and not on an unlisted one', () => {
-      const listed = run(
-        mainRef(fixture.second, fixture.alt),
-        enforcingEnv({QUONFIG_HOOK_FF_ENFORCE: 'other/repo, quonfig/our-config'}),
-      )
-      expect(listed.code, 'listed repo').to.equal(1)
-
-      const unlisted = run(
-        mainRef(fixture.second, fixture.alt),
-        enforcingEnv({GITEA_REPO_NAME: 'somebody-else', QUONFIG_HOOK_FF_ENFORCE: 'other/repo, quonfig/our-config'}),
-      )
-      expect(unlisted.code, 'unlisted repo').to.equal(0)
+    it('enforces on every repo', () => {
+      const {code} = run(mainRef(fixture.second, fixture.alt), enforcingEnv({GITEA_REPO_NAME: 'somebody-else'}))
+      expect(code).to.equal(1)
     })
 
-    it('enforces on every repo with `*`', () => {
-      const listed = run(mainRef(fixture.second, fixture.alt), enforcingEnv({QUONFIG_HOOK_FF_ENFORCE: '*'}))
-      expect(listed.code, 'listed repo').to.equal(1)
-
-      const unlisted = run(
-        mainRef(fixture.second, fixture.alt),
-        enforcingEnv({GITEA_REPO_NAME: 'somebody-else', QUONFIG_HOOK_FF_ENFORCE: '*'}),
-      )
-      expect(unlisted.code, 'unlisted repo').to.equal(1)
-    })
-
-    it('does not enforce when the repo cannot be identified from the Gitea env', () => {
+    it('enforces when the repo cannot be identified from the Gitea env', () => {
       const {code} = run(
         mainRef(fixture.second, fixture.alt),
         enforcingEnv({GITEA_REPO_NAME: undefined, GITEA_REPO_USER_NAME: undefined}),
       )
-      expect(code).to.equal(0)
+      expect(code).to.equal(1)
     })
   })
 

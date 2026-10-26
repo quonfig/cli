@@ -156,7 +156,9 @@ const REWRITE_OPTION = 'quonfig-rewrite='
  * old oid that is an ancestor of the new oid. A delete and a create are both
  * rejected (provisioning creates `main` with auto_init; no writer creates it by
  * push, and the zero-oid door is the only way to delete-then-recreate).
- * Other refs are untouched. See plan 2026-09-17-tree-derived-cache 5.6.
+ * Other refs are untouched. Enforced on every repo, unconditionally: the
+ * QUONFIG_HOOK_FF_ENFORCE rollout switch is gone (qfg-jxml.29), so no env var
+ * can turn the rule off. See plan 2026-09-17-tree-derived-cache 5.6.
  */
 export function checkAppendOnlyMain(
   refs: readonly RefUpdate[],
@@ -164,7 +166,7 @@ export function checkAppendOnlyMain(
   cwd?: string,
 ): {bypassReason?: string; errors: string[]} {
   const mainUpdates = refs.filter((ref) => ref.refName === MAIN_REF)
-  if (mainUpdates.length === 0 || !ffEnforcedForRepo(env)) return {errors: []}
+  if (mainUpdates.length === 0) return {errors: []}
 
   const bypassReason = operatorBypassReason(env)
   if (bypassReason) return {bypassReason, errors: []}
@@ -197,22 +199,6 @@ export function checkAppendOnlyMain(
   }
 
   return {errors}
-}
-
-/** Rollout switch: enforce only for repos named in the allowlist; `*` = all. */
-function ffEnforcedForRepo(env: HookEnv): boolean {
-  const allowlist = (env.QUONFIG_HOOK_FF_ENFORCE ?? '')
-    .split(',')
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean)
-  if (allowlist.length === 0) return false
-  if (allowlist.includes('*')) return true
-
-  // Gitea 1.25 hands the hook its repo via these (modules/repository/env.go).
-  const owner = (env.GITEA_REPO_USER_NAME ?? '').trim().toLowerCase()
-  const name = (env.GITEA_REPO_NAME ?? '').trim().toLowerCase()
-  if (!owner || !name) return false
-  return allowlist.includes(`${owner}/${name}`)
 }
 
 /**
