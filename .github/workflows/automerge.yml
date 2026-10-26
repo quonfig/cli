@@ -11,7 +11,7 @@ jobs:
       pull-requests: write
       statuses: read
       checks: read
-    # No `secrets: inherit`: this third-party workflow (mutable @main) only
+    # No `secrets: inherit`: this third-party workflow (pinned to a main SHA) only
     # needs GITHUB_TOKEN, which a called workflow always receives. inherit
     # handed it every repo and org secret (Semgrep p/ci secrets-inherit).
-    uses: oclif/github-workflows/.github/workflows/automerge.yml@main
+    uses: oclif/github-workflows/.github/workflows/automerge.yml@56d34995157cd6b3376597d9d2feb1e10af998bd # main
