@@ -1,16 +1,3 @@
 # Dependency-scan ignores for the SSDLC deps check (quonfig/ci, qfg-66ko.3).
 # Every entry needs a reason; past ignoreUntil it is enforced again.
 # Note: an ignore matches the advisory id for every version of the package.
-
-# --- No fixed release yet (qfg-66ko.8) ---
-
-[[IgnoredVulns]]
-id = "GHSA-vfj7-8cjw-p6xm"
-ignoreUntil = 2027-01-07
-reason = "braces <=3.0.3 stack-exhaustion DoS, no fixed release yet. Dev/test/build tooling only (micromatch under eslint/mocha/oclif tooling); patterns come from repo config, not untrusted input. Tracked in qfg-66ko.8."
-
-[[IgnoredVulns]]
-id = "GHSA-ch52-4w7c-c8xp"
-ignoreUntil = 2027-01-07
-reason = "http-cache-semantics <=4.2.0 shared-cache max-stale disclosure, no fixed release yet. Only pulled in by npm-registry HTTP clients (make-fetch-happen under npm/node-gyp, cacheable-request under the update-check plugin), each a private per-user cache; no shared multi-user HTTP cache. Tracked in qfg-66ko.8."
-
