@@ -33,7 +33,7 @@
     "lodash.camelcase": "^4.3.0",
     "mustache": "^4.2.0",
     "typescript": "^5",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "description": "Quonfig CLI.\n\n  Inject configs/secrets as env vars (preferred for scripts and CI):\n    qfg run --env DATABASE_URL=db.url --env API_KEY=stripe.key -- ./bin/migrate\n\n  Other common usage:\n    qfg get <key> --environment <env>     read a single value\n    qfg list                              show all keys in the workspace\n    qfg config-schema && qfg pull         set up arbitrary targeting rules (email, plan, segment, custom property)",
   "devDependencies": {
