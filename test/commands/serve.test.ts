@@ -20,6 +20,7 @@ import {Parser} from '@oclif/core'
 import {expect} from 'chai'
 import * as fs from 'node:fs'
 import * as http from 'node:http'
+import {createRequire} from 'node:module'
 import * as net from 'node:net'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -144,6 +145,16 @@ function base64url(s: string): string {
   return Buffer.from(s, 'utf8').toString('base64url')
 }
 
+// The client helper uses the CommonJS `http` module, not the ESM namespace
+// import above. Other test files start msw's setupServer, which patches
+// http.request. On Node 20.9 a builtin loaded through ESM while that patch is
+// live re-syncs the shared `node:http` namespace, and server.close() only
+// restores the CommonJS export. The stale ESM binding then routes requests
+// through msw's MockAgent, which hangs on the 100KB request line in the 414
+// test (surfaced by @oclif/plugin-warn-if-update-available 3.2.0, whose init
+// hook now loads under the shared @oclif/core 4).
+const nodeHttp: typeof http = createRequire(import.meta.url)('node:http')
+
 async function httpRequest(
   port: number,
   method: string,
@@ -151,7 +162,7 @@ async function httpRequest(
   headers: Record<string, string> = {},
 ): Promise<{status: number; headers: http.IncomingHttpHeaders; body: string}> {
   return new Promise((resolve, reject) => {
-    const req = http.request({host: '127.0.0.1', port, method, path: pathName, headers}, (res) => {
+    const req = nodeHttp.request({host: '127.0.0.1', port, method, path: pathName, headers}, (res) => {
       let buf = ''
       res.on('data', (chunk: Buffer) => {
         buf += chunk.toString('utf8')
