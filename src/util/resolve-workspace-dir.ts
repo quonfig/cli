@@ -44,8 +44,7 @@ export interface ResolveWorkspaceDirInput {
 }
 
 export type ResolveWorkspaceDirResult =
-  | {kind: 'ok'; dir: string; source: 'flag' | 'env' | 'cwd-walk'}
-  | {kind: 'error'; message: string}
+  {kind: 'ok'; dir: string; source: 'flag' | 'env' | 'cwd-walk'} | {kind: 'error'; message: string}
 
 const blank = (s: string | undefined): boolean => s === undefined || s === ''
 

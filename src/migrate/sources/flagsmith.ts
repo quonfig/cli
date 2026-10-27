@@ -63,8 +63,7 @@ const DEFAULT_PROJECT_ID = '1'
  * `translate()` switches on this to dispatch to the right shape converter.
  */
 export type FlagsmithRaw =
-  | {data: FlagsmithFeatureWithStates; kind: 'feature'}
-  | {data: FlagsmithSegment; kind: 'segment'}
+  {data: FlagsmithFeatureWithStates; kind: 'feature'} | {data: FlagsmithSegment; kind: 'segment'}
 
 interface FlagsmithState {
   apiKey: null | string

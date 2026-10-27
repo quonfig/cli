@@ -34,9 +34,7 @@ export const MAX_PACK_BYTES = 25 * 1024 * 1024
  * user-facing refusal message — callers throw it as-is.
  */
 export type CurrentBranchResult =
-  | {kind: 'branch'; name: string}
-  | {kind: 'detached'; message: string}
-  | {kind: 'master'; message: string}
+  {kind: 'branch'; name: string} | {kind: 'detached'; message: string} | {kind: 'master'; message: string}
 
 /**
  * Resolve HEAD via `git symbolic-ref HEAD`. Empty/failed resolution

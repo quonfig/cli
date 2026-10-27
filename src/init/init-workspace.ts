@@ -28,13 +28,7 @@ export interface InitOptions {
 }
 
 export type ActionKind =
-  | 'git-init'
-  | 'create-dir'
-  | 'write-file'
-  | 'skip-file'
-  | 'create-hook'
-  | 'update-hook'
-  | 'skip-hook'
+  'git-init' | 'create-dir' | 'write-file' | 'skip-file' | 'create-hook' | 'update-hook' | 'skip-hook'
 
 export interface InitAction {
   description: string
