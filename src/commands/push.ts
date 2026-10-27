@@ -196,8 +196,7 @@ export function buildRealDeps(
   // the probe clone, so by the time we read it here it is populated.
   let authenticatedRepoUrl: string | undefined
   let barePathProbe:
-    | {deltas: FileDelta[]; remoteHeadSha: string; scratchDir: string; totalRemoteFiles: number}
-    | undefined
+    {deltas: FileDelta[]; remoteHeadSha: string; scratchDir: string; totalRemoteFiles: number} | undefined
 
   const ensureBarePathProbe = async (dir: string) => {
     if (barePathProbe) return barePathProbe

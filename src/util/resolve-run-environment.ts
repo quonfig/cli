@@ -33,9 +33,7 @@ export interface ResolveRunEnvironmentInput {
 }
 
 export type ResolveRunEnvironmentResult =
-  | {mode: 'sdk-key'; sdkKey: string}
-  | {mode: 'user'; environmentName: string}
-  | {mode: 'error'; message: string}
+  {mode: 'sdk-key'; sdkKey: string} | {mode: 'user'; environmentName: string} | {mode: 'error'; message: string}
 
 export const RUN_MODE_AMBIGUOUS_ERROR =
   'qfg run: QUONFIG_BACKEND_SDK_KEY is set, which encodes the environment.\n' +
