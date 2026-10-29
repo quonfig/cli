@@ -748,22 +748,26 @@ Create a new feature flag, config value, or other item.
 
 ```
 USAGE
-  $ qfg create NAME --type boolean-flag|boolean|string|double|int|string-list|json|duration|log_level
-    [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential] [--env-var <value>] [--value
-    <value>] [--secret] [--secret-key-name <value>]
+  $ qfg create NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
+    [--env-var <value>] [--type boolean-flag|boolean|string|double|int|string-list|json|duration|log_level] [--value
+    <value>] [--value-from-env VAR] [--value-stdin] [--secret] [--secret-key-name <value>]
 
 ARGUMENTS
   NAME  name for your new item (e.g. my.new.flag)
 
 FLAGS
   --confidential             mark the value as confidential
-  --env-var=<value>          environment variable to get value from
-  --secret                   encrypt the value of this item
+  --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
+                             env var NOW, use --value-from-env
+  --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
-  --type=<option>            (required)
+  --type=<option>            kind of item to create (required, except with --secret, which implies string)
                              <options: boolean-flag|boolean|string|double|int|string-list|json|duration|log_level>
-  --value=<value>            default value for your new item
+  --value=<value>            default value for your new item (for secrets prefer --value-stdin / --value-from-env)
+  --value-from-env=VAR       read the value to store from this LOCAL env var now (keeps it out of argv/shell history).
+                             Not the same as --env-var
+  --value-stdin              read the value to store from stdin (one trailing newline is stripped). Keeps it out of argv
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -785,6 +789,17 @@ DESCRIPTION
   boolean       A plain boolean (not a feature flag)
   duration      An ISO 8601 duration string, e.g. PT30S, PT5M, PT1H30M (SDK returns milliseconds)
   log_level     A dynamic log level (value must be one of TRACE/DEBUG/INFO/WARN/ERROR/FATAL)
+
+  Secrets (--secret) are encrypted client-side and are STRING-ONLY: --secret
+  implies --type string, so you can leave --type off. To store a JSON secret, store the JSON as a string secret and
+  JSON.parse it in your app. The CLI never prints a secret's plaintext: it shows
+  a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
+
+  Keep the value out of argv / shell history / agent transcripts with:
+  --value-stdin             read the value from stdin
+  --value-from-env=VAR      read the value from a local env var, now
+  These are different from --env-var, which stores NO value: it tells the SDK to
+  read the value from that env var at runtime.
 
   This sets the global default value. Override per-environment with:
   qfg set-default my.flag --environment production --value true
@@ -812,7 +827,15 @@ EXAMPLES
 
   $ qfg create my.new.string --type string --value="hello world"
 
-  $ qfg create my.new.string --type string --value="hello world" --secret
+  # Create a secret without the value ever appearing in argv (--secret implies --type string):
+
+  pbpaste | qfg create stripe.api-key --secret --value-stdin
+
+  $ qfg create stripe.api-key --secret --value-from-env STRIPE_API_KEY
+
+  # A JSON secret is a string secret holding JSON (JSON.parse it in your app):
+
+  $ qfg create gcp.service-account --secret --value-stdin < sa.json
 
   $ qfg create my.new.string --type string --env-var=MY_ENV_VAR_NAME
 
@@ -1109,12 +1132,14 @@ Get the value of a config/feature-flag/etc.
 ```
 USAGE
   $ qfg get [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--environment <value>]
+    [--reveal]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
 
 FLAGS
   --environment=<value>  environment to evaluate in
+  --reveal               print the plaintext of a secret/confidential value (it is redacted by default)
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -1126,10 +1151,21 @@ GLOBAL FLAGS
 DESCRIPTION
   Get the value of a config/feature-flag/etc.
 
+  Secrets (encrypted) and confidential values print REDACTED by default, as a
+  fingerprint plus length (and the last 4 characters for values of 12+ chars):
+  [encrypted *****3fa9c, 51 chars, ends …a1b2]
+  The fingerprint is the same one SDK telemetry and the Quonfig UI show, so you
+  can confirm a rotation landed without printing the secret. Pass --reveal to
+  print the plaintext. To inject secrets into a process, prefer `qfg run`.
+
 EXAMPLES
   $ qfg get my.config.name
 
   $ qfg get my.config.name --environment=production
+
+  $ qfg get stripe.api-key --environment=production            # redacted fingerprint
+
+  $ qfg get stripe.api-key --environment=production --reveal   # plaintext
 ```
 
 _See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.4.0/src/commands/get.ts)_
@@ -2042,8 +2078,8 @@ Set the fallback value for a flag or config in one environment.
 ```
 USAGE
   $ qfg set-default [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
-    [--env-var <value>] [--environment <value>] [--replace-targeting] [--value <value>] [--confirm] [--secret]
-    [--secret-key-name <value>]
+    [--env-var <value>] [--environment <value>] [--replace-targeting] [--value <value>] [--value-from-env VAR]
+    [--value-stdin] [--confirm] [--secret] [--secret-key-name <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -2051,14 +2087,19 @@ ARGUMENTS
 FLAGS
   --confidential             mark the value as confidential
   --confirm                  confirm without prompt
-  --env-var=<value>          environment variable to use as default value
-  --environment=<value>      environment to change
+  --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
+                             env var NOW, use --value-from-env
+  --environment=<value>      environment to change, e.g. production. Use "[Default]" for the default rules that every
+                             environment without its own rules inherits
   --replace-targeting        set the value for EVERYONE: delete this environment's targeting rules instead of keeping
                              them (they stay in git history)
-  --secret                   encrypt the value of this item
+  --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
-  --value=<value>            new default value
+  --value=<value>            new default value (for secrets prefer --value-stdin / --value-from-env)
+  --value-from-env=VAR       read the value to store from this LOCAL env var now (keeps it out of argv/shell history).
+                             Not the same as --env-var
+  --value-stdin              read the value to store from stdin (one trailing newline is stripped). Keeps it out of argv
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -2083,6 +2124,16 @@ DESCRIPTION
   To set a percentage rollout (gradual rollout / A/B test / canary deploy) instead:
   qfg set-rollout my.flag --environment production --true-percent 20
 
+  Secrets (--secret, or any config whose value is already encrypted) are
+  STRING-ONLY. To store a JSON secret, make it a string secret holding the JSON
+  and JSON.parse it in your app. The CLI never prints a secret's plaintext; it
+  shows a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
+  Rotate a secret without the value entering argv / shell history:
+  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin --confirm
+  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY --confirm
+  (--env-var is different: it stores NO value and tells the SDK to read one from
+  that env var at runtime.)
+
   To see all current values and rules for a flag:
   qfg info my.flag
 
@@ -2100,7 +2151,15 @@ EXAMPLES
 
   $ qfg set-default my.flag.name --value=false --environment=production --replace-targeting   # kill-switch: off for everyone
 
-  $ qfg set-default my.flag.name --value=true --secret
+  # Rotate a secret without the value entering argv:
+
+  pbpaste | qfg set-default my.secret --environment=production --secret --value-stdin --confirm
+
+  $ qfg set-default my.secret --environment=production --secret --value-from-env=MY_SECRET --confirm
+
+  # Write the [Default] rules (inherited by every environment without its own):
+
+  $ qfg set-default my.secret --environment="[Default]" --secret --value-from-env=MY_SECRET --confirm
 
   $ qfg set-default my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
 
@@ -2245,8 +2304,8 @@ Set the fallback value for a flag or config in one environment.
 ```
 USAGE
   $ qfg toggle [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
-    [--env-var <value>] [--environment <value>] [--replace-targeting] [--value <value>] [--confirm] [--secret]
-    [--secret-key-name <value>]
+    [--env-var <value>] [--environment <value>] [--replace-targeting] [--value <value>] [--value-from-env VAR]
+    [--value-stdin] [--confirm] [--secret] [--secret-key-name <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -2254,14 +2313,19 @@ ARGUMENTS
 FLAGS
   --confidential             mark the value as confidential
   --confirm                  confirm without prompt
-  --env-var=<value>          environment variable to use as default value
-  --environment=<value>      environment to change
+  --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
+                             env var NOW, use --value-from-env
+  --environment=<value>      environment to change, e.g. production. Use "[Default]" for the default rules that every
+                             environment without its own rules inherits
   --replace-targeting        set the value for EVERYONE: delete this environment's targeting rules instead of keeping
                              them (they stay in git history)
-  --secret                   encrypt the value of this item
+  --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
-  --value=<value>            new default value
+  --value=<value>            new default value (for secrets prefer --value-stdin / --value-from-env)
+  --value-from-env=VAR       read the value to store from this LOCAL env var now (keeps it out of argv/shell history).
+                             Not the same as --env-var
+  --value-stdin              read the value to store from stdin (one trailing newline is stripped). Keeps it out of argv
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -2286,6 +2350,16 @@ DESCRIPTION
   To set a percentage rollout (gradual rollout / A/B test / canary deploy) instead:
   qfg set-rollout my.flag --environment production --true-percent 20
 
+  Secrets (--secret, or any config whose value is already encrypted) are
+  STRING-ONLY. To store a JSON secret, make it a string secret holding the JSON
+  and JSON.parse it in your app. The CLI never prints a secret's plaintext; it
+  shows a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
+  Rotate a secret without the value entering argv / shell history:
+  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin --confirm
+  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY --confirm
+  (--env-var is different: it stores NO value and tells the SDK to read one from
+  that env var at runtime.)
+
   To see all current values and rules for a flag:
   qfg info my.flag
 
@@ -2303,7 +2377,15 @@ EXAMPLES
 
   $ qfg toggle my.flag.name --value=false --environment=production --replace-targeting   # kill-switch: off for everyone
 
-  $ qfg toggle my.flag.name --value=true --secret
+  # Rotate a secret without the value entering argv:
+
+  pbpaste | qfg toggle my.secret --environment=production --secret --value-stdin --confirm
+
+  $ qfg toggle my.secret --environment=production --secret --value-from-env=MY_SECRET --confirm
+
+  # Write the [Default] rules (inherited by every environment without its own):
+
+  $ qfg toggle my.secret --environment="[Default]" --secret --value-from-env=MY_SECRET --confirm
 
   $ qfg toggle my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
 

@@ -3,6 +3,7 @@ import {Flags} from '@oclif/core'
 import {type Environment, getEnvironments} from '../api/get-environments.js'
 import {APICommand} from '../index.js'
 import {JsonObj} from '../result.js'
+import {redactedDisplay, redactedSummary} from '../util/redact.js'
 import autocomplete from '../util/autocomplete.js'
 import {getAppUrl} from '../util/domain-urls.js'
 import isInteractive from '../util/is-interactive.js'
@@ -517,7 +518,19 @@ Related commands:
         if (envConfig.name === 'Default') {
           // For Default, show the unconditional fallback value
           const fallbackRule = envConfig.rules.find((r: unknown) => isCatchAllRule(r))
-          const valueToShow = fallbackRule ? fallbackRule.value.value : envConfig.rules[0].value.value
+          const shownRule = fallbackRule ?? envConfig.rules[0]
+          // qfg-38lp: a confidential (unencrypted) value is redacted, as in text mode.
+          const valueToShow =
+            shownRule.value?.confidential && !shownRule.value?.decryptWith
+              ? redactedDisplay(
+                  redactedSummary({
+                    plaintext:
+                      typeof shownRule.value.value === 'string'
+                        ? shownRule.value.value
+                        : JSON.stringify(shownRule.value.value),
+                  }),
+                )
+              : shownRule.value.value
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ;(json[envConfig.name] as any).value = valueToShow
         } else {

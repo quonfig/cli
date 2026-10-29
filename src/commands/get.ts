@@ -7,6 +7,7 @@ import getEnvironment from '../ui/get-environment.js'
 import isInteractive from '../util/is-interactive.js'
 import nameArg from '../util/name-arg.js'
 import {decrypt} from '../util/encryption.js'
+import {redactedDisplay, redactedSummary} from '../util/redact.js'
 
 // Mirrors sdk-node's RawConfigWithDependencies. The /evaluations/evaluate
 // endpoint returns an array of these (qfg-c7d.2) — raw stored values plus
@@ -39,15 +40,28 @@ interface RawConfigWithDependencies {
 export default class Get extends APICommand {
   static args = {...nameArg}
 
-  static description = 'Get the value of a config/feature-flag/etc.'
+  static description = `Get the value of a config/feature-flag/etc.
+
+Secrets (encrypted) and confidential values print REDACTED by default, as a
+fingerprint plus length (and the last 4 characters for values of 12+ chars):
+  [encrypted *****3fa9c, 51 chars, ends …a1b2]
+The fingerprint is the same one SDK telemetry and the Quonfig UI show, so you
+can confirm a rotation landed without printing the secret. Pass --reveal to
+print the plaintext. To inject secrets into a process, prefer \`qfg run\`.`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.config.name',
     '<%= config.bin %> <%= command.id %> my.config.name --environment=production',
+    '<%= config.bin %> <%= command.id %> stripe.api-key --environment=production            # redacted fingerprint',
+    '<%= config.bin %> <%= command.id %> stripe.api-key --environment=production --reveal   # plaintext',
   ]
 
   static flags = {
     environment: Flags.string({description: 'environment to evaluate in'}),
+    reveal: Flags.boolean({
+      default: false,
+      description: 'print the plaintext of a secret/confidential value (it is redacted by default)',
+    }),
   }
 
   public async run(): Promise<JsonObj | void> {
@@ -133,6 +147,10 @@ export default class Get extends APICommand {
     }
 
     let value: unknown = config.value
+    // The stored ciphertext, kept for the redacted fingerprint (the SDK hashes
+    // the ciphertext for encrypted values, qfg-38lp).
+    let ciphertext: string | undefined
+    let decrypted = false
 
     const providedByDep = config.dependencies?.find((dep) => dep.dependencyType === 'providedBy')
 
@@ -164,7 +182,11 @@ export default class Get extends APICommand {
 
       if (keyProvidedByDep) {
         const envVarName = keyProvidedByDep.source
-        this.logToStderr(
+        // qfg-38lp: on a redacted read these diagnostics only add noise (and
+        // "Successfully decrypted" reads as if the plaintext was shown), so
+        // they print with --reveal, or with --verbose.
+        const diagnostic = (message: string) => (flags.reveal ? this.logToStderr(message) : this.verboseLog(message))
+        diagnostic(
           `This config is encrypted by key '${encryptionKeyConfig.key}' that should be found in env var '${envVarName}'`,
         )
 
@@ -186,8 +208,10 @@ export default class Get extends APICommand {
         }
 
         try {
+          ciphertext = value
           value = decrypt(value, encryptionKey)
-          this.logToStderr(`Successfully decrypted config '${key}'`)
+          decrypted = true
+          diagnostic(`Successfully decrypted config '${key}'`)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error)
           return this.err(`Failed to decrypt config '${key}': ${errorMessage}`, {
@@ -197,6 +221,24 @@ export default class Get extends APICommand {
           })
         }
       }
+    }
+
+    const isSecret = Boolean(decryptWithDep) || config.confidential === true
+
+    if (isSecret && !flags.reveal) {
+      // qfg-38lp: never print a secret's plaintext unless asked to.
+      const summary = decryptWithDep
+        ? redactedSummary({
+            ciphertext: ciphertext ?? String(value),
+            plaintext: decrypted ? String(value) : undefined,
+          })
+        : redactedSummary({plaintext: typeof value === 'string' ? value : JSON.stringify(value)})
+
+      this.logToStderr(
+        `${key} is ${summary.encrypted ? 'a secret' : 'confidential'}: value redacted. ` +
+          'A human can pass --reveal to print the plaintext (never do this in an agent session or CI log).',
+      )
+      return this.ok(redactedDisplay(summary), {[key]: summary})
     }
 
     return this.ok(this.toSuccessJson(value), {[key]: value as JsonObj[string]})

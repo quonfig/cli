@@ -311,4 +311,27 @@ No evaluations found for the past 24 hours
         expect(output.error.exitCode).to.equal(1)
       })
   })
+
+  // qfg-38lp fix pass: `info --json` / `--verbose` printed confidential plaintext.
+  describe('confidential values stay redacted (qfg-38lp)', () => {
+    test
+      .stdout()
+      .stderr()
+      .command(['info', confidentialKey, '--json', '--exclude-evaluations'])
+      .it('info --json redacts a confidential default value', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_INFO_CONFIDENTIAL_0001')
+        const parsed = JSON.parse(ctx.stdout)
+        expect(parsed[confidentialKey].values.Default.value).to.match(
+          /^\[confidential \*{5}[\da-f]{5}, 27 chars, ends …0001]$/,
+        )
+      })
+
+    test
+      .stdout()
+      .stderr()
+      .command(['info', confidentialKey, '--verbose', '--exclude-evaluations'])
+      .it('info --verbose does not dump confidential plaintext', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_INFO_CONFIDENTIAL_0001')
+      })
+  })
 })

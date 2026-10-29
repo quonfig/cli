@@ -25,7 +25,9 @@ import {
   upsertEnvRules,
   upsertFallbackRule,
 } from '../util/rules.js'
+import {RedactedSummary, redactedDisplay, redactedSummary} from '../util/redact.js'
 import secretFlags, {Secret, parsedSecretFlags} from '../util/secret-flags.js'
+import {resolveValueSource, valueSourceFlags} from '../util/value-source.js'
 
 type ValueOrEnvVar = {envVar: string; value?: never} | {envVar?: never; value: string}
 type StoredDocument = {commitSha: string} & ScopedDocument
@@ -50,6 +52,16 @@ rules (they stay in git history).
 To set a percentage rollout (gradual rollout / A/B test / canary deploy) instead:
   qfg set-rollout my.flag --environment production --true-percent 20
 
+Secrets (--secret, or any config whose value is already encrypted) are
+STRING-ONLY. To store a JSON secret, make it a string secret holding the JSON
+and JSON.parse it in your app. The CLI never prints a secret's plaintext; it
+shows a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
+Rotate a secret without the value entering argv / shell history:
+  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin --confirm
+  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY --confirm
+(--env-var is different: it stores NO value and tells the SDK to read one from
+that env var at runtime.)
+
 To see all current values and rules for a flag:
   qfg info my.flag
 
@@ -61,7 +73,11 @@ To target specific organizations or users, write rules on their KEY
     '<%= config.bin %> <%= command.id %> my.flag.name                                          # prompts for value and env',
     '<%= config.bin %> <%= command.id %> my.flag.name --value=true --environment=staging',
     '<%= config.bin %> <%= command.id %> my.flag.name --value=false --environment=production --replace-targeting   # kill-switch: off for everyone',
-    '<%= config.bin %> <%= command.id %> my.flag.name --value=true --secret',
+    '# Rotate a secret without the value entering argv:',
+    'pbpaste | <%= config.bin %> <%= command.id %> my.secret --environment=production --secret --value-stdin --confirm',
+    '<%= config.bin %> <%= command.id %> my.secret --environment=production --secret --value-from-env=MY_SECRET --confirm',
+    '# Write the [Default] rules (inherited by every environment without its own):',
+    '<%= config.bin %> <%= command.id %> my.secret --environment="[Default]" --secret --value-from-env=MY_SECRET --confirm',
     '<%= config.bin %> <%= command.id %> my.config.name --env-var=MY_ENV_VAR_NAME --environment=production',
     '# For a percentage rollout, use set-rollout instead:',
     '<%= config.bin %> set-rollout my.flag.name --environment production --true-percent 20',
@@ -71,16 +87,23 @@ To target specific organizations or users, write rules on their KEY
 
   static flags = {
     confidential: Flags.boolean({default: false, description: 'mark the value as confidential'}),
-    'env-var': Flags.string({description: 'environment variable to use as default value'}),
-    environment: Flags.string({description: 'environment to change'}),
+    'env-var': Flags.string({
+      description:
+        'store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local env var NOW, use --value-from-env',
+    }),
+    environment: Flags.string({
+      description:
+        'environment to change, e.g. production. Use "[Default]" for the default rules that every environment without its own rules inherits',
+    }),
     'replace-targeting': Flags.boolean({
       default: false,
       description:
         "set the value for EVERYONE: delete this environment's targeting rules instead of keeping them (they stay in git history)",
     }),
-    value: Flags.string({description: 'new default value'}),
+    value: Flags.string({description: 'new default value (for secrets prefer --value-stdin / --value-from-env)'}),
+    ...valueSourceFlags,
     ...confirmFlag,
-    ...secretFlags('encrypt the value of this item'),
+    ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
   }
 
   public async run(): Promise<JsonObj | void> {
@@ -94,6 +117,12 @@ To target specific organizations or users, write rules on their KEY
 
     if (flags['env-var'] && secret.selected) {
       return this.err('cannot specify both --env-var and --secret')
+    }
+
+    // qfg-38lp: --value / --value-stdin / --value-from-env all resolve here.
+    const valueSource = await resolveValueSource(flags)
+    if (!valueSource.ok) {
+      return this.err(valueSource.error ? valueSource.message : 'Value is required')
     }
 
     if (flags.confidential && secret.selected) {
@@ -159,6 +188,17 @@ To target specific organizations or users, write rules on their KEY
     }
 
     this.verboseLog('Selected config:', config)
+
+    // qfg-38lp: secrets are string-only end to end. Say so here instead of
+    // letting the server answer with a bare 422.
+    if (secret.selected && config.valueType.toLowerCase() !== 'string') {
+      return this.err(
+        `secrets are string-only; ${key} is type ${config.valueType}. ` +
+          'Store JSON (or any structured value) as a string secret instead — e.g. ' +
+          '`qfg create <new-key> --type string --secret --value-stdin < value.json` — and JSON.parse it in your app.',
+        {key, phase: 'validation', valueType: config.valueType},
+      )
+    }
 
     // Fetch the stored document ONCE. It drives encryption auto-detection,
     // the targeting-rule count in the confirmation prompt, the rules the write
@@ -247,12 +287,16 @@ To target specific organizations or users, write rules on their KEY
       })
     }
 
-    let value = flags.value
+    let value = valueSource.value
+
+    // A secret / confidential value is masked while typed and never shown.
+    const hideValue = secret.selected || confidential
 
     if (!value && isInteractive(flags)) {
       value = await getString({
         allowBlank: true,
-        message: 'Default value',
+        mask: hideValue,
+        message: hideValue ? 'Secret value (input is masked)' : 'Default value',
       })
     }
 
@@ -260,9 +304,11 @@ To target specific organizations or users, write rules on their KEY
       return this.err('Value is required')
     }
 
-    const secretMaybe = secret.selected ? ' (encrypted)' : ''
+    const promptPhrase = hideValue
+      ? redactedDisplay(redactedSummary({encrypted: secret.selected, plaintext: value}))
+      : `\`${value}\``
 
-    if (!(await getConfirmation({flags, message: confirmMessage(`\`${value}\`${secretMaybe}`)}))) {
+    if (!(await getConfirmation({flags, message: confirmMessage(promptPhrase)}))) {
       return
     }
 
@@ -325,9 +371,19 @@ To target specific organizations or users, write rules on their KEY
     // "be provided by `MY_ENV_VAR`" — plus any (encrypted)/(confidential) note.
     let valuePhrase: string
     let modifiers = ''
+    // Set whenever the value must not be printed (secret or confidential), qfg-38lp.
+    let redacted: RedactedSummary | undefined
+    // How the value may appear in an error message.
+    let shownValue: string | undefined = value
 
     if (envVar === undefined) {
       valuePhrase = `\`${value}\``
+
+      if (confidential && !secret.selected) {
+        redacted = redactedSummary({plaintext: value})
+        valuePhrase = redactedDisplay(redacted)
+        shownValue = valuePhrase
+      }
 
       if (secret.selected) {
         // Handle encrypted values using shared utility
@@ -337,7 +393,9 @@ To target specific organizations or users, write rules on their KEY
         }
 
         configValue = mapConfigValueToDto(encryptedValueResult.value, ConfigValueType.String)
-        modifiers += ' (encrypted)'
+        redacted = redactedSummary({ciphertext: String(encryptedValueResult.value.value), plaintext: value})
+        valuePhrase = redactedDisplay(redacted)
+        shownValue = valuePhrase
       } else {
         // Parse the value based on type and build value object
         let variantValue: unknown = value
@@ -353,7 +411,7 @@ To target specific organizations or users, write rules on their KEY
           case 'bool': {
             const lowerValue = value.toLowerCase()
             if (lowerValue !== 'true' && lowerValue !== 'false') {
-              return this.err(`'${value}' is not a valid value for ${key}`)
+              return this.err(`'${shownValue}' is not a valid value for ${key}`)
             }
             variantValue = lowerValue === 'true'
 
@@ -363,7 +421,7 @@ To target specific organizations or users, write rules on their KEY
             // Shared strict grammar with qfg create (qfg-2agi.23).
             variantValue = parseIntValue(value)
             if (variantValue === undefined) {
-              return this.err(`Invalid default value for int: ${value}`)
+              return this.err(`Invalid default value for int: ${shownValue}`)
             }
 
             break
@@ -371,7 +429,7 @@ To target specific organizations or users, write rules on their KEY
           case 'double': {
             variantValue = parseDoubleValue(value)
             if (variantValue === undefined) {
-              return this.err(`Invalid default value for double: ${value}`)
+              return this.err(`Invalid default value for double: ${shownValue}`)
             }
 
             break
@@ -380,7 +438,7 @@ To target specific organizations or users, write rules on their KEY
             try {
               variantValue = JSON.parse(value)
             } catch {
-              return this.err(`Invalid JSON value: ${value}`)
+              return this.err(`Invalid JSON value: ${shownValue}`)
             }
 
             break
@@ -393,7 +451,7 @@ To target specific organizations or users, write rules on their KEY
           case 'duration': {
             // Stored verbatim as the ISO 8601 string; no conversions (qfg-2agi.3).
             if (!isValidIsoDuration(value)) {
-              return this.err(`Invalid value for duration: ${value}. ${DURATION_FORMAT_HINT}`)
+              return this.err(`Invalid value for duration: ${shownValue}. ${DURATION_FORMAT_HINT}`)
             }
 
             break
@@ -418,7 +476,8 @@ To target specific organizations or users, write rules on their KEY
 
     if (confidential && !secret.selected) {
       configValue.confidential = true
-      modifiers += ' (confidential)'
+      // the redacted display already says "confidential"
+      if (!redacted) modifiers += ' (confidential)'
     }
 
     // Surgical by default (qfg-qjdm): the fallback rule's value is replaced
@@ -494,7 +553,8 @@ To target specific organizations or users, write rules on their KEY
         },
         key,
         success: true,
-        value,
+        // qfg-38lp: a secret/confidential value is reported redacted, never verbatim.
+        value: redacted ?? value,
         ...counts,
       }
     }
@@ -503,7 +563,7 @@ To target specific organizations or users, write rules on their KEY
 
     const errMsg =
       request.status === 400
-        ? `Failed to change default: ${request.status} -- is ${value || envVar} a valid value?`
+        ? `Failed to change default: ${request.status} -- is ${shownValue || envVar} a valid value?`
         : `Failed to change default: ${request.status}`
 
     return this.err(errMsg, {key, serverError: request.error})

@@ -218,7 +218,7 @@ const confidentialConfig = {
         criteria: [{operator: 'ALWAYS_TRUE'}],
         value: {
           type: 'string',
-          value: 'some value',
+          value: 'FAKE_INFO_CONFIDENTIAL_0001',
           confidential: true,
         },
       },

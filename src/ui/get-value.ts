@@ -19,10 +19,13 @@ const getValue = async ({
   environment,
   flags,
   key,
+  mask,
   message,
   quonfig,
 }: {
   allowBlank?: boolean
+  /** mask the prompt input (secret values, qfg-38lp) */
+  mask?: boolean
   desiredValue: string | undefined
   environment?: Environment
   flags: {interactive?: boolean}
@@ -32,7 +35,7 @@ const getValue = async ({
 }): Promise<Result<string>> => {
   if (desiredValue === undefined && !isInteractive(flags)) {
     return failure(
-      `No value provided for ${key ?? message}. Pass --value=<value> (or use --env-var) when running non-interactively.`,
+      `No value provided for ${key ?? message}. Pass --value=<value>, --value-stdin or --value-from-env=<VAR> (or use --env-var) when running non-interactively.`,
     )
   }
 
@@ -41,7 +44,7 @@ const getValue = async ({
       return success(desiredValue)
     }
 
-    const value = await promptForValue({allowBlank, message})
+    const value = await promptForValue({allowBlank, mask, message})
 
     if (value === undefined || value === null) {
       return noop()
@@ -58,7 +61,7 @@ const getValue = async ({
     return failure(`Could not find config named ${key}`)
   }
 
-  const selectedValue = desiredValue ?? (await promptForValue({allowBlank, config, currentDefault, message}))
+  const selectedValue = desiredValue ?? (await promptForValue({allowBlank, config, currentDefault, mask, message}))
 
   if (selectedValue === undefined || selectedValue === null) {
     return noop()
@@ -81,17 +84,19 @@ const promptForValue = async ({
   allowBlank,
   config: _config,
   currentDefault,
+  mask,
   message,
 }: {
   allowBlank: boolean
   config?: ConfigResponse
   currentDefault?: Value | undefined
+  mask?: boolean
   message: string
 }) => {
   // In the new quonfig format, allowable values aren't stored at the config level.
   // Just prompt for a string input.
-  if (!currentDefault) {
-    return getString({allowBlank, message})
+  if (!currentDefault || mask) {
+    return getString({allowBlank, mask, message})
   }
 
   const autoCompleteMessage = `The current default is \`${valueToString(currentDefault)}\`. Enter your new default.`
