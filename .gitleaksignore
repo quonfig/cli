@@ -1,0 +1,8 @@
+# gitleaks false positives (fingerprint per line: <commit>:<file>:<rule>:<line>).
+#
+# qfg-38lp (PR #71): `const KEY = 'c87ba22d...'` in the secret tests is the
+# FAKE 64-hex test encryption key that test/commands/{create,set-default}.test.ts
+# already use on main. It encrypts only test fixtures.
+af8af0b16fa5e2762a968319c0a657c096abe2e6:test/commands/create.test.ts:generic-api-key:583
+af8af0b16fa5e2762a968319c0a657c096abe2e6:test/commands/set-default.test.ts:generic-api-key:39
+6a60a1e995629d691c2114a32aa92b73a2ff0003:test/commands/create.test.ts:generic-api-key:899
