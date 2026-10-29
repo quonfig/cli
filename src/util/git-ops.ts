@@ -21,9 +21,14 @@ export const GIT_SAFE_ENV: Readonly<NodeJS.ProcessEnv> = {
 }
 
 /**
- * Redact a token from a URL string so it is safe to display to users.
+ * Redact the credential from every http(s) URL in a string (a URL, or git's
+ * stderr) so it is safe to display to users. Handles both `user:token@`
+ * (keeps the user) and a bare `token@` (qfg-9iu0).
  */
-export const redactToken = (url: string): string => url.replace(/:([^/@]+)@/, ':***@')
+export const redactToken = (text: string): string =>
+  text.replaceAll(/(https?:\/\/)(?:([^\s/:@]*):)?[^\s/@]+@/gi, (_match, scheme: string, user?: string) =>
+    user === undefined ? `${scheme}***@` : `${scheme}${user}:***@`,
+  )
 
 export interface RunGitOptions {
   cwd?: string
