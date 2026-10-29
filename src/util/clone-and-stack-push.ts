@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import {MIGRATOR_IDENTITY, runGit as runGitSafe, spawnGit} from './git-ops.js'
+import {MIGRATOR_IDENTITY, redactToken, runGit as runGitSafe, spawnGit} from './git-ops.js'
 
 export {MIGRATOR_IDENTITY} from './git-ops.js'
 
@@ -59,8 +59,6 @@ export interface CloneAndStackPushResult {
   committed: boolean
 }
 
-const redactToken = (s: string): string => s.replaceAll(/:([^\s/@]+)@/g, ':***@')
-
 export class PushConflictError extends Error {
   constructor(message: string) {
     super(message)
@@ -117,7 +115,14 @@ const getOriginUrl = async (dir: string): Promise<string | null> => {
   }
 }
 
-const normalizeRemoteUrl = (url: string): string => redactToken(url.replace(/\.git$/, '').trim())
+// Compare repos without credentials: the same repo with a different (or no)
+// username/token is still the same repo. ensureCloneOrReuse re-points origin
+// at the fresh remoteUrl after a match.
+const normalizeRemoteUrl = (url: string): string =>
+  url
+    .trim()
+    .replace(/\.git$/, '')
+    .replace(/^(https?:\/\/)[^/@]*@/i, '$1')
 
 const ensureCloneOrReuse = async (
   remoteUrl: string,
