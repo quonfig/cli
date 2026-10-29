@@ -149,7 +149,7 @@ const getArgs = async (
   return values.filter((v): v is string => v !== undefined)
 }
 
-const getFlags = async (
+export const getFlags = async (
   flags: AvailableCommand['command']['flags'],
   commandId: string,
   implicitFlags: string[],
@@ -162,7 +162,15 @@ const getFlags = async (
   const inputs: string[] = []
   const promiseInputs: Promise<void>[] = []
 
+  // qfg-38lp: secrets are string-only, so "create --secret" never asks for a type.
+  const forceStringType = commandId === 'create' && implicitFlags.includes('secret')
+
   for (const [key, arg] of Object.entries(flags)) {
+    if (forceStringType && key === 'type') {
+      inputs.push('--type=string')
+      continue
+    }
+
     if (arg.required || implicitFlags.includes(key)) {
       if (arg.type === 'boolean') {
         inputs.push(`--${key}`)

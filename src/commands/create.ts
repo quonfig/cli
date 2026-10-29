@@ -12,7 +12,9 @@ import {makeConfidentialValue} from '../util/encryption.js'
 import {EntitySubdir, writeStoredConfigToWorkspace} from '../util/local-config-writer.js'
 import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.js'
 import {policyAKeyError} from '../util/policy-a-key.js'
+import {RedactedSummary, redactedDisplay, redactedSummary, scrubConfidentialValues} from '../util/redact.js'
 import secretFlags, {parsedSecretFlags} from '../util/secret-flags.js'
+import {resolveValueSource, valueSourceFlags} from '../util/value-source.js'
 
 export default class Create extends APICommand {
   static args = {
@@ -31,6 +33,17 @@ Use --type to specify the kind of item:
   boolean       A plain boolean (not a feature flag)
   duration      An ISO 8601 duration string, e.g. PT30S, PT5M, PT1H30M (SDK returns milliseconds)
   log_level     A dynamic log level (value must be one of ${LOG_LEVELS.join('/')})
+
+Secrets (--secret) are encrypted client-side and are STRING-ONLY (use --type
+string). To store a JSON secret, store the JSON as a string secret and
+JSON.parse it in your app. The CLI never prints a secret's plaintext: it shows
+a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
+
+Keep the value out of argv / shell history / agent transcripts with:
+  --value-stdin             read the value from stdin
+  --value-from-env=VAR      read the value from a local env var, now
+These are different from --env-var, which stores NO value: it tells the SDK to
+read the value from that env var at runtime.
 
 This sets the global default value. Override per-environment with:
   qfg set-default my.flag --environment production --value true
@@ -56,6 +69,11 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     '<%= config.bin %> <%= command.id %> my.new.flag --type boolean-flag --value=true',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world"',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world" --secret',
+    '# Create a secret without the value ever appearing in argv:',
+    'pbpaste | <%= config.bin %> <%= command.id %> stripe.api-key --type string --secret --value-stdin',
+    '<%= config.bin %> <%= command.id %> stripe.api-key --type string --secret --value-from-env STRIPE_API_KEY',
+    '# A JSON secret is a string secret holding JSON (JSON.parse it in your app):',
+    '<%= config.bin %> <%= command.id %> gcp.service-account --type string --secret --value-stdin < sa.json',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --env-var=MY_ENV_VAR_NAME',
     '<%= config.bin %> <%= command.id %> my.new.string --type json --value="{\\"key\\": \\"value\\"}"',
     '<%= config.bin %> <%= command.id %> my.timeout --type duration --value PT90S',
@@ -66,13 +84,20 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
   static flags = {
     confidential: Flags.boolean({default: false, description: 'mark the value as confidential'}),
-    'env-var': Flags.string({description: 'environment variable to get value from'}),
+    'env-var': Flags.string({
+      description:
+        'store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local env var NOW, use --value-from-env',
+    }),
     type: Flags.string({
       options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'duration', 'log_level'],
       required: true,
     }),
-    value: Flags.string({description: 'default value for your new item', required: false}),
-    ...secretFlags('encrypt the value of this item'),
+    value: Flags.string({
+      description: 'default value for your new item (for secrets prefer --value-stdin / --value-from-env)',
+      required: false,
+    }),
+    ...valueSourceFlags,
+    ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
   }
 
   public async run(): Promise<JsonObj | void> {
@@ -87,21 +112,33 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       return this.err(`Invalid key "${args.name}": ${keyError}`, {key: args.name, phase: 'validation'})
     }
 
+    if (flags['env-var'] && flags.value && flags.type !== 'log_level') {
+      return this.err('cannot specify both --env-var and --value')
+    }
+
+    // qfg-38lp: --value / --value-stdin / --value-from-env all resolve here.
+    // (log_level rejects --env-var itself, with a more specific message.)
+    const valueSource = await resolveValueSource({
+      ...flags,
+      'env-var': flags.type === 'log_level' ? undefined : flags['env-var'],
+    })
+    if (!valueSource.ok) {
+      return this.err(valueSource.error ? valueSource.message : 'No value provided', {key: args.name, phase: 'input'})
+    }
+
+    const providedValue = valueSource.value
+
     if (flags.type === 'boolean-flag') {
-      return this.createBooleanFlag(args, flags.value)
+      return this.createBooleanFlag(args, providedValue)
     }
 
     if (flags.type === 'log_level') {
-      return this.createLogLevel(args, flags)
+      return this.createLogLevel(args, {...flags, value: providedValue})
     }
 
     const key = args.name
 
     const secret = parsedSecretFlags(flags)
-
-    if (flags['env-var'] && flags.value) {
-      return this.err('cannot specify both --env-var and --value')
-    }
 
     if (flags['env-var'] && secret.selected) {
       return this.err('cannot specify both --env-var and --secret')
@@ -112,11 +149,17 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     }
 
     if (secret.selected && flags.type !== 'string') {
-      return this.err('--secret flag only works with string type')
+      return this.err(
+        `--secret flag only works with string type: secrets are string-only (got --type ${flags.type}). ` +
+          'To store JSON (or any structured value) as a secret, use --type string and JSON.parse it in your app.',
+        {key, phase: 'validation'},
+      )
     }
 
     let configValue: ConfigValue = {}
     let valueType: ConfigValueType = TYPE_MAPPING[flags.type]
+    // Set whenever the value must not be printed (secret or confidential).
+    let redacted: RedactedSummary | undefined
 
     if (flags['env-var']) {
       configValue = {
@@ -127,9 +170,10 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       }
     } else {
       const valueInput = await getValue({
-        desiredValue: flags.value,
+        desiredValue: providedValue,
         flags,
-        message: 'Default value',
+        mask: secret.selected || flags.confidential,
+        message: secret.selected ? 'Secret value (input is masked)' : 'Default value',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         quonfig: undefined as any,
       })
@@ -154,6 +198,9 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
           }
 
           configValue = confidentialValueResult.value
+          redacted = redactedSummary({ciphertext: String(confidentialValueResult.value.value), plaintext: rawValue})
+        } else if (flags.confidential) {
+          redacted = redactedSummary({plaintext: rawValue})
         }
       } else if (valueInput.error) {
         return this.err(valueInput.message, valueInput.json)
@@ -195,6 +242,16 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     const confidentialMaybe = flags.confidential ? '(confidential) ' : ''
 
     await this.syncConfigToDisk('configs', key, response)
+
+    if (redacted) {
+      // qfg-38lp: never echo the plaintext — not on the success line, not in
+      // --json (the server response carries confidential values verbatim).
+      return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key} ${redactedDisplay(redacted)}`, {
+        key,
+        ...scrubConfidentialValues(response),
+        value: redacted,
+      })
+    }
 
     return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key}`, {key, ...response})
   }
@@ -265,6 +322,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       secret: boolean
       'secret-key-name': string
       value?: string
+      'value-from-env'?: string
+      'value-stdin'?: boolean
     },
   ): Promise<JsonObj | void> {
     const key = args.name

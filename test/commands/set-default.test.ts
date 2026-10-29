@@ -1,8 +1,22 @@
 import {expect, test} from '@oclif/test'
+import {Readable} from 'node:stream'
 
+import {decrypt} from '../../src/util/encryption.js'
 import {resetClientCache} from '../../src/util/get-client.js'
 import {configsUpdateCapture, server} from '../responses/set-default.js'
 import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
+
+// qfg-38lp: feed --value-stdin by swapping process.stdin for a Readable.
+let savedStdin: PropertyDescriptor | undefined
+const setStdin = (text: string) => {
+  savedStdin = Object.getOwnPropertyDescriptor(process, 'stdin')
+  Object.defineProperty(process, 'stdin', {configurable: true, value: Readable.from([text])})
+}
+
+const restoreStdin = () => {
+  if (savedStdin) Object.defineProperty(process, 'stdin', savedStdin)
+  savedStdin = undefined
+}
 
 describe('set-default', () => {
   before(() => {
@@ -17,6 +31,184 @@ describe('set-default', () => {
   after(() => {
     server.close()
     cleanupTestAuth()
+  })
+
+  // qfg-38lp: set-default must never print a secret's plaintext (success line,
+  // confirm prompt, --json), and the value can come from stdin / a local env var.
+  describe('secret ergonomics (qfg-38lp)', () => {
+    const KEY = 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221'
+    const PLAINTEXT = 'sk_live_FAKE_setdefault_0123456789'
+    const stagingRuleValue = () => {
+      const environments = configsUpdateCapture.body.json.config.environments as Array<{id: string; rules: any[]}>
+      return environments.find((e) => e.id === 'Staging')!.rules.at(-1).value
+    }
+
+    afterEach(() => {
+      delete process.env.QFG38_FAKE_SRC
+    })
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--secret',
+        `--value=${PLAINTEXT}`,
+      ])
+      .it('set-default --secret prints a redacted fingerprint, never the plaintext', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(ctx.stdout).to.match(/Set Staging fallback to \[encrypted \*{5}[\da-f]{5}, 34 chars, ends …6789]/)
+      })
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--secret',
+        `--value=${PLAINTEXT}`,
+        '--json',
+      ])
+      .it('set-default --secret --json returns a redacted summary in place of the value', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        const parsed = JSON.parse(ctx.stdout)
+        expect(parsed.value).to.deep.include({length: PLAINTEXT.length, last4: '6789', redacted: true})
+        expect(parsed.value.fingerprint).to.match(/^\*{5}[\da-f]{5}$/)
+      })
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .stdout()
+      .stderr()
+      .command(['set-default', 'robocop-secret', '--environment=Staging', '--confirm', `--value=${PLAINTEXT}`])
+      .it('auto-detected encryption also redacts', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(ctx.stdout).to.contain('[encrypted *****')
+      })
+
+    test
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--confidential',
+        `--value=${PLAINTEXT}`,
+      ])
+      .it('--confidential redacts the value too', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(ctx.stdout).to.contain('[confidential *****')
+      })
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .do(() => setStdin(`${PLAINTEXT}\n`))
+      .finally(restoreStdin)
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--secret',
+        '--value-stdin',
+      ])
+      .it('--value-stdin feeds the encrypted write', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(decrypt(stagingRuleValue().value, KEY)).to.equal(PLAINTEXT)
+      })
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY, QFG38_FAKE_SRC: PLAINTEXT})
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--secret',
+        '--value-from-env=QFG38_FAKE_SRC',
+      ])
+      .it('--value-from-env feeds the encrypted write', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(decrypt(stagingRuleValue().value, KEY)).to.equal(PLAINTEXT)
+      })
+
+    test
+      .env({QFG38_FAKE_SRC: 'plain-from-env'})
+      .stdout()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--value-from-env=QFG38_FAKE_SRC',
+      ])
+      .it('--value-from-env works without --secret', () => {
+        expect(stagingRuleValue().value).to.equal('plain-from-env')
+      })
+
+    test
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--value-from-env=QFG38_DEFINITELY_UNSET',
+      ])
+      .catch((error) => {
+        expect(error.message).to.contain('QFG38_DEFINITELY_UNSET')
+        expect(error.message).to.contain('not set')
+      })
+      .it('--value-from-env errors clearly when unset')
+
+    test
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        '--environment=Staging',
+        '--confirm',
+        '--value=x',
+        '--value-from-env=Y',
+      ])
+      .catch((error) => {
+        expect(error.message).to.contain('only one of')
+      })
+      .it('--value and --value-from-env are mutually exclusive')
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .command(['set-default', 'test.json', '--environment=Staging', '--confirm', '--secret', '--value={"a":1}'])
+      .catch((error) => {
+        expect(error.message).to.contain('secrets are string-only')
+        expect(error.message).to.contain('test.json is type json')
+        expect(error.message).to.not.contain('422')
+      })
+      .it('set-default --secret on a json config gives a clear client-side error')
+
+    // oclif's --json parse-error envelope used to dump the whole parse context,
+    // argv included, so `--value=<secret>` landed on stdout.
+    test
+      .stdout()
+      .command(['set-default', 'jeffreys.test.key.reforge', `--value=${PLAINTEXT}`, '--bogus-flag', '--json'])
+      .catch(/Nonexistent flag/)
+      .it('a --json parse error never echoes argv (and so never the --value)', (ctx) => {
+        expect(ctx.stdout).to.not.contain(PLAINTEXT)
+        const parsed = JSON.parse(ctx.stdout)
+        expect(parsed.error.message).to.contain('Nonexistent flag')
+      })
   })
 
   describe('success', () => {
@@ -173,7 +365,8 @@ describe('set-default', () => {
         '--value=hello',
       ])
       .it('can create a secret string', (ctx) => {
-        expect(ctx.stdout).to.contain(`Set Staging fallback to \`hello\` (encrypted)`)
+        expect(ctx.stdout).to.match(/Set Staging fallback to \[encrypted \*{5}[\da-f]{5}, 5 chars]/)
+        expect(ctx.stdout).to.not.contain('hello')
       })
 
     // Regression for qfg-ytw: a --secret write must persist confidential:true
@@ -237,7 +430,7 @@ describe('set-default', () => {
       ])
       .it('uses the per-environment encryption key for production secrets', (ctx) => {
         expect(ctx.stdout).to.contain('Encrypting with key from env var: QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY_PROD')
-        expect(ctx.stdout).to.contain('Set Production fallback to `hello` (encrypted)')
+        expect(ctx.stdout).to.match(/Set Production fallback to \[encrypted \*{5}[\da-f]{5}, 5 chars]/)
       })
 
     test

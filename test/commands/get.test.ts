@@ -1,4 +1,5 @@
 import {expect, test} from '@oclif/test'
+import {createHash} from 'node:crypto'
 
 import {resetClientCache} from '../../src/util/get-client.js'
 import {server} from '../responses/get.js'
@@ -8,6 +9,9 @@ const validKey = 'my-string-list-key'
 const secretKey = 'a.secret.config.reforge'
 
 // 64-char hex key matching the one used in test/util/encryption.test.ts
+const CIPHERTEXT = '652cf03ad4e252bb9b69c9--03bbdb754d1923b2a3c5bfc3--ebb8c20805482ce013b1fd68cad57d69'
+const CIPHERTEXT_FINGERPRINT = `*****${createHash('md5').update(CIPHERTEXT).digest('hex').slice(0, 5)}`
+
 const TEST_ENCRYPTION_KEY_HEX = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 
 describe('get', () => {
@@ -92,6 +96,8 @@ describe('get', () => {
   // decryptWith: the server returns ciphertext + dependency chain; the CLI
   // reads the encryption key from its own process.env and decrypts locally.
   // qfg-zvef: the decrypted plaintext must be the ONLY thing on stdout.
+  // qfg-38lp: a secret prints redacted by default; --reveal prints the plaintext.
+  // The fingerprint hashes the CIPHERTEXT, matching what SDK telemetry reports.
   test
     .do(() => {
       process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
@@ -99,7 +105,23 @@ describe('get', () => {
     .stdout()
     .stderr()
     .command(['get', 'encrypted.config', '--environment=[default]'])
-    .it('decrypts an encrypted config locally using the CLI host env key', (ctx) => {
+    .it('prints a secret redacted by default, with a --reveal hint on stderr', (ctx) => {
+      expect(ctx.stdout).to.eql(`[encrypted ${CIPHERTEXT_FINGERPRINT}, 11 chars]\n`)
+      expect(ctx.stdout + ctx.stderr).to.not.contain('test-secret')
+      expect(ctx.stderr).to.contain('pass --reveal to print the plaintext')
+    })
+
+  // decryptWith: the server returns ciphertext + dependency chain; the CLI
+  // reads the encryption key from its own process.env and decrypts locally.
+  // qfg-zvef: the decrypted plaintext must be the ONLY thing on stdout.
+  test
+    .do(() => {
+      process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
+    })
+    .stdout()
+    .stderr()
+    .command(['get', 'encrypted.config', '--reveal', '--environment=[default]'])
+    .it('decrypts an encrypted config locally using the CLI host env key with --reveal', (ctx) => {
       expect(ctx.stdout).to.eql('test-secret\n')
       expect(ctx.stderr).to.contain(
         "This config is encrypted by key 'quonfig.encryption.key' that should be found in env var 'TEST_CLI_ENCRYPTION_KEY'",
@@ -116,7 +138,21 @@ describe('get', () => {
     .stdout()
     .stderr()
     .command(['get', 'encrypted.config', '--json', '--environment=[default]'])
-    .it('emits only JSON on stdout and no diagnostics for --json', (ctx) => {
+    .it('emits a redacted JSON summary by default for a secret', (ctx) => {
+      expect(JSON.parse(ctx.stdout)).to.eql({
+        'encrypted.config': {encrypted: true, fingerprint: CIPHERTEXT_FINGERPRINT, length: 11, redacted: true},
+      })
+      expect(ctx.stderr).to.eql('')
+    })
+
+  test
+    .do(() => {
+      process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
+    })
+    .stdout()
+    .stderr()
+    .command(['get', 'encrypted.config', '--json', '--reveal', '--environment=[default]'])
+    .it('emits only the plaintext JSON on stdout for --json --reveal', (ctx) => {
       expect(JSON.parse(ctx.stdout)).to.eql({'encrypted.config': 'test-secret'})
       expect(ctx.stderr).to.eql('')
     })

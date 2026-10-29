@@ -186,9 +186,12 @@ export abstract class BaseCommand extends Command {
     // An Error's own *enumerable* properties are the structured payload handed
     // to `err()` — keep those. `oclif` is internal bookkeeping (surfaced as
     // `exitCode`), and `stack` is dropped on purpose (oclif.stacktrace=false).
+    // `parse` is oclif's parse-error context: hundreds of KB of config dump
+    // that includes the raw argv, so a `--value=<secret>` landed on stdout
+    // (qfg-38lp). The message already names the bad flag; drop the dump.
     const payload: JsonObj = {}
     for (const [key, value] of Object.entries(err as Record<string, unknown>)) {
-      if (key !== 'oclif' && key !== 'stack') payload[key] = value
+      if (key !== 'oclif' && key !== 'stack' && key !== 'parse') payload[key] = value
     }
 
     const {code} = err as {code?: unknown}
