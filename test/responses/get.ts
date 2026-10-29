@@ -93,6 +93,21 @@ const evaluationHandler = http.post(`${getApiBase()}/api/v1/evaluations/evaluate
         valueType: 'string',
       },
     },
+    // qfg-38lp: a confidential-but-unencrypted value. Its plaintext must never
+    // reach --verbose output for an unrelated `qfg get`.
+    {
+      key: 'confidential.plain',
+      type: 'string',
+      value: 'FAKE_CONF_PLAINTEXT_0001',
+      confidential: true,
+      metadata: {
+        configRowIndex: 0,
+        conditionalValueIndex: 0,
+        type: 'config',
+        id: '6',
+        valueType: 'string',
+      },
+    },
     {
       key: 'provided.config',
       type: 'provided',

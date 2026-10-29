@@ -757,4 +757,55 @@ describe('set-default', () => {
         })
     })
   })
+
+  // qfg-38lp fix pass: leaks the QA leak matrix found.
+  describe('secret leak fixes (qfg-38lp QA)', () => {
+    const NEW_CONF = 'FAKE_NEW_CONFIDENTIAL_9876'
+
+    test
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'confidential.plain',
+        '--environment=Staging',
+        '--confidential',
+        `--value=${NEW_CONF}`,
+        '--confirm',
+        '--verbose',
+      ])
+      .it(
+        '--verbose never logs old or new confidential plaintext (Config details / Update fields / ApiClient)',
+        (ctx) => {
+          expect(ctx.stdout + ctx.stderr).to.not.contain(NEW_CONF)
+          expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_OLD_CONFIDENTIAL_0001')
+          expect(ctx.stderr).to.contain('[Config details:]')
+        },
+      )
+
+    test
+      .stdout()
+      .stderr()
+      .command(['set-default', 'jeffreys.test.key.reforge', 'sk_live_FAKE_POSITIONAL_42', '--environment=Staging'])
+      .catch((error) => {
+        expect(error.message).to.not.contain('sk_live_FAKE_POSITIONAL_42')
+        expect(error.message).to.contain('Unexpected argument')
+      })
+      .it('a value passed as a stray positional is not echoed in the parse error')
+
+    test
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'jeffreys.test.key.reforge',
+        'sk_live_FAKE_POSITIONAL_42',
+        '--environment=Staging',
+        '--json',
+      ])
+      .catch(/.*/)
+      .it('a stray positional is not echoed in the --json parse error envelope', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain('sk_live_FAKE_POSITIONAL_42')
+      })
+  })
 })

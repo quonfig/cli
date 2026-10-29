@@ -748,8 +748,8 @@ Create a new feature flag, config value, or other item.
 
 ```
 USAGE
-  $ qfg create NAME --type boolean-flag|boolean|string|double|int|string-list|json|duration|log_level
-    [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential] [--env-var <value>] [--value
+  $ qfg create NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
+    [--env-var <value>] [--type boolean-flag|boolean|string|double|int|string-list|json|duration|log_level] [--value
     <value>] [--value-from-env VAR] [--value-stdin] [--secret] [--secret-key-name <value>]
 
 ARGUMENTS
@@ -762,7 +762,7 @@ FLAGS
   --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
-  --type=<option>            (required)
+  --type=<option>            kind of item to create (required, except with --secret, which implies string)
                              <options: boolean-flag|boolean|string|double|int|string-list|json|duration|log_level>
   --value=<value>            default value for your new item (for secrets prefer --value-stdin / --value-from-env)
   --value-from-env=VAR       read the value to store from this LOCAL env var now (keeps it out of argv/shell history).
@@ -790,8 +790,8 @@ DESCRIPTION
   duration      An ISO 8601 duration string, e.g. PT30S, PT5M, PT1H30M (SDK returns milliseconds)
   log_level     A dynamic log level (value must be one of TRACE/DEBUG/INFO/WARN/ERROR/FATAL)
 
-  Secrets (--secret) are encrypted client-side and are STRING-ONLY (use --type
-  string). To store a JSON secret, store the JSON as a string secret and
+  Secrets (--secret) are encrypted client-side and are STRING-ONLY: --secret
+  implies --type string, so you can leave --type off. To store a JSON secret, store the JSON as a string secret and
   JSON.parse it in your app. The CLI never prints a secret's plaintext: it shows
   a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
 
@@ -827,17 +827,15 @@ EXAMPLES
 
   $ qfg create my.new.string --type string --value="hello world"
 
-  $ qfg create my.new.string --type string --value="hello world" --secret
+  # Create a secret without the value ever appearing in argv (--secret implies --type string):
 
-  # Create a secret without the value ever appearing in argv:
+  pbpaste | qfg create stripe.api-key --secret --value-stdin
 
-  pbpaste | qfg create stripe.api-key --type string --secret --value-stdin
-
-  $ qfg create stripe.api-key --type string --secret --value-from-env STRIPE_API_KEY
+  $ qfg create stripe.api-key --secret --value-from-env STRIPE_API_KEY
 
   # A JSON secret is a string secret holding JSON (JSON.parse it in your app):
 
-  $ qfg create gcp.service-account --type string --secret --value-stdin < sa.json
+  $ qfg create gcp.service-account --secret --value-stdin < sa.json
 
   $ qfg create my.new.string --type string --env-var=MY_ENV_VAR_NAME
 
@@ -2091,7 +2089,8 @@ FLAGS
   --confirm                  confirm without prompt
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env
-  --environment=<value>      environment to change
+  --environment=<value>      environment to change, e.g. production. Use "[Default]" for the default rules that every
+                             environment without its own rules inherits
   --replace-targeting        set the value for EVERYONE: delete this environment's targeting rules instead of keeping
                              them (they stay in git history)
   --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
@@ -2130,8 +2129,8 @@ DESCRIPTION
   and JSON.parse it in your app. The CLI never prints a secret's plaintext; it
   shows a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
   Rotate a secret without the value entering argv / shell history:
-  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin
-  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY
+  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin --confirm
+  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY --confirm
   (--env-var is different: it stores NO value and tells the SDK to read one from
   that env var at runtime.)
 
@@ -2154,9 +2153,13 @@ EXAMPLES
 
   # Rotate a secret without the value entering argv:
 
-  pbpaste | qfg set-default my.secret --environment=production --secret --value-stdin
+  pbpaste | qfg set-default my.secret --environment=production --secret --value-stdin --confirm
 
-  $ qfg set-default my.secret --environment=production --secret --value-from-env=MY_SECRET
+  $ qfg set-default my.secret --environment=production --secret --value-from-env=MY_SECRET --confirm
+
+  # Write the [Default] rules (inherited by every environment without its own):
+
+  $ qfg set-default my.secret --environment="[Default]" --secret --value-from-env=MY_SECRET --confirm
 
   $ qfg set-default my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
 
@@ -2312,7 +2315,8 @@ FLAGS
   --confirm                  confirm without prompt
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env
-  --environment=<value>      environment to change
+  --environment=<value>      environment to change, e.g. production. Use "[Default]" for the default rules that every
+                             environment without its own rules inherits
   --replace-targeting        set the value for EVERYONE: delete this environment's targeting rules instead of keeping
                              them (they stay in git history)
   --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
@@ -2351,8 +2355,8 @@ DESCRIPTION
   and JSON.parse it in your app. The CLI never prints a secret's plaintext; it
   shows a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
   Rotate a secret without the value entering argv / shell history:
-  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin
-  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY
+  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin --confirm
+  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY --confirm
   (--env-var is different: it stores NO value and tells the SDK to read one from
   that env var at runtime.)
 
@@ -2375,9 +2379,13 @@ EXAMPLES
 
   # Rotate a secret without the value entering argv:
 
-  pbpaste | qfg toggle my.secret --environment=production --secret --value-stdin
+  pbpaste | qfg toggle my.secret --environment=production --secret --value-stdin --confirm
 
-  $ qfg toggle my.secret --environment=production --secret --value-from-env=MY_SECRET
+  $ qfg toggle my.secret --environment=production --secret --value-from-env=MY_SECRET --confirm
+
+  # Write the [Default] rules (inherited by every environment without its own):
+
+  $ qfg toggle my.secret --environment="[Default]" --secret --value-from-env=MY_SECRET --confirm
 
   $ qfg toggle my.config.name --env-var=MY_ENV_VAR_NAME --environment=production
 

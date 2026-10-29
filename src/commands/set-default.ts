@@ -57,8 +57,8 @@ STRING-ONLY. To store a JSON secret, make it a string secret holding the JSON
 and JSON.parse it in your app. The CLI never prints a secret's plaintext; it
 shows a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
 Rotate a secret without the value entering argv / shell history:
-  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin
-  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY
+  pbpaste | qfg set-default stripe.api-key --environment production --secret --value-stdin --confirm
+  qfg set-default stripe.api-key --environment production --secret --value-from-env STRIPE_API_KEY --confirm
 (--env-var is different: it stores NO value and tells the SDK to read one from
 that env var at runtime.)
 
@@ -74,8 +74,10 @@ To target specific organizations or users, write rules on their KEY
     '<%= config.bin %> <%= command.id %> my.flag.name --value=true --environment=staging',
     '<%= config.bin %> <%= command.id %> my.flag.name --value=false --environment=production --replace-targeting   # kill-switch: off for everyone',
     '# Rotate a secret without the value entering argv:',
-    'pbpaste | <%= config.bin %> <%= command.id %> my.secret --environment=production --secret --value-stdin',
-    '<%= config.bin %> <%= command.id %> my.secret --environment=production --secret --value-from-env=MY_SECRET',
+    'pbpaste | <%= config.bin %> <%= command.id %> my.secret --environment=production --secret --value-stdin --confirm',
+    '<%= config.bin %> <%= command.id %> my.secret --environment=production --secret --value-from-env=MY_SECRET --confirm',
+    '# Write the [Default] rules (inherited by every environment without its own):',
+    '<%= config.bin %> <%= command.id %> my.secret --environment="[Default]" --secret --value-from-env=MY_SECRET --confirm',
     '<%= config.bin %> <%= command.id %> my.config.name --env-var=MY_ENV_VAR_NAME --environment=production',
     '# For a percentage rollout, use set-rollout instead:',
     '<%= config.bin %> set-rollout my.flag.name --environment production --true-percent 20',
@@ -89,7 +91,10 @@ To target specific organizations or users, write rules on their KEY
       description:
         'store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local env var NOW, use --value-from-env',
     }),
-    environment: Flags.string({description: 'environment to change'}),
+    environment: Flags.string({
+      description:
+        'environment to change, e.g. production. Use "[Default]" for the default rules that every environment without its own rules inherits',
+    }),
     'replace-targeting': Flags.boolean({
       default: false,
       description:

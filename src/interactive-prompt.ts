@@ -171,7 +171,10 @@ export const getFlags = async (
       continue
     }
 
-    if (arg.required || implicitFlags.includes(key)) {
+    // `create --type` is optional on the command line (--secret implies string)
+    // but the interactive create still asks for it.
+    const promptForType = commandId === 'create' && key === 'type'
+    if (arg.required || promptForType || implicitFlags.includes(key)) {
       if (arg.type === 'boolean') {
         inputs.push(`--${key}`)
       } else {

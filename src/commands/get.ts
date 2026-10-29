@@ -182,7 +182,11 @@ print the plaintext. To inject secrets into a process, prefer \`qfg run\`.`
 
       if (keyProvidedByDep) {
         const envVarName = keyProvidedByDep.source
-        this.logToStderr(
+        // qfg-38lp: on a redacted read these diagnostics only add noise (and
+        // "Successfully decrypted" reads as if the plaintext was shown), so
+        // they print with --reveal, or with --verbose.
+        const diagnostic = (message: string) => (flags.reveal ? this.logToStderr(message) : this.verboseLog(message))
+        diagnostic(
           `This config is encrypted by key '${encryptionKeyConfig.key}' that should be found in env var '${envVarName}'`,
         )
 
@@ -207,7 +211,7 @@ print the plaintext. To inject secrets into a process, prefer \`qfg run\`.`
           ciphertext = value
           value = decrypt(value, encryptionKey)
           decrypted = true
-          this.logToStderr(`Successfully decrypted config '${key}'`)
+          diagnostic(`Successfully decrypted config '${key}'`)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error)
           return this.err(`Failed to decrypt config '${key}': ${errorMessage}`, {
@@ -231,7 +235,8 @@ print the plaintext. To inject secrets into a process, prefer \`qfg run\`.`
         : redactedSummary({plaintext: typeof value === 'string' ? value : JSON.stringify(value)})
 
       this.logToStderr(
-        `${key} is ${summary.encrypted ? 'a secret' : 'confidential'}; pass --reveal to print the plaintext`,
+        `${key} is ${summary.encrypted ? 'a secret' : 'confidential'}: value redacted. ` +
+          'A human can pass --reveal to print the plaintext (never do this in an agent session or CI log).',
       )
       return this.ok(redactedDisplay(summary), {[key]: summary})
     }

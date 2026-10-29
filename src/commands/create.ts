@@ -34,8 +34,8 @@ Use --type to specify the kind of item:
   duration      An ISO 8601 duration string, e.g. PT30S, PT5M, PT1H30M (SDK returns milliseconds)
   log_level     A dynamic log level (value must be one of ${LOG_LEVELS.join('/')})
 
-Secrets (--secret) are encrypted client-side and are STRING-ONLY (use --type
-string). To store a JSON secret, store the JSON as a string secret and
+Secrets (--secret) are encrypted client-side and are STRING-ONLY: --secret
+implies --type string, so you can leave --type off. To store a JSON secret, store the JSON as a string secret and
 JSON.parse it in your app. The CLI never prints a secret's plaintext: it shows
 a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
 
@@ -68,12 +68,11 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     '<%= config.bin %> <%= command.id %> my.new.flag --type boolean-flag',
     '<%= config.bin %> <%= command.id %> my.new.flag --type boolean-flag --value=true',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world"',
-    '<%= config.bin %> <%= command.id %> my.new.string --type string --value="hello world" --secret',
-    '# Create a secret without the value ever appearing in argv:',
-    'pbpaste | <%= config.bin %> <%= command.id %> stripe.api-key --type string --secret --value-stdin',
-    '<%= config.bin %> <%= command.id %> stripe.api-key --type string --secret --value-from-env STRIPE_API_KEY',
+    '# Create a secret without the value ever appearing in argv (--secret implies --type string):',
+    'pbpaste | <%= config.bin %> <%= command.id %> stripe.api-key --secret --value-stdin',
+    '<%= config.bin %> <%= command.id %> stripe.api-key --secret --value-from-env STRIPE_API_KEY',
     '# A JSON secret is a string secret holding JSON (JSON.parse it in your app):',
-    '<%= config.bin %> <%= command.id %> gcp.service-account --type string --secret --value-stdin < sa.json',
+    '<%= config.bin %> <%= command.id %> gcp.service-account --secret --value-stdin < sa.json',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --env-var=MY_ENV_VAR_NAME',
     '<%= config.bin %> <%= command.id %> my.new.string --type json --value="{\\"key\\": \\"value\\"}"',
     '<%= config.bin %> <%= command.id %> my.timeout --type duration --value PT90S',
@@ -89,8 +88,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
         'store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local env var NOW, use --value-from-env',
     }),
     type: Flags.string({
+      description: 'kind of item to create (required, except with --secret, which implies string)',
       options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'duration', 'log_level'],
-      required: true,
     }),
     value: Flags.string({
       description: 'default value for your new item (for secrets prefer --value-stdin / --value-from-env)',
@@ -112,7 +111,32 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       return this.err(`Invalid key "${args.name}": ${keyError}`, {key: args.name, phase: 'validation'})
     }
 
-    if (flags['env-var'] && flags.value && flags.type !== 'log_level') {
+    const secret = parsedSecretFlags(flags)
+
+    // qfg-38lp: secrets are string-only, so --secret implies --type string.
+    const type = flags.type ?? (secret.selected ? 'string' : undefined)
+    if (type === undefined) {
+      return this.err(
+        'Missing required flag --type (e.g. --type string, --type boolean-flag). --secret implies --type string.',
+        {key: args.name, phase: 'validation'},
+      )
+    }
+
+    // Refuse --secret / --confidential on types that cannot carry them BEFORE
+    // any value is parsed, so a coercion error can never echo the value.
+    if (secret.selected && type !== 'string' && type !== 'log_level') {
+      return this.err(
+        `--secret flag only works with string type: secrets are string-only (got --type ${type}). ` +
+          'To store JSON (or any structured value) as a secret, use --type string and JSON.parse it in your app.',
+        {key: args.name, phase: 'validation'},
+      )
+    }
+
+    if (flags.confidential && type === 'boolean-flag') {
+      return this.err('--confidential is not supported for boolean-flag', {key: args.name, phase: 'validation'})
+    }
+
+    if (flags['env-var'] && flags.value && type !== 'log_level') {
       return this.err('cannot specify both --env-var and --value')
     }
 
@@ -120,7 +144,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     // (log_level rejects --env-var itself, with a more specific message.)
     const valueSource = await resolveValueSource({
       ...flags,
-      'env-var': flags.type === 'log_level' ? undefined : flags['env-var'],
+      'env-var': type === 'log_level' ? undefined : flags['env-var'],
     })
     if (!valueSource.ok) {
       return this.err(valueSource.error ? valueSource.message : 'No value provided', {key: args.name, phase: 'input'})
@@ -128,17 +152,15 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
     const providedValue = valueSource.value
 
-    if (flags.type === 'boolean-flag') {
+    if (type === 'boolean-flag') {
       return this.createBooleanFlag(args, providedValue)
     }
 
-    if (flags.type === 'log_level') {
+    if (type === 'log_level') {
       return this.createLogLevel(args, {...flags, value: providedValue})
     }
 
     const key = args.name
-
-    const secret = parsedSecretFlags(flags)
 
     if (flags['env-var'] && secret.selected) {
       return this.err('cannot specify both --env-var and --secret')
@@ -148,16 +170,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       console.warn("Note: --confidential is implied when using --secret, so you don't need to specify both.")
     }
 
-    if (secret.selected && flags.type !== 'string') {
-      return this.err(
-        `--secret flag only works with string type: secrets are string-only (got --type ${flags.type}). ` +
-          'To store JSON (or any structured value) as a secret, use --type string and JSON.parse it in your app.',
-        {key, phase: 'validation'},
-      )
-    }
-
     let configValue: ConfigValue = {}
-    let valueType: ConfigValueType = TYPE_MAPPING[flags.type]
+    let valueType: ConfigValueType = TYPE_MAPPING[type]
     // Set whenever the value must not be printed (secret or confidential).
     let redacted: RedactedSummary | undefined
 
@@ -180,10 +194,21 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
       if (valueInput.ok) {
         const rawValue = valueInput.value
-        const parsedConfigValue = coerceIntoType(flags.type, rawValue)
+        let parsedConfigValue: ReturnType<typeof coerceIntoType>
+        try {
+          parsedConfigValue = coerceIntoType(type, rawValue)
+        } catch (error) {
+          // qfg-38lp: coercion errors quote the value; hide it when it is confidential.
+          const message = error instanceof Error ? error.message : String(error)
+          if (!flags.confidential && !secret.selected) throw error
+          return this.err(message.split(rawValue).join(redactedDisplay(redactedSummary({plaintext: rawValue}))), {
+            key,
+            phase: 'coercion',
+          })
+        }
 
         if (!parsedConfigValue) {
-          return this.err(`Failed to coerce value into type: ${flags.type}`, {key, phase: 'coercion'})
+          return this.err(`Failed to coerce value into type: ${type}`, {key, phase: 'coercion'})
         }
 
         configValue = parsedConfigValue[0]

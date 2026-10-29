@@ -96,12 +96,32 @@ export const scrubConfidentialValues = <T>(doc: T): T => {
     const out: Record<string, Json> = {}
     for (const [k, v] of Object.entries(record)) out[k] = walk(v)
 
-    if (record.confidential === true && !record.decryptWith && typeof record.value === 'string') {
-      out.value = redactedDisplay(redactedSummary({plaintext: record.value}))
+    if (record.confidential === true && !record.decryptWith && record.value !== undefined && record.value !== null) {
+      const plaintext = typeof record.value === 'string' ? record.value : JSON.stringify(record.value)
+      out.value = redactedDisplay(redactedSummary({plaintext}))
     }
 
     return out
   }
 
   return walk(doc) as T
+}
+
+/**
+ * Scrub anything headed for a --verbose / debug log line (qfg-38lp): objects
+ * are deep-scrubbed, and a string that is itself JSON (e.g. a pre-stringified
+ * request body) is parsed, scrubbed and re-serialised.
+ */
+export const scrubForLog = (message: unknown): unknown => {
+  if (typeof message === 'string') {
+    const trimmed = message.trim()
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return message
+    try {
+      return JSON.stringify(scrubConfidentialValues(JSON.parse(trimmed)), null, 2)
+    } catch {
+      return message
+    }
+  }
+
+  return scrubConfidentialValues(message)
 }

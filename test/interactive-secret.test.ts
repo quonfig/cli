@@ -1,3 +1,5 @@
+import {PassThrough, Writable} from 'node:stream'
+
 import {ux} from '@oclif/core'
 import {expect, test} from '@oclif/test'
 
@@ -16,16 +18,33 @@ describe('interactive secret prompts (qfg-38lp)', () => {
       expect(flags).to.include('--secret')
     })
 
-  let promptOptions: unknown
-  test
-    .stub(ux, 'prompt', (stub) =>
-      stub.callsFake(async (_message: string, options: unknown) => {
-        promptOptions = options
-        return 'typed'
-      }),
-    )
-    .it('getString({mask: true}) prompts with a masked input', async () => {
-      expect(await getString({allowBlank: false, mask: true, message: 'Secret value'})).to.equal('typed')
-      expect(promptOptions).to.deep.include({type: 'mask'})
+  // qfg-38lp fix pass: oclif's `mask` prompt echoed each typed character and
+  // only redrew `*` after Enter, so the plaintext sat in scrollback; it also
+  // hung when a paste delivered "value\r" in one chunk.
+  const runMasked = async (chunks: string[]) => {
+    const input = new PassThrough()
+    let written = ''
+    const output = new Writable({
+      write(chunk, _enc, cb) {
+        written += chunk.toString()
+        cb()
+      },
     })
+    const answer = getString({allowBlank: false, context: {input, output}, mask: true, message: 'Secret value'})
+    for (const chunk of chunks) input.write(chunk)
+    return {answer: await answer, written}
+  }
+
+  it('a masked prompt never writes the typed plaintext to the terminal', async () => {
+    const {answer, written} = await runMasked(['F', 'A', 'K', 'E', '_typed_9', '\r'])
+    expect(answer).to.equal('FAKE_typed_9')
+    expect(written).to.not.contain('FAKE')
+    expect(written).to.not.contain('typed')
+  })
+
+  it('a masked prompt accepts a paste that carries the newline in the same chunk', async () => {
+    const {answer, written} = await runMasked(['FAKE_pasted_value_0001\r'])
+    expect(answer).to.equal('FAKE_pasted_value_0001')
+    expect(written).to.not.contain('FAKE_pasted')
+  })
 })

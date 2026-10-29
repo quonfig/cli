@@ -1,6 +1,7 @@
 import {Flags} from '@oclif/core'
 
 import {Result, failure, success} from '../result.js'
+import getString from '../ui/get-string.js'
 
 /**
  * qfg-38lp: ways to hand the CLI a value WITHOUT putting it in argv (where it
@@ -69,11 +70,11 @@ export const resolveValueSource = async (flags: ValueSourceInput): Promise<Resul
   }
 
   if (flags['value-stdin']) {
-    if (process.stdin.isTTY) {
-      process.stderr.write('Reading value from stdin (finish with Ctrl-D)...\n')
-    }
-
-    const value = stripOneTrailingNewline(await readStdin())
+    // On a terminal, a hand-typed value would be echoed; read it through the
+    // hidden prompt instead (one line, nothing echoed).
+    const value = process.stdin.isTTY
+      ? ((await getString({allowBlank: true, mask: true, message: 'Value (input is hidden)'})) ?? '')
+      : stripOneTrailingNewline(await readStdin())
     if (value === '') {
       return failure(
         '--value-stdin read an empty value from stdin. Pipe the value in, e.g. `pbpaste | qfg ... --value-stdin`.',
@@ -87,7 +88,11 @@ export const resolveValueSource = async (flags: ValueSourceInput): Promise<Resul
   if (envName !== undefined) {
     const value = process.env[envName]
     if (value === undefined) {
-      return failure(`--value-from-env: environment variable ${envName} is not set in this shell.`)
+      return failure(
+        `--value-from-env: environment variable ${envName} is not set in this shell. ` +
+          `If you set it without \`export\`, run \`export ${envName}\` (or load a .env file with ` +
+          '`set -a; source ./file.env; set +a`).',
+      )
     }
 
     if (value === '') {

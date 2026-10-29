@@ -182,4 +182,28 @@ describe('get', () => {
     .it("shows an error if no key is provided when things aren't interactive", () => {
       // Error assertion done in catch block
     })
+
+  // qfg-38lp fix pass: --verbose dumped the whole evaluate response, which
+  // carries every confidential plaintext in the workspace.
+  test
+    .stdout()
+    .stderr()
+    .command(['get', validKey, '--environment=[default]', '--verbose'])
+    .it('--verbose does not leak other keys confidential plaintext', (ctx) => {
+      expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_CONF_PLAINTEXT_0001')
+      expect(ctx.stderr).to.contain('[ApiClient]')
+    })
+
+  // A redacted read should not announce that it decrypted anything.
+  test
+    .do(() => {
+      process.env.TEST_CLI_ENCRYPTION_KEY = TEST_ENCRYPTION_KEY_HEX
+    })
+    .stdout()
+    .stderr()
+    .command(['get', 'encrypted.config', '--environment=[default]'])
+    .it('a redacted get does not print the "Successfully decrypted" diagnostics', (ctx) => {
+      expect(ctx.stderr).to.not.contain('Successfully decrypted')
+      expect(ctx.stderr).to.not.contain('should be found in env var')
+    })
 })

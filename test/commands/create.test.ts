@@ -893,4 +893,91 @@ describe('create', () => {
       })
       .it('rejects a charset-violating log-level key (charset checked before the prefix rule)')
   })
+
+  // qfg-38lp fix pass: leaks / gaps the QA leak matrix and newcomer testers found.
+  describe('secret leak fixes (qfg-38lp QA)', () => {
+    const KEY = 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221'
+    const PLAINTEXT = 'sk_live_FAKE_createqa_0123456789'
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .stdout()
+      .stderr()
+      .command(['create', 'brand.new.secret', '--secret', `--value=${PLAINTEXT}`])
+      .it('create --secret without --type defaults to a string secret', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(ctx.stdout).to.contain('Created config: brand.new.secret [encrypted')
+        expect(createResponses.capturedCreateConfigInput.config.valueType).to.equal('string')
+      })
+
+    test
+      .command(['create', 'brand.new.string', '--value=hello'])
+      .catch((error) => {
+        expect(error.message).to.contain('--type')
+      })
+      .it('create without --type and without --secret still asks for --type')
+
+    test
+      .stdout()
+      .stderr()
+      .command([
+        'create',
+        'confidential.new.string',
+        '--type=string',
+        `--value=${PLAINTEXT}`,
+        '--confidential',
+        '--verbose',
+      ])
+      .it('create --confidential --verbose never logs the plaintext', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+        expect(ctx.stderr).to.contain('[RPC configs/create]')
+      })
+
+    test
+      .stdout()
+      .stderr()
+      .command(['create', 'brand.new.flag', '--type=boolean-flag', '--secret', `--value=${PLAINTEXT}`])
+      .catch((error) => {
+        expect(error.message).to.contain('string-only')
+        expect(error.message).to.not.contain(PLAINTEXT)
+      })
+      .it('create --type boolean-flag --secret is refused without echoing the value')
+
+    test
+      .stdout()
+      .stderr()
+      .command(['create', 'brand.new.int', '--type=int', '--confidential', `--value=${PLAINTEXT}`])
+      .catch((error) => {
+        expect(error.message).to.contain('Invalid default value for int')
+        expect(error.message).to.not.contain(PLAINTEXT)
+      })
+      .it('create --confidential coercion errors do not echo the value')
+
+    test
+      .stdout()
+      .stderr()
+      .command(['create', 'brand.new.int', '--type=int', '--confidential', `--value=${PLAINTEXT}`, '--json'])
+      .catch(/.*/)
+      .it('create --confidential coercion errors do not echo the value in --json', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
+      })
+
+    test
+      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
+      .stdout()
+      .stderr()
+      .command(['create', 'brand.new.secret', 'sk_live_FAKE_POSITIONAL_42', '--type=string', '--secret'])
+      .catch((error) => {
+        expect(error.message).to.not.contain('sk_live_FAKE_POSITIONAL_42')
+        expect(error.message).to.contain('Unexpected argument')
+      })
+      .it('a value passed as a stray positional is not echoed')
+
+    test
+      .command(['create', 'brand.new.secret', '--type=string', '--value-from-env=QFG38_DEFINITELY_UNSET', '--secret'])
+      .catch((error) => {
+        expect(error.message).to.contain('export')
+      })
+      .it('--value-from-env unset error hints at exporting the variable')
+  })
 })

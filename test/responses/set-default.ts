@@ -48,6 +48,15 @@ const metadataResponse = {
       description: 'A secret config',
     },
     {
+      key: 'confidential.plain',
+      type: 'config',
+      valueType: 'string',
+      version: 1,
+      id: 1099,
+      name: 'Confidential plain',
+      description: 'A confidential (unencrypted) config',
+    },
+    {
       key: 'test.json',
       type: 'config',
       valueType: 'json',
@@ -398,6 +407,21 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
 
   if (key === 'log-level.test-app') {
     return HttpResponse.json({json: logLevelResponse})
+  }
+
+  if (key === 'confidential.plain') {
+    return HttpResponse.json({
+      json: {
+        key: 'confidential.plain',
+        type: 'config',
+        valueType: 'string',
+        commitSha: 'abc009',
+        environments: [],
+        default: {
+          rules: [{criteria: [], value: {type: 'string', value: 'FAKE_OLD_CONFIDENTIAL_0001', confidential: true}}],
+        },
+      },
+    })
   }
 
   if (key === 'robocop-secret') {

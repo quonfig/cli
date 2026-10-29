@@ -5,6 +5,7 @@ import {Client} from '@quonfig/node'
 import type {ProjectEnvId} from '@quonfig/node'
 import {JsonObj, Result} from './result.js'
 import rawGetClient, {unwrapRequest} from './util/get-client.js'
+import {scrubForLog} from './util/redact.js'
 
 const globalFlags = {
   interactive: Flags.boolean({
@@ -123,10 +124,14 @@ export abstract class BaseCommand extends Command {
   public verboseLog = (category: string | unknown, message?: unknown): void => {
     if (!this.isVerbose) return
 
+    // qfg-38lp: verbose output (request bodies, API responses, stored config
+    // documents) must never carry a confidential plaintext.
     if (message) {
-      this.logToStderr(`[${category}] ${typeof message === 'string' ? message : JSON.stringify(message)}`)
+      const scrubbed = scrubForLog(message)
+      this.logToStderr(`[${category}] ${typeof scrubbed === 'string' ? scrubbed : JSON.stringify(scrubbed)}`)
     } else {
-      this.logToStderr(typeof category === 'string' ? category : JSON.stringify(category))
+      const scrubbed = scrubForLog(category)
+      this.logToStderr(typeof scrubbed === 'string' ? scrubbed : JSON.stringify(scrubbed))
     }
   }
 
@@ -142,6 +147,8 @@ export abstract class BaseCommand extends Command {
     if (err instanceof Errors.ExitError || err.code === 'EEXIT') {
       throw err
     }
+
+    this.redactValueParseError(err)
 
     // qfg-hzmb: `this.log()` is a documented no-op whenever jsonEnabled(), so
     // this override used to print NOTHING for a failing `--json` run — empty
@@ -203,6 +210,30 @@ export abstract class BaseCommand extends Command {
         exitCode: errorExitCode(err),
         message: errorMessage(err),
       },
+    }
+  }
+
+  /**
+   * qfg-38lp: a value typed as a stray positional (`qfg set-default KEY <secret>`)
+   * comes back from oclif as `Unexpected argument: <secret>`. On commands that
+   * take a value, hide the offending tokens instead of echoing them.
+   */
+  private redactValueParseError(err: {args?: unknown; flags?: unknown} & Error): void {
+    const flags = (this.ctor as {flags?: Record<string, unknown>}).flags ?? {}
+    if (!('value' in flags)) return
+
+    if (err.message.startsWith('Unexpected argument')) {
+      const count = Array.isArray(err.args) ? err.args.length : 1
+      err.message =
+        `Unexpected argument${count === 1 ? '' : 's'} (${count} hidden, in case ${count === 1 ? 'it is' : 'they are'} a value). ` +
+        'Pass a value with --value, --value-stdin or --value-from-env=VAR, not as a positional argument.'
+      delete err.args
+      return
+    }
+
+    if (err.message.startsWith('Nonexistent flag')) {
+      err.message = err.message.replaceAll(/=\S+/g, '=<hidden>')
+      if (Array.isArray(err.flags)) err.flags = err.flags.map((f) => String(f).replace(/=.*$/, '=<hidden>'))
     }
   }
 }
