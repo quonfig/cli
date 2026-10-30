@@ -3,11 +3,13 @@ import {expect, test} from '@oclif/test'
 import {resetClientCache} from '../../src/util/get-client.js'
 import {
   confidentialKey,
+  confidentialOverridePlaintext,
   evaluationStatsRequests,
   jsonKey,
   keyWithEvaluations,
   keyWithMalformedEvals,
   keyWithNoEvaluations,
+  providedKey,
   rawSecret,
   readyForCleanupKey,
   rolloutRuleKey,
@@ -70,7 +72,7 @@ jeffrey: 42
         )
         expect(output[keyWithEvaluations].values).to.deep.equal({
           Default: {
-            url: `${getAppBase()}/workspaces/workspace-123/flags/my-string-list-key?environment=undefined`,
+            url: `${getAppBase()}/workspaces/workspace-123/flags/my-string-list-key`,
             value: ['a', 'b', 'c'],
           },
           Production: {
@@ -165,7 +167,7 @@ No evaluations found for the past 24 hours
 
             values: {
               Default: {
-                url: `${getAppBase()}/workspaces/workspace-123/flags/jeffreys.test.key.reforge?environment=undefined`,
+                url: `${getAppBase()}/workspaces/workspace-123/flags/jeffreys.test.key.reforge`,
                 value: 'abc',
               },
               Production: {
@@ -188,7 +190,8 @@ No evaluations found for the past 24 hours
       .command(['info', secretKey])
       .it('decrypts a secret', (ctx) => {
         expect(ctx.stdout).not.contains(rawSecret)
-        expect(ctx.stdout).contains('Default: [encrypted]')
+        // qfg-r3a47: the SDK-matching fingerprint of the ciphertext, not a bare tag.
+        expect(ctx.stdout).to.match(/- Default: \[encrypted \*{5}[\da-f]{5}]/)
       })
 
     test
@@ -196,7 +199,8 @@ No evaluations found for the past 24 hours
       .command(['info', confidentialKey])
       .it('shows [confidential] for confidential items', (ctx) => {
         expect(ctx.stdout).not.contains(rawSecret)
-        expect(ctx.stdout).contains('Default: [confidential]')
+        expect(ctx.stdout).not.contains('FAKE_INFO_CONFIDENTIAL_0001')
+        expect(ctx.stdout).to.match(/- Default: \[confidential \*{5}[\da-f]{5}, 27 chars, ends …0001]/)
       })
 
     test
@@ -332,6 +336,47 @@ No evaluations found for the past 24 hours
       .command(['info', confidentialKey, '--verbose', '--exclude-evaluations'])
       .it('info --verbose does not dump confidential plaintext', (ctx) => {
         expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_INFO_CONFIDENTIAL_0001')
+      })
+  })
+
+  describe('secret UX follow-ups (qfg-r3a47)', () => {
+    test
+      .stdout()
+      .command(['info', providedKey, '--exclude-evaluations'])
+      .it('renders an ENV_VAR-provided value as `VAR` via ENV, not [object Object]', (ctx) => {
+        expect(ctx.stdout).not.contains('[object Object]')
+        expect(ctx.stdout).contains('- Default: `MY_API_KEY` via ENV')
+        expect(ctx.stdout).contains('- Production: `MY_API_KEY_PROD` via ENV')
+      })
+
+    test
+      .stdout()
+      .command(['info', secretKey, '--exclude-evaluations'])
+      .it('shows each environment a secret fallback fingerprint instead of [see rules]', (ctx) => {
+        expect(ctx.stdout).not.contains(rawSecret)
+        expect(ctx.stdout).not.contains(confidentialOverridePlaintext)
+        expect(ctx.stdout).to.match(/- Production: \[encrypted \*{5}[\da-f]{5}]/)
+        expect(ctx.stdout).to.match(/- jeffrey: \[override] \[confidential \*{5}[\da-f]{5}, 23 chars, ends …0002]/)
+      })
+
+    test
+      .stdout()
+      .command(['info', secretKey, '--exclude-evaluations', '--json'])
+      .it('info --json never carries a confidential override plaintext', (ctx) => {
+        expect(ctx.stdout).not.contains(confidentialOverridePlaintext)
+        const parsed = JSON.parse(ctx.stdout)
+        expect(parsed[secretKey].values.jeffrey.override).to.match(/^\[confidential \*{5}[\da-f]{5}, 23 chars/)
+      })
+
+    test
+      .stdout()
+      .command(['info', keyWithNoEvaluations, '--exclude-evaluations', '--json'])
+      .it('the Default URL has no ?environment=undefined', (ctx) => {
+        expect(ctx.stdout).not.contains('environment=undefined')
+        const parsed = JSON.parse(ctx.stdout)
+        expect(parsed[keyWithNoEvaluations].values.Default.url).to.equal(
+          `${getAppBase()}/workspaces/workspace-123/flags/${keyWithNoEvaluations}`,
+        )
       })
   })
 })

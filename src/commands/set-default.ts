@@ -86,7 +86,11 @@ To target specific organizations or users, write rules on their KEY
   ]
 
   static flags = {
-    confidential: Flags.boolean({default: false, description: 'mark the value as confidential'}),
+    confidential: Flags.boolean({
+      allowNo: true,
+      description:
+        'mark the value as confidential. Auto-detected when the key already holds a confidential value; pass --no-confidential to store it in the clear',
+    }),
     'env-var': Flags.string({
       description:
         'store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local env var NOW, use --value-from-env',
@@ -125,7 +129,7 @@ To target specific organizations or users, write rules on their KEY
       return this.err(valueSource.error ? valueSource.message : 'Value is required')
     }
 
-    if (flags.confidential && secret.selected) {
+    if (flags.confidential === true && secret.selected) {
       console.warn("Note: --confidential is implied when using --secret, so you don't need to specify both.")
     }
 
@@ -215,18 +219,33 @@ To target specific organizations or users, write rules on their KEY
     const currentConfig = detailRequest.json as unknown as StoredDocument
     this.verboseLog('Config details:', currentConfig)
 
-    // Check if existing config has encrypted values
-    if (!secret.selected && currentConfig.default?.rules) {
-      for (const rule of currentConfig.default.rules) {
-        if ((rule.value as {decryptWith?: string} | undefined)?.decryptWith) {
-          this.verboseLog('Auto-detected encryption from existing config')
-          secret = {
-            keyName: secret.keyName,
-            selected: true,
-          }
-          break
-        }
+    // Auto-detect from EVERY stored rule value, default and per-environment
+    // (qfg-r3a47): an update to an encrypted or confidential key must not
+    // silently store the new value in the clear.
+    const storedValues = [
+      ...(currentConfig.default?.rules ?? []),
+      ...(currentConfig.environments ?? []).flatMap((env) => env.rules ?? []),
+    ].map((rule) => rule.value as {confidential?: boolean; decryptWith?: string; type?: string} | undefined)
+
+    if (!secret.selected && storedValues.some((value) => value?.decryptWith)) {
+      this.verboseLog('Auto-detected encryption from existing config')
+      secret = {
+        keyName: secret.keyName,
+        selected: true,
       }
+    }
+
+    let confidential = flags.confidential === true
+    if (
+      flags.confidential === undefined &&
+      !secret.selected &&
+      storedValues.some((value) => value?.confidential && value.type !== 'provided')
+    ) {
+      confidential = true
+      this.logToStderr(
+        `Note: ${key} already holds a confidential value, so the new value is stored confidential too. ` +
+          'Pass --no-confidential to store it in the clear.',
+      )
     }
 
     // Get the environment
@@ -261,10 +280,8 @@ To target specific organizations or users, write rules on their KEY
     const deletePhrase = targetingRuleCount > 0 ? `, deleting ${targetingRuleCount} targeting rule(s)` : ''
     const confirmMessage = (valuePhrase: string): string =>
       replaceTargeting
-        ? `Confirm: set ${key} in ${environment.name} to ${valuePhrase} for EVERYONE${deletePhrase}? yes/no`
-        : `Confirm: set the fallback for ${key} in ${environment.name} to ${valuePhrase}?${keptPhrase} yes/no`
-
-    const {confidential} = flags
+        ? `Confirm: set ${key} in ${environment.name} to ${valuePhrase} for EVERYONE${deletePhrase}?`
+        : `Confirm: set the fallback for ${key} in ${environment.name} to ${valuePhrase}?${keptPhrase}`
 
     // Get the value
     if (flags['env-var']) {

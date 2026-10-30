@@ -348,15 +348,17 @@ Related commands:
   private formatValue(value: Record<string, unknown>, includeQuotes: boolean = true): string {
     if (!value) return 'null'
 
-    // Handle encrypted values
-    if (value.decryptWith) {
-      return '[encrypted]'
+    // Handle provided values (ENV_VAR). The stored value is the env var NAME,
+    // not a secret, so it is shown even when the value is confidential.
+    // Shape: {type: 'provided', value: {source, lookup}} (qfg-r3a47).
+    const provided = (value.type === 'provided' ? value.value : value.provided) as {lookup?: string} | undefined
+    if (provided && typeof provided === 'object') {
+      return `\`${provided.lookup}\` via ENV`
     }
 
-    // Handle confidential values
-    if (value.confidential) {
-      return '[confidential]'
-    }
+    // Secrets and confidential values show the redacted fingerprint (qfg-r3a47).
+    const redacted = this.redactedValue(value)
+    if (redacted) return redacted
 
     // Handle weighted values (A/B testing)
     if (Array.isArray(value.weightedValues)) {
@@ -368,17 +370,6 @@ Related commands:
           return `${percent}% ${val}`
         })
       return weights.join(', ')
-    }
-
-    // Handle provided values (ENV_VAR)
-    if (value.provided) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let str = `${(value.provided as any).lookup}`
-      if (value.confidential) {
-        str = `\`${str}\``
-      }
-      str += ' via ENV'
-      return str
     }
 
     // Handle simple values
@@ -408,22 +399,21 @@ Related commands:
     return this.extractSimpleValue(value)
   }
 
-  // Anything that is not a catch-all targets someone. Both live catch-all
-  // spellings (`criteria: []` and all-ALWAYS_TRUE) are unconditional — one
+  // The redacted display for an encrypted or confidential value, or undefined
+  // for a value that may be shown. An encrypted value hashes its ciphertext,
+  // a confidential one its plaintext, matching the SDK (src/util/redact.ts).
   // shared predicate, qfg-9kr8.
   private hasNonTrivialCriteria(rule: unknown): boolean {
     return !isCatchAllRule(rule)
   }
 
-  // A rule value is a "simple scalar" if it carries a literal value that can be
-  // rendered inline next to "[override]". Rollouts ({type: 'weighted_values',
-  // ...}, or anything else where `value.value` is itself an object) cannot —
-  // String(obj) yields "[object Object]" (qfg-5j9i), and a percent split is
-  // never a one-token override anyway.
+  // Anything that is not a catch-all targets someone. Both live catch-all
+  // spellings (`criteria: []` and all-ALWAYS_TRUE) are unconditional — one
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private isSimpleScalarRuleValue(value: any): boolean {
     if (!value || typeof value !== 'object') return false
     if (value.type === 'weighted_values' || Array.isArray(value.weightedValues)) return false
+    if (value.type === 'provided' || value.provided) return true
     // Old format: {type: 'string'|'bool'|'int'|'double'|'stringList'|'json', value: X}
     if (typeof value.type === 'string' && value.value !== undefined) {
       // A `json` payload may legitimately be an object — render it as JSON, not [object Object].
@@ -441,6 +431,11 @@ Related commands:
     )
   }
 
+  // A rule value is a "simple scalar" if it carries a literal value that can be
+  // rendered inline next to "[override]". Rollouts ({type: 'weighted_values',
+  // ...}, or anything else where `value.value` is itself an object) cannot —
+  // String(obj) yields "[object Object]" (qfg-5j9i), and a percent split is
+  // never a one-token override anyway.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private parseConfig(config: any, environments: Environment[], url: string) {
     const contents: string[] = []
@@ -495,20 +490,33 @@ Related commands:
           const overrideRule = envConfig.rules.find((r: any) => this.hasNonTrivialCriteria(r))
           if (overrideRule && this.isSimpleScalarRuleValue(overrideRule.value)) {
             const overrideValue = this.formatValue(overrideRule.value, false)
-            displayValue = `[override] \`${overrideValue}\``
+            // A redacted display or `VAR` via ENV is already delimited.
+            displayValue =
+              this.redactedValue(overrideRule.value) || overrideValue.startsWith('`')
+                ? `[override] ${overrideValue}`
+                : `[override] \`${overrideValue}\``
           } else {
             // Rollouts / weighted_values / anything we can't render inline → defer to the URL (qfg-5j9i).
             displayValue = '[see rules]'
           }
         } else {
-          // Only has unconditional rules - show [see rules] to indicate env has custom config
-          displayValue = '[see rules]'
+          // Only has unconditional rules - show [see rules] to indicate env has
+          // custom config. A secret / provided fallback shows its redacted
+          // fingerprint or env var instead, so a rotation can be confirmed per
+          // environment without revealing it (qfg-r3a47).
+          const fallbackRule = envConfig.rules.find((r: unknown) => isCatchAllRule(r))
+          const fallbackValue = fallbackRule?.value
+          displayValue =
+            fallbackValue && (this.redactedValue(fallbackValue) || fallbackValue.type === 'provided')
+              ? this.formatValue(fallbackValue, false)
+              : '[see rules]'
         }
       }
 
       contents.push(`- ${envConfig.name}: ${displayValue}`)
 
-      const envUrl = envConfig.id ? `${url}?environment=${envConfig.id}` : `${url}?environment=undefined`
+      // [Default] has no environment id; its URL is the flag page itself (qfg-r3a47).
+      const envUrl = envConfig.id ? `${url}?environment=${envConfig.id}` : url
       json[envConfig.name] = {
         url: envUrl,
       }
@@ -547,8 +555,12 @@ Related commands:
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const overrideRule = envConfig.rules.find((r: any) => this.hasNonTrivialCriteria(r))
             if (overrideRule) {
-              // Extract just the value without formatting
-              const overrideValue = overrideRule.value.value
+              // Extract just the value without formatting; a confidential
+              // override is redacted, never the plaintext (qfg-r3a47).
+              const overrideValue =
+                overrideRule.value?.confidential && !overrideRule.value?.decryptWith
+                  ? this.redactedValue(overrideRule.value)
+                  : overrideRule.value.value
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               ;(json[envConfig.name] as any).override = overrideValue
             }
@@ -560,6 +572,17 @@ Related commands:
     this.log(contents.join('\n').trim())
 
     return json
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private redactedValue(value: any): string | undefined {
+    if (!value || typeof value !== 'object') return undefined
+    if (value.type === 'provided' || value.provided) return undefined
+    const raw = value.value ?? value.string
+    const text = typeof raw === 'string' ? raw : JSON.stringify(raw)
+    if (value.decryptWith) return redactedDisplay(redactedSummary({ciphertext: text}))
+    if (value.confidential) return redactedDisplay(redactedSummary({plaintext: text}))
+    return undefined
   }
 
   private transformEvaluationStatsForJson(

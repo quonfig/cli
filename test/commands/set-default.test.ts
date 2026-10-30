@@ -808,4 +808,54 @@ describe('set-default', () => {
         expect(ctx.stdout + ctx.stderr).to.not.contain('sk_live_FAKE_POSITIONAL_42')
       })
   })
+
+  // qfg-r3a47: encryption was auto-detected from default.rules only, and
+  // confidential was never auto-detected, so an update silently stored the new
+  // value in the clear.
+  describe('secret / confidential auto-detection (qfg-r3a47)', () => {
+    const NEW_CONF = 'FAKE_NEW_CONFIDENTIAL_r3a47'
+    const lastRuleValue = (envId: string) => {
+      const environments = configsUpdateCapture.body.json.config.environments as Array<{id: string; rules: any[]}>
+      return environments.find((e) => e.id === envId)!.rules.at(-1).value
+    }
+
+    test
+      .stdout()
+      .stderr()
+      .command(['set-default', 'confidential.plain', '--environment=Staging', `--value=${NEW_CONF}`, '--confirm'])
+      .it('keeps an already-confidential key confidential without --confidential', (ctx) => {
+        expect(lastRuleValue('Staging').confidential).to.equal(true)
+        expect(ctx.stdout + ctx.stderr).to.not.contain(NEW_CONF)
+        expect(ctx.stdout).to.contain('[confidential *****')
+        expect(ctx.stderr).to.contain('--no-confidential')
+      })
+
+    test
+      .stdout()
+      .stderr()
+      .command([
+        'set-default',
+        'confidential.plain',
+        '--environment=Staging',
+        '--value=now-public',
+        '--no-confidential',
+        '--confirm',
+      ])
+      .it('--no-confidential stores the value in the clear on purpose', (ctx) => {
+        expect(lastRuleValue('Staging').confidential).to.equal(undefined)
+        expect(ctx.stdout).to.contain('`now-public`')
+      })
+
+    test
+      .env({
+        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
+      })
+      .stdout()
+      .stderr()
+      .command(['set-default', 'env-only.secret', '--environment=Staging', '--value=FAKE_ENV_ONLY_9', '--confirm'])
+      .it('auto-detects encryption from environment rules, not only the default', (ctx) => {
+        expect(lastRuleValue('Staging').decryptWith).to.equal('quonfig.secrets.encryption.key')
+        expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_ENV_ONLY_9')
+      })
+  })
 })
