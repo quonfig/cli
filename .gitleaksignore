@@ -6,3 +6,8 @@
 af8af0b16fa5e2762a968319c0a657c096abe2e6:test/commands/create.test.ts:generic-api-key:583
 af8af0b16fa5e2762a968319c0a657c096abe2e6:test/commands/set-default.test.ts:generic-api-key:39
 6a60a1e995629d691c2114a32aa92b73a2ff0003:test/commands/create.test.ts:generic-api-key:899
+
+# qfg-r3a47 (PR #75): GET_ENCRYPTION_KEY in the secret leak matrix is the FAKE
+# 64-hex key that test/commands/get.test.ts already uses on main; the get
+# fixture's ciphertext was encrypted with it. It encrypts only test fixtures.
+cb5ad27c0534df4565097aa47de6796e43f0583a:test/commands/secret-leak-matrix.test.ts:generic-api-key:25
