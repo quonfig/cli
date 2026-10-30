@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 - 2026-10-30
+
+- **feat(environments): `qfg environments` (alias `qfg envs`) lists the environment names in your workspace (minor).** Commands that take `--environment` need an exact name, and there was no CLI way to find one, so agents guessed `production`. The command prints each name, marks protected ones, and reminds you that `"[Default]"` names the inherited default rules; `--json` prints `{environments: [{id, name, protected}]}`. (qfg-r3a47)
+
+- **fix(secrets): `qfg info --json` no longer prints a confidential targeting override in the clear.** A confidential (unencrypted) value served by an environment's targeting rule appeared verbatim in `values.<env>.override`. It is now the redacted form, the same as the default value. (qfg-r3a47)
+
+- **fix(set-default): an update to a confidential key stays confidential (behavior change).** `set-default` auto-detected encryption but not `confidential`, so updating a confidential key without `--confidential` silently stored the new value in the clear. It is now kept confidential, with a note on stderr; pass `--no-confidential` to store it in the clear on purpose. Encryption is also auto-detected from per-environment rules, not only the default rules, so a key encrypted in one environment is not written in the clear there. (qfg-r3a47)
+
+- **fix(info): secrets and env-var values render readably.** A value provided by an env var shows as `` `MY_API_KEY` via ENV `` (it showed `[object Object]` or `[confidential]`). Encrypted and confidential values show the redacted fingerprint, such as `[encrypted *****ee2d9]`, for the default and for each environment whose fallback is a secret (they showed `[encrypted]` / `[see rules]`), so you can confirm a rotation landed per environment. The `[Default]` URL in `--json` no longer ends in `?environment=undefined`. (qfg-r3a47)
+
+- **fix(ui): confirmation prompts read `(y/N)` and default to no.** `set-default` and `set-rollout` prompts use a raw-mode prompt, so a stray `^D` no longer appears before the success line in a terminal, and pressing Enter alone declines. `--confirm` is unchanged. (qfg-r3a47)
+
+- **test: a secret leak matrix runs `create`, `set-default`, `get` and `info` in text, `--json` and `--verbose` mode and fails if any secret or confidential plaintext reaches stdout or stderr.** (qfg-r3a47)
+
 ## 0.5.0 - 2026-10-29
 
 - **feat(secrets): secrets stay out of terminals, logs and agent transcripts (minor; one behavior change).** No command prints a secret's plaintext anymore. `create --secret` and `set-default --secret` (including the confirm prompt, the auto-detected-encryption path and `--confidential`) show a redacted form instead, such as `[encrypted *****31118, 37 chars, ends …abcd]`. The `*****abcde` fingerprint is the same one SDK telemetry reports, and the last 4 characters appear only for values of 12 or more characters. In `--json` the value is replaced by `{redacted, encrypted, fingerprint, length, last4?}`. **Behavior change:** `qfg get <secret>` prints the redacted form by default; pass `--reveal` to print the plaintext (scripts using `$(qfg get secret)` need `--reveal`, or use `qfg run`). New `--value-stdin` and `--value-from-env <VAR>` on `create` and `set-default` keep the value out of argv and shell history. `create --secret` implies `--type string` (secrets are string-only; store JSON as a string secret), and the interactive menu no longer asks for a type. Secret value prompts are masked. `set-default --secret` on a non-string config gives a clear error instead of a bare 422. Also closed: `--verbose` dumps, `info --json`, coercion errors and oclif parse/unexpected-argument errors no longer echo confidential values. The bundled agent skill gains secrets guidance. `qfg history` still shows confidential (non-encrypted) diffs from the server; tracked as qfg-7usey. (qfg-38lp)
