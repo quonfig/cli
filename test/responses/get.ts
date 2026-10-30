@@ -26,6 +26,15 @@ const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
           version: 1,
         },
         {
+          description: 'A confidential (unencrypted) config',
+          id: 6,
+          key: 'confidential.plain',
+          name: 'Confidential plain',
+          type: 'config',
+          valueType: 'string',
+          version: 1,
+        },
+        {
           description: 'A secret config',
           id: 2,
           key: 'a.secret.config.reforge',

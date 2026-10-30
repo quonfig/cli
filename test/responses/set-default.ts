@@ -57,6 +57,15 @@ const metadataResponse = {
       description: 'A confidential (unencrypted) config',
     },
     {
+      key: 'env-only.secret',
+      type: 'config',
+      valueType: 'string',
+      version: 1,
+      id: 1100,
+      name: 'Env-only secret',
+      description: 'Encrypted only in Staging (qfg-r3a47)',
+    },
+    {
       key: 'test.json',
       type: 'config',
       valueType: 'json',
@@ -420,6 +429,35 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
         default: {
           rules: [{criteria: [], value: {type: 'string', value: 'FAKE_OLD_CONFIDENTIAL_0001', confidential: true}}],
         },
+      },
+    })
+  }
+
+  // qfg-r3a47: the default is plain; only the Staging rules are encrypted.
+  if (key === 'env-only.secret') {
+    return HttpResponse.json({
+      json: {
+        key: 'env-only.secret',
+        type: 'config',
+        valueType: 'string',
+        commitSha: 'abc010',
+        default: {rules: [{criteria: [], value: {type: 'string', value: 'placeholder'}}]},
+        environments: [
+          {
+            id: 'Staging',
+            rules: [
+              {
+                criteria: [],
+                value: {
+                  type: 'string',
+                  value: 'encrypted-value-here',
+                  confidential: true,
+                  decryptWith: 'quonfig.secrets.encryption.key',
+                },
+              },
+            ],
+          },
+        ],
       },
     })
   }
