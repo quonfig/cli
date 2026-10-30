@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.5.0 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.6.0 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -206,7 +206,7 @@ EXAMPLES
   $ qfg activity restore my.flag --yes
 ```
 
-_See code: [src/commands/activity.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/activity.ts)_
+_See code: [src/commands/activity.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/activity.ts)_
 
 ## `qfg activity deleted`
 
@@ -235,7 +235,7 @@ EXAMPLES
   $ qfg activity deleted --json
 ```
 
-_See code: [src/commands/activity/deleted.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/activity/deleted.ts)_
+_See code: [src/commands/activity/deleted.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/activity/deleted.ts)_
 
 ## `qfg activity feed`
 
@@ -270,7 +270,7 @@ EXAMPLES
   $ qfg activity feed --json
 ```
 
-_See code: [src/commands/activity/feed.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/activity/feed.ts)_
+_See code: [src/commands/activity/feed.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/activity/feed.ts)_
 
 ## `qfg activity history [NAME]`
 
@@ -304,7 +304,7 @@ EXAMPLES
   $ qfg activity history request.timeout --json
 ```
 
-_See code: [src/commands/activity/history.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/activity/history.ts)_
+_See code: [src/commands/activity/history.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/activity/history.ts)_
 
 ## `qfg activity restore [NAME]`
 
@@ -343,7 +343,7 @@ EXAMPLES
   $ qfg activity restore request.timeout --type config --yes
 ```
 
-_See code: [src/commands/activity/restore.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/activity/restore.ts)_
+_See code: [src/commands/activity/restore.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/activity/restore.ts)_
 
 ## `qfg agent install-skill`
 
@@ -388,7 +388,7 @@ EXAMPLES
   $ qfg agent install-skill --force
 ```
 
-_See code: [src/commands/agent/install-skill.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/agent/install-skill.ts)_
+_See code: [src/commands/agent/install-skill.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/agent/install-skill.ts)_
 
 ## `qfg audit-log [NAME]`
 
@@ -416,7 +416,7 @@ EXAMPLES
   $ qfg audit-log my.flag
 ```
 
-_See code: [src/commands/audit-log.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/audit-log.ts)_
+_See code: [src/commands/audit-log.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/audit-log.ts)_
 
 ## `qfg cleanup`
 
@@ -458,7 +458,7 @@ EXAMPLES
   $ qfg cleanup status my.flag.key
 ```
 
-_See code: [src/commands/cleanup.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/cleanup.ts)_
+_See code: [src/commands/cleanup.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/cleanup.ts)_
 
 ## `qfg cleanup list`
 
@@ -505,7 +505,7 @@ EXAMPLES
   $ qfg cleanup list --json
 ```
 
-_See code: [src/commands/cleanup/list.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/cleanup/list.ts)_
+_See code: [src/commands/cleanup/list.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/cleanup/list.ts)_
 
 ## `qfg cleanup remove [NAME]`
 
@@ -552,7 +552,7 @@ EXAMPLES
   $ qfg cleanup remove my.flag.key --json
 ```
 
-_See code: [src/commands/cleanup/remove.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/cleanup/remove.ts)_
+_See code: [src/commands/cleanup/remove.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/cleanup/remove.ts)_
 
 ## `qfg cleanup status [NAME]`
 
@@ -592,7 +592,7 @@ EXAMPLES
   $ qfg cleanup status my.flag.key --json
 ```
 
-_See code: [src/commands/cleanup/status.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/cleanup/status.ts)_
+_See code: [src/commands/cleanup/status.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/cleanup/status.ts)_
 
 ## `qfg cleanup verify [NAME]`
 
@@ -638,7 +638,7 @@ EXAMPLES
   $ qfg cleanup verify my.flag.key && qfg delete my.flag.key
 ```
 
-_See code: [src/commands/cleanup/verify.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/cleanup/verify.ts)_
+_See code: [src/commands/cleanup/verify.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/cleanup/verify.ts)_
 
 ## `qfg config-schema`
 
@@ -667,7 +667,7 @@ EXAMPLES
   $ qfg config-schema --json-schema    # full JSON Schema document (copy into your editor)
 ```
 
-_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/config-schema.ts)_
+_See code: [src/commands/config-schema.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/config-schema.ts)_
 
 ## `qfg contexts`
 
@@ -690,7 +690,7 @@ EXAMPLES
   $ qfg contexts search organization formhealth
 ```
 
-_See code: [src/commands/contexts.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/contexts.ts)_
+_See code: [src/commands/contexts.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/contexts.ts)_
 
 ## `qfg contexts search CONTEXTTYPE QUERY`
 
@@ -742,7 +742,7 @@ EXAMPLES
   $ qfg contexts search organization formhealth --json
 ```
 
-_See code: [src/commands/contexts/search.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/contexts/search.ts)_
+_See code: [src/commands/contexts/search.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/contexts/search.ts)_
 
 ## `qfg create NAME`
 
@@ -852,7 +852,7 @@ EXAMPLES
   $ qfg set-rollout my.new.flag --environment production --true-percent 20
 ```
 
-_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/create.ts)_
+_See code: [src/commands/create.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/create.ts)_
 
 ## `qfg delete NAME`
 
@@ -898,7 +898,7 @@ EXAMPLES
   $ qfg delete my.config --yes
 ```
 
-_See code: [src/commands/delete.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/delete.ts)_
+_See code: [src/commands/delete.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/delete.ts)_
 
 ## `qfg environments`
 
@@ -932,7 +932,7 @@ EXAMPLES
   $ qfg environments --json
 ```
 
-_See code: [src/commands/environments.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/environments.ts)_
+_See code: [src/commands/environments.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/environments.ts)_
 
 ## `qfg envs`
 
@@ -1168,7 +1168,7 @@ EXAMPLES
   $ qfg generate --targets node-ts -o ./dist # combine with targets
 ```
 
-_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/generate.ts)_
+_See code: [src/commands/generate.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/generate.ts)_
 
 ## `qfg generate-new-hex-key`
 
@@ -1191,7 +1191,7 @@ EXAMPLES
   $ qfg generate-new-hex-key
 ```
 
-_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/generate-new-hex-key.ts)_
+_See code: [src/commands/generate-new-hex-key.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/generate-new-hex-key.ts)_
 
 ## `qfg get [NAME]`
 
@@ -1236,7 +1236,7 @@ EXAMPLES
   $ qfg get stripe.api-key --environment=production --reveal   # plaintext
 ```
 
-_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/get.ts)_
+_See code: [src/commands/get.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/get.ts)_
 
 ## `qfg history NAME`
 
@@ -1262,7 +1262,7 @@ EXAMPLES
   $ qfg history my.flag
 ```
 
-_See code: [src/commands/history.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/history.ts)_
+_See code: [src/commands/history.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/history.ts)_
 
 ## `qfg info [NAME]`
 
@@ -1310,7 +1310,7 @@ EXAMPLES
   $ qfg info my.config.name --exclude-evaluations   # skip 24h stats
 ```
 
-_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/info.ts)_
+_See code: [src/commands/info.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/info.ts)_
 
 ## `qfg init [DIRECTORY]`
 
@@ -1350,7 +1350,7 @@ EXAMPLES
   $ qfg init --dry-run
 ```
 
-_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/init.ts)_
+_See code: [src/commands/init.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/init.ts)_
 
 ## `qfg interactive`
 
@@ -1380,7 +1380,7 @@ EXAMPLES
   $ qfg
 ```
 
-_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/interactive.ts)_
+_See code: [src/commands/interactive.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/interactive.ts)_
 
 ## `qfg list`
 
@@ -1420,7 +1420,7 @@ EXAMPLES
   $ qfg list --feature-flags
 ```
 
-_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/list.ts)_
+_See code: [src/commands/list.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/list.ts)_
 
 ## `qfg log`
 
@@ -1445,7 +1445,7 @@ EXAMPLES
   $ qfg log --limit 5
 ```
 
-_See code: [src/commands/log.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/log.ts)_
+_See code: [src/commands/log.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/log.ts)_
 
 ## `qfg log-level NAME`
 
@@ -1510,7 +1510,7 @@ EXAMPLES
   $ qfg log-level log-level.my-app --target=Chatty --value=INFO --environment=production
 ```
 
-_See code: [src/commands/log-level.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/log-level.ts)_
+_See code: [src/commands/log-level.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/log-level.ts)_
 
 ## `qfg login`
 
@@ -1535,7 +1535,7 @@ EXAMPLES
   $ qfg login --profile myprofile
 ```
 
-_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/login.ts)_
+_See code: [src/commands/login.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/login.ts)_
 
 ## `qfg logout`
 
@@ -1558,7 +1558,7 @@ EXAMPLES
   $ qfg logout
 ```
 
-_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/logout.ts)_
+_See code: [src/commands/logout.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/logout.ts)_
 
 ## `qfg migrate`
 
@@ -1623,7 +1623,7 @@ EXAMPLES
   $ qfg migrate --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --staging
 ```
 
-_See code: [src/commands/migrate.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/migrate.ts)_
+_See code: [src/commands/migrate.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/migrate.ts)_
 
 ## `qfg migrate doctor`
 
@@ -1661,7 +1661,7 @@ EXAMPLES
   $ qfg migrate doctor --json
 ```
 
-_See code: [src/commands/migrate/doctor.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/migrate/doctor.ts)_
+_See code: [src/commands/migrate/doctor.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/migrate/doctor.ts)_
 
 ## `qfg migrate my-code`
 
@@ -1693,7 +1693,7 @@ EXAMPLES
   $ qfg migrate my-code --dry-run
 ```
 
-_See code: [src/commands/migrate/my-code.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/migrate/my-code.ts)_
+_See code: [src/commands/migrate/my-code.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/migrate/my-code.ts)_
 
 ## `qfg migrate status`
 
@@ -1724,7 +1724,7 @@ EXAMPLES
   $ qfg migrate status --json
 ```
 
-_See code: [src/commands/migrate/status.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/migrate/status.ts)_
+_See code: [src/commands/migrate/status.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/migrate/status.ts)_
 
 ## `qfg override [NAME] [VALUE]`
 
@@ -1779,7 +1779,7 @@ EXAMPLES
   $ qfg override my.flag true --env=staging
 ```
 
-_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/override.ts)_
+_See code: [src/commands/override.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/override.ts)_
 
 ## `qfg pull`
 
@@ -1826,7 +1826,7 @@ EXAMPLES
   $ qfg pull  # uses QUONFIG_DIR env var
 ```
 
-_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/pull.ts)_
+_See code: [src/commands/pull.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/pull.ts)_
 
 ## `qfg push`
 
@@ -1875,7 +1875,7 @@ EXAMPLES
   $ qfg push --dir ./our-config --yes
 ```
 
-_See code: [src/commands/push.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/push.ts)_
+_See code: [src/commands/push.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/push.ts)_
 
 ## `qfg run [COMMAND]`
 
@@ -1926,7 +1926,7 @@ EXAMPLES
   $ qfg run --env DATABASE_URL=db.url --preserve-env --environment=staging -- npm test
 ```
 
-_See code: [src/commands/run.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/run.ts)_
+_See code: [src/commands/run.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/run.ts)_
 
 ## `qfg schema NAME`
 
@@ -1964,7 +1964,7 @@ EXAMPLES
   $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
 ```
 
-_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/schema.ts)_
+_See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/schema.ts)_
 
 ## `qfg sdk-key`
 
@@ -1991,7 +1991,7 @@ EXAMPLES
   $ qfg sdk-key revoke <key-id>
 ```
 
-_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/sdk-key.ts)_
+_See code: [src/commands/sdk-key.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/sdk-key.ts)_
 
 ## `qfg sdk-key create`
 
@@ -2023,7 +2023,7 @@ EXAMPLES
   $ qfg sdk-key create --environment staging --type browser
 ```
 
-_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/sdk-key/create.ts)_
+_See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/sdk-key/create.ts)_
 
 ## `qfg sdk-key list`
 
@@ -2052,7 +2052,7 @@ EXAMPLES
   $ qfg sdk-key list --environment production
 ```
 
-_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/sdk-key/list.ts)_
+_See code: [src/commands/sdk-key/list.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/sdk-key/list.ts)_
 
 ## `qfg sdk-key revoke KEYID`
 
@@ -2079,7 +2079,7 @@ EXAMPLES
   $ qfg sdk-key revoke a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
-_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/sdk-key/revoke.ts)_
+_See code: [src/commands/sdk-key/revoke.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/sdk-key/revoke.ts)_
 
 ## `qfg serve`
 
@@ -2137,7 +2137,7 @@ EXAMPLES
   $ qfg serve --port 6581 --frontend-sdk-key PUBLIC_KEY
 ```
 
-_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/serve.ts)_
+_See code: [src/commands/serve.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/serve.ts)_
 
 ## `qfg set-default [NAME]`
 
@@ -2241,7 +2241,7 @@ EXAMPLES
   $ qfg pull && qfg config-schema
 ```
 
-_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/set-default.ts)_
+_See code: [src/commands/set-default.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/set-default.ts)_
 
 ## `qfg set-rollout [NAME]`
 
@@ -2332,7 +2332,7 @@ EXAMPLES
   $ qfg set-rollout my.variant.flag --environment production --weights "a:33,b:33,c:34" --hash-by user.id
 ```
 
-_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/set-rollout.ts)_
+_See code: [src/commands/set-rollout.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/set-rollout.ts)_
 
 ## `qfg sync`
 
@@ -2364,7 +2364,7 @@ EXAMPLES
   $ qfg sync --watch --dir ./our-config --interval 30
 ```
 
-_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/sync.ts)_
+_See code: [src/commands/sync.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/sync.ts)_
 
 ## `qfg toggle [NAME]`
 
@@ -2499,7 +2499,7 @@ EXAMPLES
   $ qfg verify --json
 ```
 
-_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/verify.ts)_
+_See code: [src/commands/verify.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/verify.ts)_
 
 ## `qfg whoami`
 
@@ -2522,7 +2522,7 @@ EXAMPLES
   $ qfg whoami
 ```
 
-_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/whoami.ts)_
+_See code: [src/commands/whoami.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/whoami.ts)_
 
 ## `qfg workspace`
 
@@ -2545,7 +2545,7 @@ EXAMPLES
   $ qfg workspace
 ```
 
-_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/workspace.ts)_
+_See code: [src/commands/workspace.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/workspace.ts)_
 
 ## `qfg workspace bootstrap`
 
@@ -2578,7 +2578,7 @@ EXAMPLES
   $ qfg workspace bootstrap --dir ./our-config --skip-validate
 ```
 
-_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/workspace/bootstrap.ts)_
+_See code: [src/commands/workspace/bootstrap.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/workspace/bootstrap.ts)_
 
 ## `qfg workspace create SLUG`
 
@@ -2612,7 +2612,7 @@ EXAMPLES
   $ qfg workspace create my-team --org 11111111-1111-1111-1111-111111111111
 ```
 
-_See code: [src/commands/workspace/create.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/workspace/create.ts)_
+_See code: [src/commands/workspace/create.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/workspace/create.ts)_
 
 ## `qfg workspace switch [SLUG]`
 
@@ -2640,7 +2640,7 @@ EXAMPLES
   $ qfg workspace switch acme/production
 ```
 
-_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/workspace/switch.ts)_
+_See code: [src/commands/workspace/switch.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/workspace/switch.ts)_
 <!-- commandsstop -->
 
 ## Local Development
