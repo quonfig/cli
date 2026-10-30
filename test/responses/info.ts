@@ -11,6 +11,8 @@ export const jsonKey = 'question.max-response.override'
 export const keyWithMalformedEvals = 'flag.malformed-eval-rows'
 export const rolloutRuleKey = 'fx-rule-rollout'
 export const readyForCleanupKey = 'flag.ready-for-cleanup'
+export const providedKey = 'a.provided.config'
+export const confidentialOverridePlaintext = 'FAKE_INFO_OVERRIDE_0002'
 
 export const rawSecret = `875247386844c18c58a97c--b307b97a8288ac9da3ce0cf2--7ab0c32e044869e355586ed653a435de`
 
@@ -122,6 +124,75 @@ const secretConfig = {
       },
     ],
   },
+  // qfg-r3a47: Production has its own encrypted fallback; jeffrey has a
+  // confidential (unencrypted) targeting override above the catch-all.
+  environments: [
+    {
+      id: '143',
+      rules: [
+        {
+          criteria: [{operator: 'ALWAYS_TRUE'}],
+          value: {
+            type: 'string',
+            value: `${rawSecret}-prod`,
+            confidential: true,
+            decryptWith: 'prefab.secrets.encryption.key',
+          },
+        },
+      ],
+    },
+    {
+      id: '588',
+      rules: [
+        {
+          criteria: [
+            {
+              operator: 'PROP_IS_ONE_OF',
+              propertyName: 'user.key',
+              valueToMatch: {type: 'string_list', value: ['alice']},
+            },
+          ],
+          value: {type: 'string', value: confidentialOverridePlaintext, confidential: true},
+        },
+        {
+          criteria: [{operator: 'ALWAYS_TRUE'}],
+          value: {
+            type: 'string',
+            value: rawSecret,
+            confidential: true,
+            decryptWith: 'prefab.secrets.encryption.key',
+          },
+        },
+      ],
+    },
+  ],
+}
+
+// qfg-r3a47: an ENV_VAR-provided config, the way the encryption-key configs
+// are stored in our-config. The value is the env var NAME, not a secret.
+const providedConfig = {
+  key: providedKey,
+  type: 'config',
+  valueType: 'string',
+  default: {
+    rules: [
+      {
+        criteria: [{operator: 'ALWAYS_TRUE'}],
+        value: {type: 'provided', value: {source: 'ENV_VAR', lookup: 'MY_API_KEY'}, confidential: true},
+      },
+    ],
+  },
+  environments: [
+    {
+      id: '143',
+      rules: [
+        {
+          criteria: [{operator: 'ALWAYS_TRUE'}],
+          value: {type: 'provided', value: {source: 'ENV_VAR', lookup: 'MY_API_KEY_PROD'}, confidential: true},
+        },
+      ],
+    },
+  ],
 }
 
 // v1 config response for a JSON-typed config (exercises [object Object] bug)
@@ -260,6 +331,7 @@ const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
           description: '',
         },
         {key: jsonKey, type: 'config', valueType: 'json', version: 1, id: 5, name: 'JSON Override', description: ''},
+        {key: providedKey, type: 'config', valueType: 'string', version: 1, id: 9, name: 'Provided', description: ''},
         {
           key: keyWithMalformedEvals,
           type: 'feature_flag',
@@ -316,6 +388,10 @@ const configHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, asyn
 
   if (key === jsonKey) {
     return HttpResponse.json({json: jsonConfig})
+  }
+
+  if (key === providedKey) {
+    return HttpResponse.json({json: providedConfig})
   }
 
   if (key === keyWithMalformedEvals) {

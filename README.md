@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.5.0 darwin-arm64 node-v24.4.1
+@quonfig/cli/0.5.0 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -137,6 +137,8 @@ script doesn't need to know which env it's running in.
 * [`qfg contexts search CONTEXTTYPE QUERY`](#qfg-contexts-search-contexttype-query)
 * [`qfg create NAME`](#qfg-create-name)
 * [`qfg delete NAME`](#qfg-delete-name)
+* [`qfg environments`](#qfg-environments)
+* [`qfg envs`](#qfg-envs)
 * [`qfg flag info [NAME]`](#qfg-flag-info-name)
 * [`qfg flag list`](#qfg-flag-list)
 * [`qfg flag show [NAME]`](#qfg-flag-show-name)
@@ -897,6 +899,72 @@ EXAMPLES
 ```
 
 _See code: [src/commands/delete.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/delete.ts)_
+
+## `qfg environments`
+
+List the environments in your workspace.
+
+```
+USAGE
+  $ qfg environments [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  List the environments in your workspace.
+
+  Use these names with --environment (set-default, set-rollout, get, run, ...).
+  "[Default]" is not an environment: it names the default rules that every
+  environment without rules of its own inherits. Protected environments may
+  require extra permissions to change.
+
+ALIASES
+  $ qfg envs
+
+EXAMPLES
+  $ qfg environments
+
+  $ qfg environments --json
+```
+
+_See code: [src/commands/environments.ts](https://github.com/quonfig/cli/blob/v0.5.0/src/commands/environments.ts)_
+
+## `qfg envs`
+
+List the environments in your workspace.
+
+```
+USAGE
+  $ qfg envs [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+
+GLOBAL FLAGS
+  -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
+      --[no-]interactive   Force interactive mode
+      --json               Format output as json.
+      --no-color           Do not colorize output
+      --verbose            Verbose output
+
+DESCRIPTION
+  List the environments in your workspace.
+
+  Use these names with --environment (set-default, set-rollout, get, run, ...).
+  "[Default]" is not an environment: it names the default rules that every
+  environment without rules of its own inherits. Protected environments may
+  require extra permissions to change.
+
+ALIASES
+  $ qfg envs
+
+EXAMPLES
+  $ qfg envs
+
+  $ qfg envs --json
+```
 
 ## `qfg flag info [NAME]`
 
@@ -2085,7 +2153,8 @@ ARGUMENTS
   NAME  config/feature-flag/etc. name
 
 FLAGS
-  --confidential             mark the value as confidential
+  --[no-]confidential        mark the value as confidential. Auto-detected when the key already holds a confidential
+                             value; pass --no-confidential to store it in the clear
   --confirm                  confirm without prompt
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env
@@ -2311,7 +2380,8 @@ ARGUMENTS
   NAME  config/feature-flag/etc. name
 
 FLAGS
-  --confidential             mark the value as confidential
+  --[no-]confidential        mark the value as confidential. Auto-detected when the key already holds a confidential
+                             value; pass --no-confidential to store it in the clear
   --confirm                  confirm without prompt
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env

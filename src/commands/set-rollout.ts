@@ -240,8 +240,8 @@ To inspect the current rollout:
       targetingRuleCount > 0 ? ` (${targetingRuleCount} targeting rule${targetingRuleCount === 1 ? '' : 's'} kept)` : ''
     const deletePhrase = targetingRuleCount > 0 ? `, deleting ${targetingRuleCount} targeting rule(s)` : ''
     const message = replaceTargeting
-      ? `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}] for EVERYONE${deletePhrase}? yes/no`
-      : `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}]?${keptPhrase} yes/no`
+      ? `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}] for EVERYONE${deletePhrase}?`
+      : `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}]?${keptPhrase}`
 
     if (!(await getConfirmation({flags, message}))) {
       return
