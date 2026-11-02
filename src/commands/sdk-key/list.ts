@@ -50,7 +50,7 @@ export default class SdkKeyList extends APICommand {
     if (keys.length === 0) {
       const envSuffix = flags.environment ? ` for environment "${flags.environment}"` : ''
       this.log(`No SDK keys found${envSuffix}.`)
-      this.log(`\nCreate one with: qfg sdk-key create --environment <name> --type server|browser`)
+      this.log(`\nCreate one with: qfg sdk-key create --name <name> --environment <env> --type server|browser`)
       return {keys: []}
     }
 
