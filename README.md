@@ -2002,7 +2002,7 @@ DESCRIPTION
 EXAMPLES
   $ qfg sdk-key list
 
-  $ qfg sdk-key create --environment production --type server
+  $ qfg sdk-key create --name "checkout service" --environment production --type server
 
   $ qfg sdk-key revoke <key-id>
 ```
@@ -2015,11 +2015,12 @@ Create a new SDK key
 
 ```
 USAGE
-  $ qfg sdk-key create [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [-e <value>] [-t
+  $ qfg sdk-key create -n <value> [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [-e <value>] [-t
     server|browser]
 
 FLAGS
   -e, --environment=<value>  Environment name (e.g. production, staging)
+  -n, --name=<value>         (required) Name for the key, shown in the key list (e.g. the service that uses it)
   -t, --type=<option>        Key type: server (backend) or browser (frontend)
                              <options: server|browser>
 
@@ -2034,9 +2035,9 @@ DESCRIPTION
   Create a new SDK key
 
 EXAMPLES
-  $ qfg sdk-key create --environment production --type server
+  $ qfg sdk-key create --name "checkout service" --environment production --type server
 
-  $ qfg sdk-key create --environment staging --type browser
+  $ qfg sdk-key create --name "marketing site" --environment staging --type browser
 ```
 
 _See code: [src/commands/sdk-key/create.ts](https://github.com/quonfig/cli/blob/v0.7.0/src/commands/sdk-key/create.ts)_
