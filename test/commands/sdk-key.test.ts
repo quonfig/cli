@@ -71,9 +71,10 @@ describe('sdk-key create', () => {
 
   test
     .stdout()
-    .command(['sdk-key create', '--environment', 'production', '--type', 'server'])
+    .command(['sdk-key create', '--name', 'checkout service', '--environment', 'production', '--type', 'server'])
     .it('creates a server key and shows the raw key once', (ctx) => {
       expect(ctx.stdout).to.contain('SDK key created successfully')
+      expect(ctx.stdout).to.contain('Name:         checkout service')
       expect(ctx.stdout).to.contain('production')
       expect(ctx.stdout).to.contain('server')
       expect(ctx.stdout).to.contain('qf_sk_production_abcd1234')
@@ -83,16 +84,28 @@ describe('sdk-key create', () => {
 
   test
     .stdout()
-    .command(['sdk-key create', '--environment', 'staging', '--type', 'browser'])
+    .command(['sdk-key create', '--name', 'web', '--environment', 'staging', '--type', 'browser'])
     .it('creates a browser key', (ctx) => {
       expect(ctx.stdout).to.contain('SDK key created successfully')
     })
 
   test
     .stdout()
-    .command(['sdk-key create', '--environment', 'nonexistent', '--type', 'server'])
+    .command(['sdk-key create', '--name', 'x', '--environment', 'nonexistent', '--type', 'server'])
     .catch(/not found/)
     .it('errors on unknown environment')
+
+  test
+    .stdout()
+    .command(['sdk-key create', '--environment', 'production', '--type', 'server'])
+    .catch(/Missing required flag[\S\s]*name/)
+    .it('requires --name')
+
+  test
+    .stdout()
+    .command(['sdk-key create', '--name', '   ', '--environment', 'production', '--type', 'server'])
+    .catch(/name cannot be empty/)
+    .it('rejects a blank --name')
 })
 
 describe('sdk-key revoke', () => {

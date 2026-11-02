@@ -52,9 +52,11 @@ const environmentsHandler = http.post(`${getApiBase()}/api/v1/environments/list`
   HttpResponse.json({json: environmentsResponse}),
 )
 
-const createHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/create`, () =>
-  HttpResponse.json({json: createdKeyResponse}),
-)
+// Echo the requested name back so tests prove the CLI sends it.
+const createHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/create`, async ({request}) => {
+  const body = (await request.json()) as {json?: {name?: string}}
+  return HttpResponse.json({json: {...createdKeyResponse, name: body.json?.name ?? null}})
+})
 
 const deleteHandler = http.post(`${getApiBase()}/api/v1/sdkKeys/delete`, () => HttpResponse.json({json: {ok: true}}))
 

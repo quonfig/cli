@@ -14,6 +14,7 @@ interface CreatedSdkKey {
   environmentName: string
   id: string
   keyType: KeyType
+  name: string | null
   rawKey: string
 }
 
@@ -21,8 +22,8 @@ export default class SdkKeyCreate extends APICommand {
   static description = 'Create a new SDK key'
 
   static examples = [
-    '<%= config.bin %> <%= command.id %> --environment production --type server',
-    '<%= config.bin %> <%= command.id %> --environment staging --type browser',
+    '<%= config.bin %> <%= command.id %> --name "checkout service" --environment production --type server',
+    '<%= config.bin %> <%= command.id %> --name "marketing site" --environment staging --type browser',
   ]
 
   static flags = {
@@ -30,6 +31,11 @@ export default class SdkKeyCreate extends APICommand {
       char: 'e',
       description: 'Environment name (e.g. production, staging)',
       required: false,
+    }),
+    name: Flags.string({
+      char: 'n',
+      description: 'Name for the key, shown in the key list (e.g. the service that uses it)',
+      required: true,
     }),
     type: Flags.string({
       char: 't',
@@ -41,6 +47,11 @@ export default class SdkKeyCreate extends APICommand {
 
   public async run(): Promise<JsonObj | void> {
     const {flags} = await this.parse(SdkKeyCreate)
+
+    const name = flags.name.trim()
+    if (!name) {
+      return this.err('--name cannot be empty.')
+    }
 
     // Fetch available environments
     const environments = await getEnvironments(this)
@@ -94,6 +105,7 @@ export default class SdkKeyCreate extends APICommand {
       workspaceId: this.workspaceId,
       environmentId,
       keyType,
+      name,
     })
 
     if (!request.ok) {
@@ -105,6 +117,7 @@ export default class SdkKeyCreate extends APICommand {
     const typeLabel = keyType === 'backend' ? 'server' : 'browser'
 
     this.log(`\nSDK key created successfully!\n`)
+    this.log(`Name:         ${key.name ?? name}`)
     this.log(`Environment:  ${environmentName}`)
     this.log(`Type:         ${typeLabel}`)
     this.log(`Key ID:       ${key.id}`)
@@ -117,6 +130,7 @@ export default class SdkKeyCreate extends APICommand {
       environmentName: key.environmentName,
       id: key.id,
       keyType: typeLabel,
+      name: key.name ?? name,
       rawKey: key.rawKey,
     }
   }
