@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0 - 2026-11-02
+
+- **feat(sdk-key): `qfg sdk-key create` takes a required `--name` / `-n` (breaking).** Keys created from the CLI used to get an auto-generated name. Now the name you pass is stored on the key and shown by `qfg sdk-key list`, in the create output, and as `name` in `--json`. Leading and trailing spaces are trimmed, and a blank name is an error. **Scripts that run `qfg sdk-key create` without `--name` now fail with "Missing required flag".** Add `--name "<what uses this key>"` to them.
+
 ## 0.7.0 - 2026-11-02
 
 - **feat(cleanup): `qfg cleanup list --all` finds cleanup candidates across every flag and config (minor).** Without `--all` the command still lists only flags marked ready for cleanup. With it, every flag and config in the workspace is listed, marked or not, with eval counts (24h / 2d / 7d / 30d), the last eval date, and new `KIND` and `MARKED` columns, sorted quiet-first and oldest-first. `--environment <name>` counts evals in one environment; an unknown name is an error rather than an empty, all-quiet list. `--json` rows gain `kind`, `ready_for_cleanup` and `per_environment`. The command now makes one request for the whole workspace instead of one per environment, and errors if eval data is unavailable instead of reporting everything as quiet. `LAST_EVAL` `-` means no evals in the last 90 days. (qfg-1nyzs.2)
