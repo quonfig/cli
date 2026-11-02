@@ -98,7 +98,7 @@ describe('sdk-key create', () => {
   test
     .stdout()
     .command(['sdk-key create', '--environment', 'production', '--type', 'server'])
-    .catch(/Missing required flag[\s\S]*name/)
+    .catch(/Missing required flag[\S\s]*name/)
     .it('requires --name')
 
   test
