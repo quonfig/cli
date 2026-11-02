@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.6.0 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.6.0 darwin-arm64 node-v24.4.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -466,10 +466,12 @@ List feature flags marked readyForCleanup=true, with eval volume per window.
 
 ```
 USAGE
-  $ qfg cleanup list [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+  $ qfg cleanup list [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--all] [--environment <value>]
 
 FLAGS
-  --json  Return structured rows for agent consumption
+  --all                  Every flag and config in the workspace, not only flags marked readyForCleanup
+  --environment=<value>  Count evals in this environment only (default: all environments)
+  --json                 Return structured rows for agent consumption
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -480,29 +482,43 @@ GLOBAL FLAGS
 DESCRIPTION
   List feature flags marked readyForCleanup=true, with eval volume per window.
 
+  Pass --all to prospect instead: every flag AND config in the workspace,
+  marked or not, so you can find what has gone quiet.
+
   Columns:
-  KEY         the flag key
-  TYPE        the flag's valueType (bool, string, int, etc.)
+  KEY         the flag or config key
+  KIND        flag or config (--all only)
+  TYPE        the valueType (bool, string, int, etc.)
   EVALS_24H   evals counted in today's bucket (latest day)
   EVALS_2D    evals in the last 2 calendar days
   EVALS_7D    evals in the last 7 calendar days
   EVALS_30D   evals in the last 30 calendar days
-  LAST_EVAL   most recent calendar day with any evals (UTC), blank if none
+  LAST_EVAL   most recent calendar day with any evals (UTC); "-" if none
+  in the last 90 days (the retention window), not "never"
+  MARKED      yes if the flag is marked readyForCleanup (--all only)
   CLASS       quiet (zero evals in last 2 days) or active
+
+  Counts are summed across environments; --environment scopes them to one.
 
   Default sort: quiet first, oldest LAST_EVAL at top.
 
-  Pass --json for the structured object (rows[]). Each row carries the columns
-  above plus the raw eval counts your agent can reason about itself.
+  Quiet is not proof of unused: a config read once at process start, an SDK
+  with eval telemetry turned off, or a code path that runs yearly can all look
+  quiet. Check the code before deleting.
 
-  Once you've picked a candidate, run `qfg cleanup status <key>` for the
-  drill-in, or `qfg cleanup remove <key>` to hand the removal to your coding agent
-  with the Quonfig agent skill.
+  Pass --json for the structured object (rows[]). Each row carries the columns
+  above plus per_environment breakdowns your agent can reason about itself.
+
+  Once you've picked a flag, mark it ready for cleanup in the UI, then run
+  `qfg cleanup status <key>` for the drill-in, or `qfg cleanup remove <key>` to
+  hand the removal to your coding agent with the Quonfig agent skill.
 
 EXAMPLES
   $ qfg cleanup list
 
-  $ qfg cleanup list --json
+  $ qfg cleanup list --all
+
+  $ qfg cleanup list --all --environment production --json
 ```
 
 _See code: [src/commands/cleanup/list.ts](https://github.com/quonfig/cli/blob/v0.6.0/src/commands/cleanup/list.ts)_
