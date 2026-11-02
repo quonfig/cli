@@ -17,88 +17,105 @@ interface MetadataListResponse {
   configs: MetadataConfig[]
 }
 
-interface SparklineRow {
-  config_key: string
-  counts: number[]
-  days: string[]
-}
-
-interface SparklinesResponse {
-  daysOfHistory: number
-  rows: SparklineRow[]
-}
-
-interface CleanupRow {
-  class: 'active' | 'quiet'
+interface EvalWindows {
   evals_2d: number
   evals_7d: number
   evals_24h: number
   evals_30d: number
+}
+
+interface EvalActivityRow extends EvalWindows {
+  config_key: string
+  environment: string
+  last_eval: string
+}
+
+interface EvalActivityResponse {
+  available: boolean
+  rows: EvalActivityRow[]
+  windowDays: number
+}
+
+interface EnvironmentActivity extends EvalWindows {
+  environment: string
+  last_eval: string
+}
+
+interface CleanupRow extends EvalWindows {
+  class: 'active' | 'quiet'
   key: string
+  kind: 'config' | 'flag'
   last_eval: string | null
+  per_environment: EnvironmentActivity[]
+  ready_for_cleanup: boolean
   type: string
 }
 
-function startOfDayUtcMs(date: Date): number {
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-}
+// Entity types whose evaluations SDKs count. Log levels are excluded by the
+// SDKs' eval summaries and schemas/segments are never evaluated directly.
+const KIND_BY_TYPE: Record<string, CleanupRow['kind']> = {config: 'config', feature_flag: 'flag'}
 
-function deriveWindows(
-  daysAgoByKey: Map<string, Map<number, number>>,
-  key: string,
-): Omit<CleanupRow, 'key' | 'type' | 'class'> {
-  const buckets = daysAgoByKey.get(key) ?? new Map<number, number>()
-  let evals_24h = 0
-  let evals_2d = 0
-  let evals_7d = 0
-  let evals_30d = 0
-  let mostRecentDayAgo: number | null = null
-
-  for (const [daysAgo, count] of buckets) {
-    if (count <= 0) continue
-    if (daysAgo === 0) evals_24h += count
-    if (daysAgo <= 1) evals_2d += count
-    if (daysAgo <= 6) evals_7d += count
-    if (daysAgo <= 29) evals_30d += count
-    if (mostRecentDayAgo === null || daysAgo < mostRecentDayAgo) {
-      mostRecentDayAgo = daysAgo
-    }
-  }
-
+function rollUp(perEnv: EnvironmentActivity[]): {last_eval: string | null} & EvalWindows {
   let last_eval: string | null = null
-  if (mostRecentDayAgo !== null) {
-    const ms = startOfDayUtcMs(new Date()) - mostRecentDayAgo * 86_400_000
-    last_eval = new Date(ms).toISOString().slice(0, 10)
+  const totals: EvalWindows = {evals_24h: 0, evals_2d: 0, evals_7d: 0, evals_30d: 0}
+  for (const env of perEnv) {
+    totals.evals_24h += env.evals_24h
+    totals.evals_2d += env.evals_2d
+    totals.evals_7d += env.evals_7d
+    totals.evals_30d += env.evals_30d
+    // YYYY-MM-DD strings compare chronologically.
+    if (last_eval === null || env.last_eval > last_eval) last_eval = env.last_eval
   }
 
-  return {evals_24h, evals_2d, evals_7d, evals_30d, last_eval}
+  return {...totals, last_eval}
 }
 
 export default class CleanupList extends APICommand {
   static description = `List feature flags marked readyForCleanup=true, with eval volume per window.
 
+Pass --all to prospect instead: every flag AND config in the workspace,
+marked or not, so you can find what has gone quiet.
+
 Columns:
-  KEY         the flag key
-  TYPE        the flag's valueType (bool, string, int, etc.)
+  KEY         the flag or config key
+  KIND        flag or config (--all only)
+  TYPE        the valueType (bool, string, int, etc.)
   EVALS_24H   evals counted in today's bucket (latest day)
   EVALS_2D    evals in the last 2 calendar days
   EVALS_7D    evals in the last 7 calendar days
   EVALS_30D   evals in the last 30 calendar days
-  LAST_EVAL   most recent calendar day with any evals (UTC), blank if none
+  LAST_EVAL   most recent calendar day with any evals (UTC); "-" if none
+              in the last 90 days (the retention window), not "never"
+  MARKED      yes if the flag is marked readyForCleanup (--all only)
   CLASS       quiet (zero evals in last 2 days) or active
+
+Counts are summed across environments; --environment scopes them to one.
 
 Default sort: quiet first, oldest LAST_EVAL at top.
 
+Quiet is not proof of unused: a config read once at process start, an SDK
+with eval telemetry turned off, or a code path that runs yearly can all look
+quiet. Check the code before deleting.
+
 Pass --json for the structured object (rows[]). Each row carries the columns
-above plus the raw eval counts your agent can reason about itself.
+above plus per_environment breakdowns your agent can reason about itself.
 
-Once you've picked a candidate, run \`qfg cleanup status <key>\` for the
-drill-in, or \`qfg cleanup remove <key>\` to hand the removal to your coding agent
-with the Quonfig agent skill.`
+Once you've picked a flag, mark it ready for cleanup in the UI, then run
+\`qfg cleanup status <key>\` for the drill-in, or \`qfg cleanup remove <key>\` to
+hand the removal to your coding agent with the Quonfig agent skill.`
 
-  static examples = ['<%= config.bin %> <%= command.id %>', '<%= config.bin %> <%= command.id %> --json']
+  static examples = [
+    '<%= config.bin %> <%= command.id %>',
+    '<%= config.bin %> <%= command.id %> --all',
+    '<%= config.bin %> <%= command.id %> --all --environment production --json',
+  ]
 
   static flags = {
+    all: Flags.boolean({
+      default: false,
+      description: 'Every flag and config in the workspace, not only flags marked readyForCleanup',
+    }),
+    environment: Flags.string({description: 'Count evals in this environment only (default: all environments)'}),
     json: Flags.boolean({default: false, description: 'Return structured rows for agent consumption'}),
   }
 
@@ -112,10 +129,18 @@ with the Quonfig agent skill.`
     }
 
     const metadata = metadataReq.json as unknown as MetadataListResponse
-    const readyFlags = metadata.configs.filter((c) => c.type === 'feature_flag' && c.readyForCleanup === true)
+    const candidates = metadata.configs.filter((c) =>
+      flags.all ? c.type in KIND_BY_TYPE : c.type === 'feature_flag' && c.readyForCleanup === true,
+    )
 
-    if (readyFlags.length === 0) {
-      this.log('No feature flags are marked readyForCleanup. Mark a flag in the UI to start the retirement workflow.')
+    if (candidates.length === 0) {
+      if (flags.all) {
+        this.log('No flags or configs in this workspace.')
+      } else {
+        this.log('No feature flags are marked readyForCleanup. Mark a flag in the UI to start the retirement workflow.')
+        this.log('To find candidates by eval activity, run `qfg cleanup list --all`.')
+      }
+
       if (flags.json) {
         return {rows: []}
       }
@@ -123,53 +148,54 @@ with the Quonfig agent skill.`
       return
     }
 
-    const environments = await getEnvironments(this)
-
-    // Per-env sparklines, aggregated client-side into a per-key (daysAgo → count) map.
-    const todayMs = startOfDayUtcMs(new Date())
-    const daysAgoByKey = new Map<string, Map<number, number>>()
-
-    for (const env of environments) {
-      // eslint-disable-next-line no-await-in-loop
-      const req = await this.apiClient.post('/api/v1/analytics/sparklines', {
-        workspaceId: this.workspaceId,
-        environment: env.name,
-      })
-      if (!req.ok) {
-        this.verboseLog('cleanup list', `sparklines failed for env ${env.name}: ${req.status}`)
-        continue
-      }
-
-      const resp = req.json as unknown as SparklinesResponse
-      for (const row of resp.rows ?? []) {
-        const bucket = daysAgoByKey.get(row.config_key) ?? new Map<number, number>()
-        for (const [i, day] of row.days.entries()) {
-          const count = row.counts[i] ?? 0
-          if (count <= 0) continue
-          // Day strings are YYYY-MM-DD in UTC (ClickHouse Date). Parsing as UTC midnight.
-          const dayMs = Date.parse(`${day}T00:00:00Z`)
-          if (Number.isNaN(dayMs)) continue
-          const daysAgo = Math.round((todayMs - dayMs) / 86_400_000)
-          bucket.set(daysAgo, (bucket.get(daysAgo) ?? 0) + count)
-        }
-
-        daysAgoByKey.set(row.config_key, bucket)
+    if (flags.environment !== undefined) {
+      // An unknown name would come back with zero rows and make every key
+      // look quiet, so check it before querying.
+      const names = (await getEnvironments(this)).map((env) => env.name)
+      if (!names.includes(flags.environment)) {
+        return this.err(`Unknown environment "${flags.environment}". Known environments: ${names.join(', ')}`)
       }
     }
 
-    const rows: CleanupRow[] = readyFlags.map((flag) => {
-      const windows = deriveWindows(daysAgoByKey, flag.key)
-      const klass: 'active' | 'quiet' = windows.evals_2d === 0 ? 'quiet' : 'active'
+    const activityReq = await this.apiClient.post('/api/v1/analytics/evalActivity', {
+      workspaceId: this.workspaceId,
+      ...(flags.environment === undefined ? {} : {environment: flags.environment}),
+    })
+    if (!activityReq.ok) {
+      const errorMsg = activityReq.error?.error || `Failed to fetch eval activity: ${activityReq.status}`
+      return this.err(errorMsg, {serverError: activityReq.error})
+    }
+
+    const activity = activityReq.json as unknown as EvalActivityResponse
+    if (!activity.available) {
+      return this.err(
+        'Eval data is temporarily unavailable, so quiet and active keys cannot be told apart. Try again shortly.',
+      )
+    }
+
+    const perEnvByKey = new Map<string, EnvironmentActivity[]>()
+    for (const {config_key, ...envActivity} of activity.rows ?? []) {
+      const list = perEnvByKey.get(config_key) ?? []
+      list.push(envActivity)
+      perEnvByKey.set(config_key, list)
+    }
+
+    const rows: CleanupRow[] = candidates.map((entity) => {
+      const perEnv = perEnvByKey.get(entity.key) ?? []
+      const windows = rollUp(perEnv)
       return {
-        key: flag.key,
-        type: flag.valueType,
+        key: entity.key,
+        kind: KIND_BY_TYPE[entity.type],
+        type: entity.valueType,
         ...windows,
-        class: klass,
+        ready_for_cleanup: entity.readyForCleanup === true,
+        class: windows.evals_2d === 0 ? 'quiet' : 'active',
+        per_environment: perEnv,
       }
     })
 
     // Safest-first sort: quiet before active; within each class, oldest last_eval first
-    // (null last_eval is "never seen" — sort to the top of the quiet group).
+    // (null last_eval is "none in the window" — sort to the top of the quiet group).
     rows.sort((a, b) => {
       if (a.class !== b.class) return a.class === 'quiet' ? -1 : 1
       if (a.last_eval === b.last_eval) return a.key.localeCompare(b.key)
@@ -184,18 +210,24 @@ with the Quonfig agent skill.`
       return {rows: rows as unknown as JsonObj[]}
     }
 
-    // Plain-text table for human consumption.
-    const headers = ['KEY', 'TYPE', 'EVALS_24H', 'EVALS_2D', 'EVALS_7D', 'EVALS_30D', 'LAST_EVAL', 'CLASS']
-    const cells: string[][] = rows.map((r) => [
-      r.key,
-      r.type,
-      String(r.evals_24h),
-      String(r.evals_2d),
-      String(r.evals_7d),
-      String(r.evals_30d),
-      r.last_eval ?? '-',
-      r.class,
-    ])
+    // Plain-text table for human consumption. KIND/MARKED only appear with
+    // --all, where rows mix kinds and marked/unmarked flags.
+    const columns: Array<[string, (r: CleanupRow) => string]> = [
+      ['KEY', (r) => r.key],
+      ...(flags.all ? [['KIND', (r: CleanupRow) => r.kind] as [string, (r: CleanupRow) => string]] : []),
+      ['TYPE', (r) => r.type],
+      ['EVALS_24H', (r) => String(r.evals_24h)],
+      ['EVALS_2D', (r) => String(r.evals_2d)],
+      ['EVALS_7D', (r) => String(r.evals_7d)],
+      ['EVALS_30D', (r) => String(r.evals_30d)],
+      ['LAST_EVAL', (r) => r.last_eval ?? '-'],
+      ...(flags.all
+        ? [['MARKED', (r: CleanupRow) => (r.ready_for_cleanup ? 'yes' : '-')] as [string, (r: CleanupRow) => string]]
+        : []),
+      ['CLASS', (r) => r.class],
+    ]
+    const headers = columns.map(([header]) => header)
+    const cells: string[][] = rows.map((r) => columns.map(([, cell]) => cell(r)))
 
     const widths = headers.map((h, i) => Math.max(h.length, ...cells.map((row) => row[i].length)))
     const padRow = (row: string[]) => row.map((cell, i) => cell.padEnd(widths[i])).join('  ')
@@ -204,7 +236,14 @@ with the Quonfig agent skill.`
     this.log(widths.map((w) => '-'.repeat(w)).join('  '))
     for (const row of cells) this.log(padRow(row))
     this.log('')
-    this.log(`${rows.length} flag(s) marked readyForCleanup. Run \`qfg cleanup status <key>\` for drill-in.`)
+    if (flags.all) {
+      const quiet = rows.filter((r) => r.class === 'quiet').length
+      this.log(
+        `${rows.length} flag(s) and config(s), ${quiet} quiet. LAST_EVAL "-" means no evals in the last ${activity.windowDays} days.`,
+      )
+    } else {
+      this.log(`${rows.length} flag(s) marked readyForCleanup. Run \`qfg cleanup status <key>\` for drill-in.`)
+    }
 
     return {rows: rows as unknown as JsonObj[]}
   }

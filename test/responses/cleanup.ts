@@ -9,9 +9,8 @@ import {getApiBase} from '../test-domain-helper.js'
  * - `metadata.list` now carries `readyForCleanup` (server change in
  *   app-quonfig/src/lib/orpc/routes/metadata.ts) so the CLI can identify
  *   candidates without N+1 getByKey calls.
- * - `analytics.sparklines` is per-environment, so the CLI loops over envs
- *   and aggregates client-side. The mock returns deterministic shapes per
- *   (env, key) pair.
+ * - `analytics.evalActivity` returns per key+env eval windows for the whole
+ *   workspace in one call; `cleanup list` sums across envs client-side.
  * - `analytics.configSparklines` returns all-env data for one key in one
  *   call (used by `qfg cleanup status <key>`).
  */
@@ -21,6 +20,8 @@ export const activeFlagKey = 'flag.active'
 export const variantFlagKey = 'flag.variant'
 export const notReadyFlagKey = 'flag.not-ready-yet'
 export const nonFlagConfigKey = 'config.not-a-flag'
+export const logLevelKey = 'log-level.app'
+export const schemaKey = 'schema.order'
 // qfg-9kr8: a flag whose fallback carries the older bare `criteria: []`
 // spelling, sitting under a real targeting rule. A strict single-ALWAYS_TRUE
 // find misses it and reports the TARGETING rule's value as the fallback.
@@ -81,6 +82,8 @@ const metadataHandler = http.post(`${getApiBase()}/api/v1/metadata/list`, () =>
           name: 'Config not flag',
           description: 'Configs cannot be cleanup-marked',
         },
+        {key: logLevelKey, type: 'log_level', valueType: 'log_level', version: 'pqr'},
+        {key: schemaKey, type: 'schema', valueType: 'json', version: 'stu'},
       ],
     },
   }),
@@ -95,57 +98,71 @@ const environmentsHandler = http.post(`${getApiBase()}/api/v1/environments/list`
   }),
 )
 
-// Per-env sparkline mock. Per the plan, the CLI calls analytics.sparklines once
-// per environment and sums the per-key counts client-side.
-//
-// Shape produced server-side: { daysOfHistory, rows: [{ config_key, days[], counts[] }] }
-const sparklinesHandler = http.post(`${getApiBase()}/api/v1/analytics/sparklines`, async ({request}) => {
+// analytics.evalActivity mock (qfg-1nyzs.2). One call returns per key+env
+// windows already aggregated server-side; the CLI sums across envs. Rows
+// mirror the configSparklines data below so list/status/remove agree:
+//   production activeFlag:  today=3, yesterday=10, 5d=50, 20d=200
+//   staging    activeFlag:  yesterday=4
+//   production variantFlag: yesterday=1, 5d=5
+//   staging    variantFlag: 5d=2
+//   production config:      20d=7
+// quietFlagKey and notReadyFlagKey have no evals anywhere.
+export const evalActivityRows = [
+  {
+    config_key: activeFlagKey,
+    environment: 'production',
+    last_eval: today,
+    evals_24h: 3,
+    evals_2d: 13,
+    evals_7d: 63,
+    evals_30d: 263,
+  },
+  {
+    config_key: activeFlagKey,
+    environment: 'staging',
+    last_eval: yesterday,
+    evals_24h: 0,
+    evals_2d: 4,
+    evals_7d: 4,
+    evals_30d: 4,
+  },
+  {
+    config_key: variantFlagKey,
+    environment: 'production',
+    last_eval: yesterday,
+    evals_24h: 0,
+    evals_2d: 1,
+    evals_7d: 6,
+    evals_30d: 6,
+  },
+  {
+    config_key: variantFlagKey,
+    environment: 'staging',
+    last_eval: fiveDaysAgo,
+    evals_24h: 0,
+    evals_2d: 0,
+    evals_7d: 2,
+    evals_30d: 2,
+  },
+  {
+    config_key: nonFlagConfigKey,
+    environment: 'production',
+    last_eval: twentyDaysAgo,
+    evals_24h: 0,
+    evals_2d: 0,
+    evals_7d: 0,
+    evals_30d: 7,
+  },
+]
+
+export const evalActivityRequests: Array<{environment?: string}> = []
+
+const evalActivityHandler = http.post(`${getApiBase()}/api/v1/analytics/evalActivity`, async ({request}) => {
   const body = (await request.json()) as {json?: {environment?: string}}
-  const env = body?.json?.environment ?? ''
-
-  if (env === 'production') {
-    return HttpResponse.json({
-      json: {
-        daysOfHistory: 60,
-        rows: [
-          {
-            config_key: activeFlagKey,
-            days: [twentyDaysAgo, fiveDaysAgo, yesterday, today],
-            counts: [200, 50, 10, 3],
-          },
-          {
-            config_key: variantFlagKey,
-            days: [fiveDaysAgo, yesterday],
-            counts: [5, 1],
-          },
-        ],
-      },
-    })
-  }
-
-  if (env === 'staging') {
-    return HttpResponse.json({
-      json: {
-        daysOfHistory: 60,
-        rows: [
-          // quietFlagKey appears nowhere — zero evals everywhere
-          {
-            config_key: activeFlagKey,
-            days: [yesterday],
-            counts: [4],
-          },
-          {
-            config_key: variantFlagKey,
-            // last_eval was 5d ago, nothing since — under the 2d gate but not 7d
-            days: [fiveDaysAgo],
-            counts: [2],
-          },
-        ],
-      },
-    })
-  }
-
-  return HttpResponse.json({json: {daysOfHistory: 60, rows: []}})
+  const environment = body?.json?.environment
+  evalActivityRequests.push({environment})
+  const rows = environment ? evalActivityRows.filter((r) => r.environment === environment) : evalActivityRows
+  return HttpResponse.json({json: {available: true, windowDays: 90, rows}})
 })
 
 // configSparklines returns all-env data for one key in one call.
@@ -266,7 +283,7 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
 export const server = setupServer(
   metadataHandler,
   environmentsHandler,
-  sparklinesHandler,
+  evalActivityHandler,
   configSparklinesHandler,
   getByKeyHandler,
 )
