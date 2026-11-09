@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0 - 2026-11-09
+
+- **feat(local-workspace): commands that write to a hosted workspace refuse to run inside a local-only workspace (breaking).** `create`, `delete`, `set-default`, `set-rollout`, `log-level`, `override` and `activity:restore` write to the workspace of your login profile, not to the files in the directory you run them from. Inside a workspace made by `qfg init` (its `quonfig.json` has no `"workspace"` pin), the write used to land in whatever hosted workspace was the profile default, and the local files did not change. Now these commands exit 1 and tell you to edit the JSON files and run `qfg verify`. **Scripts that run one of these commands from inside an unpinned workspace on purpose now fail.** To write to a hosted workspace from there, pass `--workspace <org>/<workspace>` (or `--profile`), or set `QUONFIG_WORKSPACE`. Outside a local workspace, or inside one pinned to a hosted workspace, nothing changes.
+
+- **feat(create): the success line names the target workspace.** For example `Created boolean flag: my.flag in acme/web`. `--json` output is unchanged.
+
 ## 0.8.0 - 2026-11-02
 
 - **feat(sdk-key): `qfg sdk-key create` takes a required `--name` / `-n` (breaking).** Keys created from the CLI used to get an auto-generated name. Now the name you pass is stored on the key and shown by `qfg sdk-key list`, in the create output, and as `name` in `--json`. Leading and trailing spaces are trimmed, and a blank name is an error. **Scripts that run `qfg sdk-key create` without `--name` now fail with "Missing required flag".** Add `--name "<what uses this key>"` to them.
