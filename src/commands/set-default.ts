@@ -110,6 +110,8 @@ To target specific organizations or users, write rules on their KEY
     ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(SetDefault)
 

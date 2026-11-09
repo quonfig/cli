@@ -48,6 +48,8 @@ Schemas cannot be restored — use git history instead.`
     yes: Flags.boolean({default: false, description: 'Skip the confirmation prompt'}),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(ActivityRestore)
 

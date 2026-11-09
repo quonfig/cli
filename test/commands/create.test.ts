@@ -39,6 +39,44 @@ describe('create', () => {
     cleanupTestAuth()
   })
 
+  // A local-only workspace (qfg init, no "workspace" pin) must not silently
+  // receive a hosted write aimed at the default profile's workspace.
+  describe('inside a local-only workspace', () => {
+    let localDir: string
+    let savedQuonfigDir: string | undefined
+
+    beforeEach(() => {
+      localDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-create-local-'))
+      fs.writeFileSync(path.join(localDir, 'quonfig.json'), '{"environments": []}\n')
+      savedQuonfigDir = process.env.QUONFIG_DIR
+      process.env.QUONFIG_DIR = localDir
+    })
+
+    afterEach(() => {
+      if (savedQuonfigDir === undefined) delete process.env.QUONFIG_DIR
+      else process.env.QUONFIG_DIR = savedQuonfigDir
+      fs.rmSync(localDir, {force: true, recursive: true})
+    })
+
+    test
+      .stdout()
+      .command(['create', 'brand.new.flag', '--type=boolean-flag'])
+      .catch((error) => {
+        expect(error.message).to.contain('local-only Quonfig workspace')
+        expect(error.message).to.contain('--workspace')
+      })
+      .it('refuses to write to the hosted default workspace')
+  })
+
+  describe('success output', () => {
+    test
+      .stdout()
+      .command(['create', 'brand.new.flag', '--type=boolean-flag'])
+      .it('names the hosted workspace it wrote to', (ctx) => {
+        expect(ctx.stdout).to.contain('Created boolean flag: brand.new.flag in workspace workspace-123')
+      })
+  })
+
   describe('type=boolean-flag', () => {
     test
       .stdout()

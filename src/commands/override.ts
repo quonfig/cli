@@ -152,6 +152,8 @@ Examples
     remove: Flags.boolean({default: false, description: 'remove your override on this key'}),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Override)
 

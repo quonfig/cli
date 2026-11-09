@@ -5,6 +5,7 @@ import {Client} from '@quonfig/node'
 import type {ProjectEnvId} from '@quonfig/node'
 import {JsonObj, Result} from './result.js'
 import rawGetClient, {unwrapRequest} from './util/get-client.js'
+import {findLocalOnlyWorkspace, localOnlyWorkspaceError} from './util/local-workspace-guard.js'
 import {scrubForLog} from './util/redact.js'
 
 const globalFlags = {
@@ -256,11 +257,21 @@ export abstract class APICommand extends BaseCommand {
     }),
   }
 
+  /**
+   * Set on commands that write to the hosted workspace. They refuse to run
+   * inside a local-only workspace unless the target is named explicitly
+   * (--workspace or QUONFIG_WORKSPACE); see local-workspace-guard.ts.
+   */
+  static writesHostedWorkspace = false
+
   public currentEnvironment!: ProjectEnvId
 
   public rawApiClient!: Client
 
   public workspaceId?: string
+
+  /** Human-readable target workspace (`org/ws`, else `workspace <id>`), for success lines. */
+  public workspaceLabel?: string
 
   get apiClient() {
     return {
@@ -276,6 +287,12 @@ export abstract class APICommand extends BaseCommand {
     await super.init()
 
     const {flags} = await this.parse()
+
+    const explicitTarget = flags.workspace ?? flags.profile ?? process.env.QUONFIG_WORKSPACE
+    if ((this.constructor as typeof APICommand).writesHostedWorkspace && !explicitTarget) {
+      const localDir = findLocalOnlyWorkspace({cwd: process.cwd(), envDir: process.env.QUONFIG_DIR})
+      if (localDir) this.error(localOnlyWorkspaceError(this.id ?? 'this command', localDir), {exit: 1})
+    }
 
     this.rawApiClient = await rawGetClient(this, undefined, flags.workspace ?? flags.profile)
 
