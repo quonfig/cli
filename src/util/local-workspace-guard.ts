@@ -57,4 +57,4 @@ export const localOnlyWorkspaceError = (commandId: string, dir: string): string 
   `${dir} is a local-only Quonfig workspace (its quonfig.json has no "workspace" pin), ` +
   `but \`qfg ${commandId}\` writes to a hosted workspace, not to these files. ` +
   'To change this workspace, edit its JSON files directly and run `qfg verify`. ' +
-  'To write to a hosted workspace anyway, pass --workspace <org>/<workspace>.'
+  'To write to a hosted workspace anyway, pass --workspace <org>/<workspace> or set QUONFIG_WORKSPACE.'
