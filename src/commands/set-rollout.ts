@@ -99,6 +99,8 @@ To inspect the current rollout:
     confirm: Flags.boolean({description: 'skip the interactive confirmation prompt (useful for scripts and agents)'}),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(SetRollout)
 

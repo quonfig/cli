@@ -15,10 +15,12 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
 
 let clientInstance: Client | undefined
 let cachedWorkspaceId: string | undefined
+let cachedWorkspaceLabel: string | undefined
 
 export const resetClientCache = () => {
   clientInstance = undefined
   cachedWorkspaceId = undefined
+  cachedWorkspaceLabel = undefined
 }
 
 const getClient = async (command: APICommand, sdkKey?: string, profile?: string) => {
@@ -27,11 +29,13 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     if (cachedWorkspaceId) {
       command.workspaceId = cachedWorkspaceId
     }
+    command.workspaceLabel = cachedWorkspaceLabel
     return clientInstance
   }
 
   let jwt: string | undefined
   let workspaceId: string | undefined
+  let workspaceLabel: string | undefined
 
   const apiKey = process.env.QUONFIG_API_KEY
 
@@ -108,6 +112,7 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
       }
 
       workspaceId = match.workspaceId
+      workspaceLabel = workspaceOverride
       command.verboseLog('ApiKey auth', {source: 'org/ws', pin, workspaceId})
     }
   } else {
@@ -178,6 +183,7 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
       }
 
       workspaceId = match.workspaceId
+      workspaceLabel = `${orgSlug}/${workspaceSlug}`
       command.verboseLog('Workspace lookup', {source: 'org/ws', orgSlug, workspaceSlug, orgId, workspaceId})
     } else {
       const authConfig = await loadAuthConfig()
@@ -214,6 +220,7 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
       }
 
       workspaceId = profileData.workspace
+      if (profileData.workspaceSlug) workspaceLabel = `${profileData.organizationSlug}/${profileData.workspaceSlug}`
     }
   }
 
@@ -221,7 +228,11 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
   if (workspaceId) {
     command.workspaceId = workspaceId
     cachedWorkspaceId = workspaceId
+    workspaceLabel ??= `workspace ${workspaceId}`
   }
+
+  command.workspaceLabel = workspaceLabel
+  cachedWorkspaceLabel = workspaceLabel
 
   clientInstance = new Client({
     jwt,

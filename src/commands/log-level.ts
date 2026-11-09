@@ -86,6 +86,8 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
     }),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(LogLevel)
 

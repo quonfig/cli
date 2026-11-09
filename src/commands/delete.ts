@@ -67,6 +67,8 @@ Examples
     yes: Flags.boolean({default: false, description: 'skip confirmation prompt'}),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Delete)
 

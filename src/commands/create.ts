@@ -99,6 +99,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
   }
 
+  static writesHostedWorkspace = true
+
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Create)
 
@@ -271,14 +273,17 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     if (redacted) {
       // qfg-38lp: never echo the plaintext — not on the success line, not in
       // --json (the server response carries confidential values verbatim).
-      return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key} ${redactedDisplay(redacted)}`, {
-        key,
-        ...scrubConfidentialValues(response),
-        value: redacted,
-      })
+      return this.ok(
+        `${checkmark} Created ${confidentialMaybe}config: ${key} ${redactedDisplay(redacted)}${this.targetSuffix()}`,
+        {
+          key,
+          ...scrubConfidentialValues(response),
+          value: redacted,
+        },
+      )
     }
 
-    return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key}`, {key, ...response})
+    return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key}${this.targetSuffix()}`, {key, ...response})
   }
 
   private async createBooleanFlag(args: {name: string}, rawDefault: string | undefined): Promise<JsonObj | void> {
@@ -335,7 +340,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
     await this.syncConfigToDisk('feature-flags', key, response)
 
-    return this.ok(`${checkmark} Created boolean flag: ${key}`, {key, ...response})
+    return this.ok(`${checkmark} Created boolean flag: ${key}${this.targetSuffix()}`, {key, ...response})
   }
 
   private async createLogLevel(
@@ -456,7 +461,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       }
     }
 
-    return this.ok(`${checkmark} Created log level: ${key} (default: ${rawValue})`, {
+    return this.ok(`${checkmark} Created log level: ${key} (default: ${rawValue})${this.targetSuffix()}`, {
       key,
       value: rawValue,
     })
@@ -489,5 +494,10 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     } catch (error: unknown) {
       this.verboseLog('LocalWrite', `Failed to sync ${key} to disk: ${String(error)}`)
     }
+  }
+
+  /** ` in <org>/<ws>` so a success line always says which hosted workspace changed. */
+  private targetSuffix(): string {
+    return this.workspaceLabel ? ` in ${this.workspaceLabel}` : ''
   }
 }
