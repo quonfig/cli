@@ -1,0 +1,71 @@
+{
+  "key": "fx-seg-dashboard-any-blocks",
+  "type": "segment",
+  "valueType": "bool",
+  "default": {
+    "rules": [
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["enterprise"]
+            }
+          },
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "region",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["us-east"]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["scale"]
+            }
+          },
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "region",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["us-east"]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "ALWAYS_TRUE"
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": false
+        }
+      }
+    ]
+  },
+  "environments": [],
+  "variants": [],
+  "description": "Hand-authored (qfg-ug6kd): the shape the Flagsmith dashboard saves, an empty ALL wrapping one ANY rule per UI block"
+}

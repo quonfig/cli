@@ -56,7 +56,6 @@ import type {
 } from './flagsmith/types.js'
 
 const SOURCE_NAME = 'flagsmith'
-const DEFAULT_PROJECT_ID = '1'
 
 /**
  * Raw payload carried on each LegacyChange — discriminated by `kind`. Epic 3's
@@ -71,7 +70,8 @@ interface FlagsmithState {
   environments: FlagsmithEnvironment[]
   /** The project record from `/projects/{id}/`; carries `use_edge_identities`, etc. */
   project: FlagsmithProject | null
-  projectId: string
+  /** Null until `--project` / FLAGSMITH_PROJECT_ID supplies one; there is no default. */
+  projectId: null | string
   report: ConversionReport
   /** Project-scoped segment pool from the last snapshot — converter looks up id → name. */
   segments: FlagsmithSegment[]
@@ -79,8 +79,8 @@ interface FlagsmithState {
   tags: FlagsmithTag[]
 }
 
-function resolveProjectId(): string {
-  return process.env.FLAGSMITH_PROJECT_ID ?? DEFAULT_PROJECT_ID
+function resolveProjectId(): null | string {
+  return process.env.FLAGSMITH_PROJECT_ID?.trim() || null
 }
 
 const state: FlagsmithState = {
@@ -120,6 +120,14 @@ class MissingAuthError extends Error {
   }
 }
 
+function requireProjectId(): string {
+  if (!state.projectId) {
+    throw new Error('Flagsmith project ID is not set: pass --project <id> or set FLAGSMITH_PROJECT_ID.')
+  }
+
+  return state.projectId
+}
+
 function requireApiKey(operation: string): string {
   if (!state.apiKey) throw new MissingAuthError(operation)
   return state.apiKey
@@ -137,7 +145,7 @@ async function validateAuthImpl(apiKey: string): Promise<void> {
   // The cheapest authenticated probe is the project endpoint — 401s on a bad
   // token, 404s on a bad project, and we need `use_edge_identities` for the
   // snapshot walk anyway, so capture it here.
-  const project = await fetchProject(apiKey, state.projectId)
+  const project = await fetchProject(apiKey, requireProjectId())
   state.apiKey = apiKey
   state.project = project
   state.report = new ConversionReport()
@@ -154,7 +162,7 @@ async function listEnvironmentsImpl(): Promise<string[]> {
   // standalone env fetch and stash the results — fetchSnapshot will refresh
   // them when it runs.
   const {fetchEnvironments} = await import('./flagsmith/api.js')
-  const envs = await fetchEnvironments(apiKey, state.projectId)
+  const envs = await fetchEnvironments(apiKey, requireProjectId())
   state.environments = envs
   return [...new Set(envs.map((e) => slugifyEnvName(e.name)))]
 }
@@ -172,7 +180,7 @@ async function listEnvironmentsImpl(): Promise<string[]> {
  */
 async function* fetchChangesImpl(): AsyncIterable<LegacyChange> {
   const apiKey = requireApiKey('fetchChanges')
-  const snapshot = await fetchSnapshot(apiKey, state.projectId)
+  const snapshot = await fetchSnapshot(apiKey, requireProjectId())
   state.project = snapshot.project
   state.environments = snapshot.environments
   state.segments = snapshot.segments

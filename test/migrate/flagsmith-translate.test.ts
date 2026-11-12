@@ -640,4 +640,130 @@ describe('migrate/sources/flagsmith/translate', () => {
       expect(rules[1]).to.deep.equal({criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}})
     })
   })
+
+  // ── qfg-ug6kd: ANY / nested rules ──────────────────────────────────
+  //
+  // Flagsmith's engine: a segment matches when ALL of its top-level rules
+  // match; a rule matches when its conditions match under its type (ALL =
+  // every, ANY = some, NONE = none) AND every sub-rule matches. Quonfig ORs
+  // rules (first match wins) and ANDs criteria, so the converter expands to
+  // disjunctive normal form: one true-valued rule per conjunction.
+  describe('translateSegment — ANY rules translate to OR (qfg-ug6kd)', () => {
+    const eq = (property: string, value: string) => ({operator: 'EQUAL', property, value})
+    const isOneOf = (propertyName: string, value: string) => ({
+      operator: 'PROP_IS_ONE_OF',
+      propertyName,
+      valueToMatch: {type: 'string_list', value: [value]},
+    })
+    const FALSE_CATCH_ALL = {criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}
+    const truthy = (...criteria: unknown[]) => ({criteria, value: {type: 'bool', value: true}})
+    const seg = (rules: FlagsmithSegment['rules']): FlagsmithSegment => ({
+      id: 1,
+      name: 'fx-seg-any',
+      project: 38_856,
+      rules,
+      uuid: 'su',
+    })
+    const rulesOf = (out: Record<string, unknown>) => (out.default as {rules: unknown[]}).rules
+
+    it('a top-level ANY rule becomes one Quonfig rule per condition', () => {
+      const report = new ConversionReport()
+      const out = translateSegment(
+        seg([{conditions: [eq('plan', 'enterprise'), eq('plan', 'scale')], rules: [], type: 'ANY'}]),
+        report,
+      )
+      expect(rulesOf(out)).to.deep.equal([
+        truthy(isOneOf('plan', 'enterprise')),
+        truthy(isOneOf('plan', 'scale')),
+        FALSE_CATCH_ALL,
+      ])
+      expect(report.byCategory('skipped-rule')).to.have.length(0)
+    })
+
+    it('ALL with an ANY sub-rule distributes the AND over the OR', () => {
+      const report = new ConversionReport()
+      const out = translateSegment(
+        seg([
+          {
+            conditions: [eq('plan', 'enterprise')],
+            rules: [{conditions: [eq('region', 'us-east'), eq('region', 'us-west')], rules: [], type: 'ANY'}],
+            type: 'ALL',
+          },
+        ]),
+        report,
+      )
+      expect(rulesOf(out)).to.deep.equal([
+        truthy(isOneOf('plan', 'enterprise'), isOneOf('region', 'us-east')),
+        truthy(isOneOf('plan', 'enterprise'), isOneOf('region', 'us-west')),
+        FALSE_CATCH_ALL,
+      ])
+    })
+
+    it('the dashboard shape (empty ALL wrapping ANY blocks) ANDs the blocks', () => {
+      const report = new ConversionReport()
+      const out = translateSegment(
+        seg([
+          {
+            conditions: [],
+            rules: [
+              {conditions: [eq('plan', 'enterprise'), eq('plan', 'scale')], rules: [], type: 'ANY'},
+              {conditions: [eq('region', 'us-east')], rules: [], type: 'ANY'},
+            ],
+            type: 'ALL',
+          },
+        ]),
+        report,
+      )
+      expect(rulesOf(out)).to.deep.equal([
+        truthy(isOneOf('plan', 'enterprise'), isOneOf('region', 'us-east')),
+        truthy(isOneOf('plan', 'scale'), isOneOf('region', 'us-east')),
+        FALSE_CATCH_ALL,
+      ])
+    })
+
+    it('multiple top-level rules are ANDed, as Flagsmith evaluates them', () => {
+      const report = new ConversionReport()
+      const out = translateSegment(
+        seg([
+          {conditions: [eq('plan', 'enterprise')], rules: [], type: 'ALL'},
+          {conditions: [eq('region', 'us-east')], rules: [], type: 'ALL'},
+        ]),
+        report,
+      )
+      expect(rulesOf(out)).to.deep.equal([
+        truthy(isOneOf('plan', 'enterprise'), isOneOf('region', 'us-east')),
+        FALSE_CATCH_ALL,
+      ])
+    })
+
+    it('an unmappable condition anywhere drops the whole segment match, with a note', () => {
+      const report = new ConversionReport()
+      const out = translateSegment(
+        seg([
+          {
+            conditions: [],
+            rules: [
+              {conditions: [eq('plan', 'enterprise'), {operator: 'MODULO', property: 'id', value: '2|0'}], rules: [], type: 'ANY'},
+            ],
+            type: 'ALL',
+          },
+        ]),
+        report,
+      )
+      expect(rulesOf(out)).to.deep.equal([FALSE_CATCH_ALL])
+      expect(report.byCategory('skipped-rule')).to.have.length(1)
+      expect(report.byCategory('skipped-rule')[0].detail).to.contain('MODULO')
+    })
+
+    it('NONE with conditions is still dropped with a note', () => {
+      const report = new ConversionReport()
+      const out = translateSegment(
+        seg([{conditions: [eq('plan', 'free')], rules: [], type: 'NONE'}]),
+        report,
+      )
+      expect(rulesOf(out)).to.deep.equal([FALSE_CATCH_ALL])
+      expect(report.byCategory('skipped-rule')[0].detail).to.contain('NONE')
+    })
+  })
 })
+

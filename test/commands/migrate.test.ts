@@ -67,7 +67,7 @@ describe('migrate', () => {
   // suite, not here (no live API to hit from the command-level harness).
   describe('stub sources', () => {
     test
-      .command(['migrate', '--from', 'flagsmith', '--source-api-key', 'k', '--dry-run'])
+      .command(['migrate', '--from', 'flagsmith', '--source-api-key', 'k', '--project', '38856', '--dry-run'])
       .catch((error) => {
         // Without a reachable Flagsmith API, validateAuth fails with a
         // network/fetch error — the precise shape varies by node version,
@@ -76,6 +76,25 @@ describe('migrate', () => {
         expect(error).to.be.instanceOf(Error)
       })
       .it('--from flagsmith with no reachable API surfaces a fetch error (not a stub)')
+
+    // qfg-ug6kd: --project used to fall back to project 1 silently, which
+    // migrated whatever project 1 was (or 404ed) without saying why.
+    test
+      .env({FLAGSMITH_PROJECT_ID: undefined})
+      .command(['migrate', '--from', 'flagsmith', '--source-api-key', 'k', '--dry-run'])
+      .catch((error) => {
+        expect(error.message).to.contain('--project')
+        expect(error.message).to.contain('FLAGSMITH_PROJECT_ID')
+      })
+      .it('--from flagsmith without --project errors instead of defaulting to project 1')
+
+    test
+      .env({FLAGSMITH_PROJECT_ID: undefined})
+      .command(['migrate', '--from', 'flagsmith', '--source-api-key', 'k', '--project', 'my-project', '--dry-run'])
+      .catch((error) => {
+        expect(error.message).to.contain('numeric')
+      })
+      .it('--from flagsmith rejects a non-numeric --project')
   })
 
   describe('cross-source refusal', () => {

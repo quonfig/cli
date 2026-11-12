@@ -1,0 +1,56 @@
+{
+  "created_at": "2026-05-17T18:13:24.312797Z",
+  "description": "Hand-authored (qfg-ug6kd): the shape the Flagsmith dashboard saves, an empty ALL wrapping one ANY rule per UI block",
+  "feature": null,
+  "id": 1127990,
+  "metadata": [],
+  "name": "fx-seg-dashboard-any-blocks",
+  "project": 38856,
+  "rules": [
+    {
+      "conditions": [],
+      "id": 4159901,
+      "type": "ALL",
+      "rules": [
+        {
+          "conditions": [
+            {
+              "description": null,
+              "id": 83599901,
+              "operator": "EQUAL",
+              "property": "plan",
+              "value": "enterprise"
+            },
+            {
+              "description": null,
+              "id": 83599902,
+              "operator": "EQUAL",
+              "property": "plan",
+              "value": "scale"
+            }
+          ],
+          "id": 4159902,
+          "rules": [],
+          "type": "ANY"
+        },
+        {
+          "conditions": [
+            {
+              "description": null,
+              "id": 83599903,
+              "operator": "EQUAL",
+              "property": "region",
+              "value": "us-east"
+            }
+          ],
+          "id": 4159903,
+          "rules": [],
+          "type": "ANY"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-05-17T18:13:24.319408Z",
+  "uuid": "00000000-0000-4000-8000-000000ug6kd",
+  "version_of": 1127687
+}
