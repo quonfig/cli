@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.0 - 2026-11-12
+
+- **fix(set-rollout): re-running `qfg set-rollout` keeps the rollout's sticky property (behavior change).** `--hash-by` defaulted to `user.key` and was always written, so changing the percentage on a rollout that bucketed on another property (such as `organization.key`), or on a non-sticky one, reset it to `user.key` and reshuffled every user. Without `--hash-by`, the existing rollout's property is now kept; a new rollout still defaults to `user.key`. `--hash-by ""` authors a non-sticky split. `--json` `hashByPropertyName` reports the value written. (qfg-cs4vu)
+
+- **fix(schema): updating a protected schema without `--protected` keeps it protected (behavior change).** The CLI sent `protected: false` whenever `--protected` was omitted, which moved a protected schema to standard storage (or was refused without protected edit access). An update now leaves the storage alone unless you pass `--protected` or the new `--no-protected`. A new schema is still standard unless you pass `--protected`. (qfg-2o7ms)
+
+- **fix(generate): configs bound to a schema in `schemas-protected/` get their schema-derived type.** `qfg generate` read only `schemas/`. (qfg-s2afr)
+
+- **fix(migrate): Flagsmith `ANY` segment rules are migrated instead of dropped (behavior change).** The Flagsmith dashboard saves each segment as an `ALL` rule wrapping one `ANY` rule per block, and the converter dropped every `ANY` rule, so those segments migrated matching no one. They now convert as Flagsmith evaluates them: each OR becomes its own Quonfig segment rule, and rules (including top-level ones, which were wrongly ORed) are ANDed. A segment with a `NONE` rule or an unsupported condition (`MODULO`, `PERCENTAGE_SPLIT`) migrates matching no one, with a note in the migration report, instead of with that piece silently removed. Re-run the migration to pick up the fixed segments. (qfg-ug6kd)
+
+- **fix(migrate): `--from flagsmith` requires `--project`, as documented (behavior change).** It silently fell back to project ID 1, which migrated the wrong project or failed with an unexplained 404. It now exits with an error unless `--project` or `FLAGSMITH_PROJECT_ID` is set, and rejects a non-numeric ID. (qfg-ug6kd)
+
+- **feat(sdk-key): `qfg sdk-key list` shows a NAME column**, as the 0.8.0 entry described. Keys created before names were stored show `-`. (qfg-70utk)
+
+- **chore: help text and messages match current behavior.** `qfg migrate --help` lists all three sources with their guides, and its examples no longer use the deprecated `--api-key`. `qfg serve --help` gives the real datadir order (`QUONFIG_DIR` first) and says `--cors-origin` is recommended, not required, off loopback. The bad-`QUONFIG_API_KEY` error points at Environments & Keys → CLI & API keys. `MIGRATION_REPORT.md` names the actual source in its duplicate-key section. `qfg init` sample files carry `$schema`. `qfg migrate status` no longer suggests `qfg migrate my-code`. (qfg-70utk)
+
 ## 0.9.0 - 2026-11-09
 
 - **feat(local-workspace): commands that write to a hosted workspace refuse to run inside a local-only workspace (breaking).** `create`, `delete`, `set-default`, `set-rollout`, `log-level`, `override` and `activity:restore` write to the workspace of your login profile, not to the files in the directory you run them from. Inside a workspace made by `qfg init` (its `quonfig.json` has no `"workspace"` pin), the write used to land in whatever hosted workspace was the profile default, and the local files did not change. Now these commands exit 1 and tell you to edit the JSON files and run `qfg verify`. **Scripts that run one of these commands from inside an unpinned workspace on purpose now fail.** To write to a hosted workspace from there, pass `--workspace <org>/<workspace>` (or `--profile`), or set `QUONFIG_WORKSPACE`. Outside a local workspace, or inside one pinned to a hosted workspace, nothing changes.
