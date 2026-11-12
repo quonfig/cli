@@ -2278,7 +2278,8 @@ ARGUMENTS
 FLAGS
   --confirm               skip the interactive confirmation prompt (useful for scripts and agents)
   --environment=<value>   environment to update (e.g. production, staging)
-  --hash-by=<value>       [default: user.key] user property used to assign buckets (default: user.key)
+  --hash-by=<value>       context property used to assign buckets. Defaults to the existing rollout's property, or
+                          user.key for a new rollout. Pass "" for a non-sticky split.
   --replace-targeting     roll out to EVERYONE: delete this environment's targeting rules instead of keeping them (they
                           stay in git history)
   --true-percent=<value>  percentage of users that receive true (0–100). Remaining users receive false. Boolean flags
@@ -2309,9 +2310,11 @@ DESCRIPTION
   For multi-value flags or custom splits, use --weights with a comma-separated list:
   qfg set-rollout my.flag --environment production --weights "red:33,green:33,blue:34"
 
-  Hashing: users are bucketed by the value of hashByPropertyName (default: "user.key").
-  Use --hash-by to change which property drives the bucket assignment:
+  Hashing: users are bucketed by the value of hashByPropertyName. A new rollout
+  defaults to "user.key". Re-running set-rollout to change the percentages keeps
+  the existing rollout's property, so you only pass --hash-by to change it:
   qfg set-rollout my.flag --environment production --true-percent 10 --hash-by user.id
+  Pass --hash-by "" for a non-sticky split (a fresh random draw on every evaluation).
 
   The rollout becomes the environment's fallback: the unconditional rule at the end
   of its rule list, what users receive when no targeting rule matches. Targeting

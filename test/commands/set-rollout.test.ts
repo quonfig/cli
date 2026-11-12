@@ -167,4 +167,84 @@ describe('set-rollout', () => {
         expect(ctx.stdout).to.contain('abc102')
       })
   })
+
+  // ── Re-ramp keeps the bucketing property (qfg-cs4vu) ───────────────
+  //
+  // Changing the percentage must not reshuffle users: without --hash-by the
+  // existing fallback's hashByPropertyName (custom or blank) is carried
+  // forward. Only a brand-new rollout defaults to user.key.
+  describe('hash-by carry-forward', () => {
+    before(() => {
+      setupTestAuth()
+      server.listen()
+    })
+    afterEach(() => {
+      server.resetHandlers()
+      resetClientCache()
+      flagsUpdateCapture.body = null
+    })
+    after(() => {
+      server.close()
+      cleanupTestAuth()
+    })
+
+    const fallbackHashBy = (envId: string): unknown => {
+      const body = flagsUpdateCapture.body
+      expect(body, 'flags/update was never called').to.not.be.null
+      const environments = body.json.flag.environments as Array<{id: string; rules: any[]}>
+      const env = environments.find((e) => e.id === envId)
+      expect(env, `${envId} env missing from update payload`).to.exist
+      return env!.rules.at(-1)!.value.value.hashByPropertyName
+    }
+
+    test
+      .stdout()
+      .command(['set-rollout', 'rollout.flag', '--environment=Development', '--true-percent=50', '--confirm', '--json'])
+      .it('keeps a custom sticky property on re-ramp when --hash-by is omitted', (ctx) => {
+        expect(fallbackHashBy('Development')).to.equal('organization.key')
+        expect(JSON.parse(ctx.stdout).hashByPropertyName).to.equal('organization.key')
+      })
+
+    test
+      .stdout()
+      .command(['set-rollout', 'rollout.flag', '--environment=Staging', '--true-percent=50', '--confirm'])
+      .it('keeps a blank (non-sticky) property on re-ramp when --hash-by is omitted', () => {
+        expect(fallbackHashBy('Staging')).to.equal('')
+      })
+
+    test
+      .stdout()
+      .command([
+        'set-rollout',
+        'rollout.flag',
+        '--environment=Development',
+        '--true-percent=50',
+        '--hash-by=user.id',
+        '--confirm',
+      ])
+      .it('an explicit --hash-by still wins over the existing property', () => {
+        expect(fallbackHashBy('Development')).to.equal('user.id')
+      })
+
+    test
+      .stdout()
+      .command([
+        'set-rollout',
+        'rollout.flag',
+        '--environment=Development',
+        '--true-percent=50',
+        '--hash-by=',
+        '--confirm',
+      ])
+      .it('--hash-by "" authors a non-sticky split', () => {
+        expect(fallbackHashBy('Development')).to.equal('')
+      })
+
+    test
+      .stdout()
+      .command(['set-rollout', 'targeted.flag', '--environment=Development', '--true-percent=25', '--confirm'])
+      .it('a first rollout (no weighted fallback yet) defaults to user.key', () => {
+        expect(fallbackHashBy('Development')).to.equal('user.key')
+      })
+  })
 })

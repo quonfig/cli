@@ -11,6 +11,7 @@ import {
   ScopedDocument,
   catchAllRule,
   countTargetingRules,
+  isCatchAllRule,
   keptTargetingNote,
   replacedTargetingNote,
   seedScopeRules,
@@ -39,9 +40,11 @@ true (the remainder automatically receive false):
 For multi-value flags or custom splits, use --weights with a comma-separated list:
   qfg set-rollout my.flag --environment production --weights "red:33,green:33,blue:34"
 
-Hashing: users are bucketed by the value of hashByPropertyName (default: "user.key").
-Use --hash-by to change which property drives the bucket assignment:
+Hashing: users are bucketed by the value of hashByPropertyName. A new rollout
+defaults to "user.key". Re-running set-rollout to change the percentages keeps
+the existing rollout's property, so you only pass --hash-by to change it:
   qfg set-rollout my.flag --environment production --true-percent 10 --hash-by user.id
+Pass --hash-by "" for a non-sticky split (a fresh random draw on every evaluation).
 
 The rollout becomes the environment's fallback: the unconditional rule at the end
 of its rule list, what users receive when no targeting rule matches. Targeting
@@ -79,8 +82,8 @@ To inspect the current rollout:
   static flags = {
     environment: Flags.string({description: 'environment to update (e.g. production, staging)'}),
     'hash-by': Flags.string({
-      default: 'user.key',
-      description: 'user property used to assign buckets (default: user.key)',
+      description:
+        'context property used to assign buckets. Defaults to the existing rollout\'s property, or user.key for a new rollout. Pass "" for a non-sticky split.',
     }),
     'true-percent': Flags.integer({
       description: 'percentage of users that receive true (0–100). Remaining users receive false. Boolean flags only.',
@@ -201,14 +204,6 @@ To inspect the current rollout:
       )
     }
 
-    const rolloutValue = {
-      type: 'weighted_values',
-      value: {
-        hashByPropertyName: flags['hash-by'],
-        weightedValues,
-      },
-    }
-
     const rolloutDescription = weightedValues
       .map((wv) => `${wv.weight / 1000}% → ${JSON.stringify(wv.value.value)}`)
       .join(', ')
@@ -237,6 +232,18 @@ To inspect the current rollout:
     // A --replace-targeting write does NOT seed from default: there is nothing
     // in that environment to replace.
     const targetingRuleCount = replaceTargeting && scope.seeded ? 0 : countTargetingRules(scope.rules)
+
+    // qfg-cs4vu: a re-ramp keeps the bucketing property of the rollout it
+    // replaces (custom or blank), so changing the percentage never reshuffles
+    // users. Same rule as the public API write path (carriedHashByPropertyName).
+    const hashByPropertyName = flags['hash-by'] ?? carriedHashByPropertyName(scope.rules) ?? 'user.key'
+    const rolloutValue = {
+      type: 'weighted_values',
+      value: {
+        hashByPropertyName,
+        weightedValues,
+      },
+    }
 
     const keptPhrase =
       targetingRuleCount > 0 ? ` (${targetingRuleCount} targeting rule${targetingRuleCount === 1 ? '' : 's'} kept)` : ''
@@ -318,7 +325,7 @@ To inspect the current rollout:
 
       return {
         environment: {id: environment.id, name: environment.name},
-        hashByPropertyName: flags['hash-by'],
+        hashByPropertyName,
         key,
         rollout: rolloutDescription,
         success: true,
@@ -382,6 +389,19 @@ To inspect the current rollout:
 
     return {ok: true, weights}
   }
+}
+
+/**
+ * The hashByPropertyName of the scope's current rollout, if its fallback is
+ * one. Reads the FIRST catch-all — the exact rule `upsertFallbackRule`
+ * overwrites — matching app-quonfig's public-api `carriedHashByPropertyName`.
+ */
+export function carriedHashByPropertyName(rules: unknown[]): string | undefined {
+  const fallback = rules.find((rule) => isCatchAllRule(rule)) as
+    {value?: {type?: unknown; value?: {hashByPropertyName?: unknown}}} | undefined
+  if (fallback?.value?.type !== 'weighted_values') return undefined
+  const hashBy = fallback.value.value?.hashByPropertyName
+  return typeof hashBy === 'string' ? hashBy : undefined
 }
 
 /**
