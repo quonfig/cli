@@ -137,6 +137,8 @@ async function readJsonFiles(dir: string): Promise<{filePath: string; data: unkn
   }
 }
 
+const SCHEMA_DIRS = ['schemas', 'schemas-protected'] as const
+
 export class LocalConfigReader {
   constructor(private dir: string) {}
 
@@ -184,8 +186,11 @@ export class LocalConfigReader {
       })
     }
 
-    // Read schemas
-    const schemaFiles = await readJsonFiles(path.join(this.dir, 'schemas'))
+    // Read schemas from both tiers (qfg-s2afr): a config's schemaKey may name
+    // schemas/<key>.json or schemas-protected/<key>.json, same as verify.
+    const schemaFiles = (
+      await Promise.all(SCHEMA_DIRS.map((schemaDir) => readJsonFiles(path.join(this.dir, schemaDir))))
+    ).flat()
     const schemas: SchemaFile[] = schemaFiles.map(({filePath, data}) => ({
       path: filePath,
       schema: data as Record<string, unknown>,

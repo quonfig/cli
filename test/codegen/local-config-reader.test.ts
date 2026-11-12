@@ -1,4 +1,5 @@
 import {expect} from 'chai'
+import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
@@ -168,6 +169,30 @@ describe('LocalConfigReader', () => {
       expect(schema.path).to.include('my-schema.json')
       expect(schema.schema).to.have.property('$schema')
       expect(schema.schema).to.have.property('type', 'object')
+    })
+
+    // qfg-s2afr: a config bound to a protected schema must get its types too.
+    it('reads schemas-protected/ alongside schemas/', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qfg-reader-protected-'))
+      try {
+        fs.writeFileSync(path.join(dir, 'quonfig.json'), '{}')
+        fs.mkdirSync(path.join(dir, 'schemas'))
+        fs.mkdirSync(path.join(dir, 'schemas-protected'))
+        fs.writeFileSync(path.join(dir, 'schemas', 'open.json'), JSON.stringify({type: 'object'}))
+        fs.writeFileSync(
+          path.join(dir, 'schemas-protected', 'limits.json'),
+          JSON.stringify({properties: {max: {type: 'integer'}}, type: 'object'}),
+        )
+
+        const result = await new LocalConfigReader(dir).read()
+
+        const names = result.schemas!.map((s) => path.basename(s.path)).sort()
+        expect(names).to.deep.equal(['limits.json', 'open.json'])
+        const limits = result.schemas!.find((s) => s.path.endsWith('limits.json'))!
+        expect(limits.path.replaceAll('\\', '/')).to.include('schemas-protected/limits.json')
+      } finally {
+        fs.rmSync(dir, {force: true, recursive: true})
+      }
     })
 
     it('throws an error when directory does not exist', async () => {

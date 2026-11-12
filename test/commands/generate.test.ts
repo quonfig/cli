@@ -460,4 +460,52 @@ describe('generate', () => {
         // Error assertion done in catch block
       })
   })
+
+  // qfg-s2afr: configs whose schemaKey points at schemas-protected/ get the
+  // schema-derived type, not a bare fallback.
+  describe('protected schemas', () => {
+    const tmpDir = path.join(os.tmpdir(), `qfg-generate-protected-${process.pid}`)
+    const outDir = path.join(tmpDir, 'out')
+
+    before(() => {
+      fs.mkdirSync(path.join(tmpDir, 'configs'), {recursive: true})
+      fs.mkdirSync(path.join(tmpDir, 'schemas-protected'), {recursive: true})
+      fs.writeFileSync(path.join(tmpDir, 'quonfig.json'), '{}')
+      fs.writeFileSync(
+        path.join(tmpDir, 'schemas-protected', 'limits-schema.json'),
+        JSON.stringify({
+          properties: {protectedLimitField: {type: 'integer'}},
+          required: ['protectedLimitField'],
+          type: 'object',
+        }),
+      )
+      fs.writeFileSync(
+        path.join(tmpDir, 'configs', 'my.limits.json'),
+        JSON.stringify({
+          default: {rules: [{criteria: [], value: {type: 'json', value: {}}}]},
+          environments: [],
+          key: 'my.limits',
+          schemaKey: 'limits-schema',
+          type: 'config',
+          valueType: 'json',
+        }),
+      )
+    })
+
+    after(() => {
+      fs.rmSync(tmpDir, {force: true, recursive: true})
+    })
+
+    test
+      .stdout()
+      .stderr()
+      .command(['generate', '--dir', tmpDir, '--targets', 'node-ts', '--output-directory', outDir])
+      .it('types a config bound to a schemas-protected/ schema', () => {
+        const generated = fs
+          .readdirSync(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), 'utf8'))
+          .join('\n')
+        expect(generated).to.include('protectedLimitField')
+      })
+  })
 })
