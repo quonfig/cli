@@ -15,6 +15,7 @@ const environmentsResponse = [
 const sdkKeysListResponse = [
   {
     id: 'key-uuid-1',
+    name: 'billing-api',
     environmentId: 'env-prod-uuid',
     environmentName: 'production',
     keyType: 'backend',
@@ -24,6 +25,8 @@ const sdkKeysListResponse = [
   },
   {
     id: 'key-uuid-2',
+    // A key created before names were stored.
+    name: null,
     environmentId: 'env-staging-uuid',
     environmentName: 'staging',
     keyType: 'frontend',

@@ -48,7 +48,7 @@ export async function getValidAccessToken(workosOrgId: string, log: Logger = noo
     // bearer tokens; the server tells them apart, the CLI treats them identically.
     if (!envKey.startsWith('qf_uk_') && !envKey.startsWith('qf_sa_')) {
       throw new Error(
-        `QUONFIG_API_KEY must start with "qf_uk_" or "qf_sa_" (got "${envKey.slice(0, 8)}..."). Generate one from the web UI under Settings → API Keys.`,
+        `QUONFIG_API_KEY must start with "qf_uk_" or "qf_sa_" (got "${envKey.slice(0, 8)}..."). Generate one in the web app under Environments & Keys → CLI & API keys.`,
       )
     }
 

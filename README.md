@@ -1621,18 +1621,21 @@ GLOBAL FLAGS
 DESCRIPTION
   Migrate flags and configs from a legacy feature-flag system into a Quonfig workspace.
 
-  Currently supported sources:
-  launch — Reforge Launch (ported from launch-migrator)
+  Supported sources (--from):
+  launch        Reforge Launch      https://docs.quonfig.com/docs/migrating/from-launch
+  launchdarkly  LaunchDarkly        https://docs.quonfig.com/docs/migrating/from-launchdarkly
+  flagsmith     Flagsmith           https://docs.quonfig.com/docs/migrating/from-flagsmith
 
-  See https://docs.quonfig.com/docs/migrating/from-launch for the step-by-step guide,
-  and https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.
+  See https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.
 
 EXAMPLES
   $ qfg migrate --from launchdarkly --source-api-key $LAUNCHDARKLY_API_KEY --dir ./quonfig-repo
 
-  $ qfg migrate --from launch --source-api-key $LAUNCH_API_KEY --workspace acme-prod --push
+  $ qfg migrate --from flagsmith --source-api-key $FLAGSMITH_API_KEY --project 12345 --dir ./quonfig-repo
 
-  $ qfg migrate --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset
+  $ qfg migrate --from launch --source-api-key $LAUNCH_API_KEY --workspace acme/prod --push
+
+  $ qfg migrate --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset
 
   $ qfg migrate --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --dry-run
 
@@ -2113,10 +2116,10 @@ USAGE
 
 FLAGS
   --allow-non-loopback        Confirm a LAN-reachable bind. Required when --host is not loopback.
-  --cors-origin=<value>...    [default: *] Allowed CORS origin (repeatable). Default is *; required when binding to a
-                              non-loopback host.
-  --datadir=<value>           Datadir to serve (defaults to ./our-config, then ./.quonfig, then errors). Honors
-                              QUONFIG_DIR.
+  --cors-origin=<value>...    [default: *] Allowed CORS origin (repeatable). Default is *; recommended when binding to a
+                              non-loopback host (with --allow-non-loopback).
+  --datadir=<value>           Datadir to serve. Without this flag: QUONFIG_DIR if set, then ./our-config, then
+                              ./.quonfig, then an error.
   --environment=<value>       [default: development] Which environment slug to evaluate. Flag wins, then
                               QUONFIG_ENVIRONMENT (serve hosts a service, so the var is its identity), then development.
   --frontend-sdk-key=<value>  If set, every request must present Authorization: Basic 1:<key>. If unset, the server is

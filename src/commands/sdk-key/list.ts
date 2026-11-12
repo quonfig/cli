@@ -12,6 +12,8 @@ interface SdkKeySummary {
   environmentName: string
   id: string
   keyType: 'backend' | 'frontend'
+  /** Null for keys created before names were stored. */
+  name?: null | string
 }
 
 export default class SdkKeyList extends APICommand {
@@ -57,15 +59,17 @@ export default class SdkKeyList extends APICommand {
     const maxEnvLength = Math.max(11, ...keys.map((k) => k.environmentName.length))
     const maxTypeLength = 7 // "browser" is longest
     const maxIdLength = Math.max(2, ...keys.map((k) => k.id.length))
+    const nameOf = (k: SdkKeySummary) => k.name || '-'
+    const maxNameLength = Math.max(4, ...keys.map((k) => nameOf(k).length))
 
-    const header = `${'ID'.padEnd(maxIdLength)}  ${'ENVIRONMENT'.padEnd(maxEnvLength)}  ${'TYPE'.padEnd(maxTypeLength)}  ${'PREFIX'.padEnd(28)}  CREATED`
-    const separator = `${'-'.repeat(maxIdLength)}  ${'-'.repeat(maxEnvLength)}  ${'-'.repeat(maxTypeLength)}  ${'-'.repeat(28)}  ${'-'.repeat(24)}`
+    const header = `${'ID'.padEnd(maxIdLength)}  ${'NAME'.padEnd(maxNameLength)}  ${'ENVIRONMENT'.padEnd(maxEnvLength)}  ${'TYPE'.padEnd(maxTypeLength)}  ${'PREFIX'.padEnd(28)}  CREATED`
+    const separator = `${'-'.repeat(maxIdLength)}  ${'-'.repeat(maxNameLength)}  ${'-'.repeat(maxEnvLength)}  ${'-'.repeat(maxTypeLength)}  ${'-'.repeat(28)}  ${'-'.repeat(24)}`
 
     const rows = keys.map((k) => {
       const typeLabel = k.keyType === 'backend' ? 'server' : 'browser'
       const prefix = k.keyType === 'backend' ? `qf_sk_${k.environmentName}_...` : `qf_pk_${k.environmentName}_...`
       const created = k.createdAt ? new Date(k.createdAt).toISOString().slice(0, 10) : 'unknown'
-      return `${k.id.padEnd(maxIdLength)}  ${k.environmentName.padEnd(maxEnvLength)}  ${typeLabel.padEnd(maxTypeLength)}  ${prefix.padEnd(28)}  ${created}`
+      return `${k.id.padEnd(maxIdLength)}  ${nameOf(k).padEnd(maxNameLength)}  ${k.environmentName.padEnd(maxEnvLength)}  ${typeLabel.padEnd(maxTypeLength)}  ${prefix.padEnd(28)}  ${created}`
     })
 
     this.log([header, separator, ...rows].join('\n'))

@@ -2,11 +2,9 @@
  * Deterministic single-key Policy A sanitizer for `qfg migrate` (qfg-6na9.3).
  *
  * Migrated keys enter a workspace via `cloneAndStackPush` -> the app-gitea
- * pre-receive `qfg-verify` hook, which hard-rejects FS-floor violations
- * (qfg-6na9.4) and — after the warn->error soak — will hard-reject Policy A
- * charset violations too (qfg-6na9.6). To keep migrations from (a) aborting on
- * a floor violation or (b) seeding a permanently non-conforming key that
- * freezes the customer once .6 flips, we rewrite every imported key so it 100%
+ * pre-receive `qfg-verify` hook, which hard-rejects both FS-floor violations
+ * (qfg-6na9.4) and Policy A charset violations (qfg-6na9.6). So that a
+ * migration never aborts on either, we rewrite every imported key so it 100%
  * conforms to Policy A (project/plans/26-06-tighter-naming.md).
  *
  * This function is a PURE, deterministic single-key transform. It preserves as

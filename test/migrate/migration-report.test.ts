@@ -51,6 +51,26 @@ describe('migrate/migration-report', () => {
       expect(md).to.match(/^##\s*Follow-up checklist/m)
     })
 
+    // qfg-70utk: the duplicate-resolution path is generic across sources.
+    it('names the actual source in the resolved-duplicates section', () => {
+      const duplicateResolutions = {
+        entries: [
+          {
+            collisionTypes: ['config', 'feature_flag'],
+            deleted: ['feature-flags/dup.json'],
+            kept: 'configs/dup.json',
+            key: 'dup',
+          },
+        ],
+        total: 1,
+      }
+      const flagsmith = buildMigrationReport(baseData({duplicateResolutions, source: 'flagsmith'}))
+      expect(flagsmith).to.contain('Flagsmith had **1** key(s)')
+      expect(flagsmith).to.not.contain('Reforge')
+      const launch = buildMigrationReport(baseData({duplicateResolutions, source: 'launch'}))
+      expect(launch).to.contain('Reforge Launch had **1** key(s)')
+    })
+
     it('includes the source name in the header', () => {
       const md = buildMigrationReport(baseData({source: 'launch'}))
       expect(md).to.match(/launch/i)

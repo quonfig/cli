@@ -204,12 +204,36 @@ const renderDroppedOverrides = (dropped: DroppedOverrideSummary | null | undefin
   return lines.join('\n')
 }
 
-const renderDuplicateResolutions = (resolved: DuplicateResolutionSummary | null | undefined): null | string => {
+/** Human name of a `--from` source for report prose. */
+const sourceDisplayName = (source: string): string => {
+  switch (source) {
+    case 'flagsmith': {
+      return 'Flagsmith'
+    }
+
+    case 'launch': {
+      return 'Reforge Launch'
+    }
+
+    case 'launchdarkly': {
+      return 'LaunchDarkly'
+    }
+
+    default: {
+      return source
+    }
+  }
+}
+
+const renderDuplicateResolutions = (
+  resolved: DuplicateResolutionSummary | null | undefined,
+  source: string,
+): null | string => {
   if (!resolved || resolved.total === 0) return null
   const lines: string[] = [
     '## Resolved cross-type duplicates',
     '',
-    `Reforge had **${resolved.total}** key(s) present as both a config and a feature_flag (or other types) at the same time. qfg requires globally-unique keys, so the migrator kept the **config** side and deleted the other type(s). Review each and clean up the source system so the collision stops recurring.`,
+    `${sourceDisplayName(source)} had **${resolved.total}** key(s) present as both a config and a feature_flag (or other types) at the same time. qfg requires globally-unique keys, so the migrator kept the **config** side and deleted the other type(s). Review each and clean up the source system so the collision stops recurring.`,
     '',
   ]
   const sorted = [...resolved.entries].sort((a, b) => a.key.localeCompare(b.key))
@@ -447,7 +471,7 @@ const renderBeforeYouCutOver = (notes: ConversionNote[] | undefined): null | str
 const renderRebucketedRollouts = (notes: ConversionNote[] | undefined, source: string): null | string => {
   const rollouts = (notes ?? []).filter((n) => n.category === 'rebucketed-rollout')
   if (rollouts.length === 0) return null
-  const sourceLabel = source === 'flagsmith' ? 'Flagsmith' : source === 'launchdarkly' ? 'LaunchDarkly' : source
+  const sourceLabel = sourceDisplayName(source)
   const lines: string[] = [
     '## Users will be re-bucketed',
     '',
@@ -772,7 +796,7 @@ export const buildMigrationReport = (data: MigrationReportData): string => {
   const keyRewrites = renderKeyRewrites(data.keyRewrites)
   if (keyRewrites !== null) sections.push(keyRewrites)
 
-  const resolved = renderDuplicateResolutions(data.duplicateResolutions)
+  const resolved = renderDuplicateResolutions(data.duplicateResolutions, data.source)
   if (resolved !== null) sections.push(resolved)
 
   const skipped = renderSkippedConfigs(data.skippedConfigs)

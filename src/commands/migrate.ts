@@ -47,15 +47,17 @@ const FETCH_PROGRESS_INTERVAL = 1000
 export default class Migrate extends BaseCommand {
   static description =
     'Migrate flags and configs from a legacy feature-flag system into a Quonfig workspace.\n\n' +
-    'Currently supported sources:\n' +
-    '  launch — Reforge Launch (ported from launch-migrator)\n\n' +
-    'See https://docs.quonfig.com/docs/migrating/from-launch for the step-by-step guide,\n' +
-    'and https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.'
+    'Supported sources (--from):\n' +
+    '  launch        Reforge Launch      https://docs.quonfig.com/docs/migrating/from-launch\n' +
+    '  launchdarkly  LaunchDarkly        https://docs.quonfig.com/docs/migrating/from-launchdarkly\n' +
+    '  flagsmith     Flagsmith           https://docs.quonfig.com/docs/migrating/from-flagsmith\n\n' +
+    'See https://docs.quonfig.com/docs/migrating/troubleshooting when something goes sideways.'
 
   static examples = [
     '<%= config.bin %> <%= command.id %> --from launchdarkly --source-api-key $LAUNCHDARKLY_API_KEY --dir ./quonfig-repo',
-    '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --workspace acme-prod --push',
-    '<%= config.bin %> <%= command.id %> --from launch --api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset',
+    '<%= config.bin %> <%= command.id %> --from flagsmith --source-api-key $FLAGSMITH_API_KEY --project 12345 --dir ./quonfig-repo',
+    '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --workspace acme/prod --push',
+    '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --reset',
     '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --dry-run',
     '<%= config.bin %> <%= command.id %> --from launch --source-api-key $LAUNCH_API_KEY --dir ./quonfig-repo --staging',
   ]
