@@ -10,10 +10,14 @@ export interface SampleFile {
   path: string
 }
 
+/** The hosted JSON Schema every stored config file names in `$schema`. */
+const STORED_CONFIG_SCHEMA_URL = 'https://api.quonfig.com/schemas/v1/stored-config.json'
+
 export const SAMPLE_FILES: SampleFile[] = [
   {
     path: 'configs/example.greeting.json',
     content: {
+      $schema: STORED_CONFIG_SCHEMA_URL,
       key: 'example.greeting',
       type: 'config',
       valueType: 'string',
@@ -44,6 +48,7 @@ export const SAMPLE_FILES: SampleFile[] = [
   {
     path: 'feature-flags/example.dark-mode.json',
     content: {
+      $schema: STORED_CONFIG_SCHEMA_URL,
       key: 'example.dark-mode',
       type: 'feature_flag',
       valueType: 'bool',
@@ -73,6 +78,7 @@ export const SAMPLE_FILES: SampleFile[] = [
   {
     path: 'segments/example.beta-users.json',
     content: {
+      $schema: STORED_CONFIG_SCHEMA_URL,
       key: 'example.beta-users',
       type: 'segment',
       valueType: 'bool',
@@ -103,6 +109,7 @@ export const SAMPLE_FILES: SampleFile[] = [
   {
     path: 'log-levels/log-level.example.app.json',
     content: {
+      $schema: STORED_CONFIG_SCHEMA_URL,
       key: 'log-level.example.app',
       type: 'log_level',
       valueType: 'log_level',

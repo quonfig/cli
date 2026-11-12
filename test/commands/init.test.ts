@@ -75,6 +75,10 @@ describe('qfg init', () => {
         // Samples
         for (const sample of SAMPLE_FILES) {
           expect(fs.existsSync(path.join(dir, sample.path)), `${sample.path} should exist`).to.be.true
+          // qfg-70utk: samples carry $schema so editors autocomplete them, like every other config file.
+          const written = JSON.parse(fs.readFileSync(path.join(dir, sample.path), 'utf8'))
+          expect(Object.keys(written)[0], `${sample.path} $schema first`).to.equal('$schema')
+          expect(written.$schema).to.equal('https://api.quonfig.com/schemas/v1/stored-config.json')
         }
       } finally {
         fs.rmSync(dir, {recursive: true, force: true})

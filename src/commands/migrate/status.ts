@@ -57,7 +57,8 @@ function nextHint(source: string, counts: WorkspaceCounts): string {
     return `Run \`qfg migrate --from ${source}\` to import flags and segments.`
   }
 
-  return `Run \`qfg migrate my-code --from ${source}\` to update your SDK call sites, or re-run \`qfg migrate --from ${source}\` to pick up changes.`
+  // `qfg migrate my-code` is not recommended here until qfg-llynq lands.
+  return `Re-run \`qfg migrate --from ${source}\` to pick up changes made in ${source} since the last run.`
 }
 
 function formatHuman(payload: {

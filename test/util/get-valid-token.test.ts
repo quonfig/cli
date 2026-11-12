@@ -121,7 +121,7 @@ describe('get-valid-token (QUONFIG_API_KEY)', () => {
     // Both accepted prefixes must be named so the user knows what a valid key looks like.
     expect(caught!.message).to.include('qf_uk_')
     expect(caught!.message).to.include('qf_sa_')
-    expect(caught!.message).to.include('Settings')
+    expect(caught!.message).to.include('Environments & Keys → CLI & API keys')
     // Error must not leak the full key — only the first 8 chars.
     expect(caught!.message).to.not.include('this_full_secret_should_not_leak')
     expect(caught!.message).to.include('bad_pref')

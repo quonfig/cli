@@ -102,6 +102,8 @@ describe('migrate status', () => {
           segments: 1,
         })
         expect(output.next).to.be.a('string')
+        // qfg-70utk: `migrate my-code` is broken until qfg-llynq; don't send people to it.
+        expect(output.next).to.not.contain('my-code')
         expect(output.dir).to.be.a('string')
       })
 

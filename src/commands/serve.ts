@@ -38,7 +38,8 @@ to confirm a LAN-reachable bind.`
 
   static flags = {
     datadir: Flags.string({
-      description: 'Datadir to serve (defaults to ./our-config, then ./.quonfig, then errors). Honors QUONFIG_DIR.',
+      description:
+        'Datadir to serve. Without this flag: QUONFIG_DIR if set, then ./our-config, then ./.quonfig, then an error.',
     }),
     environment: Flags.string({
       default: 'development',
@@ -61,7 +62,8 @@ to confirm a LAN-reachable bind.`
     }),
     'cors-origin': Flags.string({
       default: ['*'],
-      description: 'Allowed CORS origin (repeatable). Default is *; required when binding to a non-loopback host.',
+      description:
+        'Allowed CORS origin (repeatable). Default is *; recommended when binding to a non-loopback host (with --allow-non-loopback).',
       multiple: true,
     }),
     watch: Flags.boolean({

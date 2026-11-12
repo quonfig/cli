@@ -14,9 +14,10 @@
  *   - no trailing dot or space (silently stripped on Windows), and
  *   - the first dot-segment is not a Windows reserved device name (qfg-hbuy.6).
  *
- * NOTE the layering: this is the create boundary (hard). The general charset is
- * a *warning* in `qfg verify` (`src/verify/validate.ts`, qfg-6na9.5) during the
- * warn->error soak, and the FS-safety floor there is already hard (qfg-6na9.4).
+ * NOTE the layering: this is the create boundary. `qfg verify`
+ * (`src/verify/validate.ts`) enforces the same general charset as a hard
+ * error too (qfg-6na9.6, after the qfg-6na9.5 warn soak), alongside the
+ * FS-safety floor (qfg-6na9.4).
  * Keep the messages aligned with app-quonfig's for a consistent UX.
  */
 // Kept as the explicit char class (not the `[\w.-]` the linter suggests) so it

@@ -36,6 +36,17 @@ describe('sdk-key list', () => {
       expect(ctx.stdout).to.contain('qf_pk_staging_...')
     })
 
+  // qfg-70utk: the 0.8.0 CHANGELOG promised the list shows each key's name.
+  test
+    .stdout()
+    .command(['sdk-key list'])
+    .it('shows a NAME column, with - for a key that has no name', (ctx) => {
+      const [header, , first, second] = ctx.stdout.trim().split('\n')
+      expect(header).to.match(/\bNAME\b/)
+      expect(first).to.contain('billing-api')
+      expect(second).to.match(/key-uuid-2\s+-\s/)
+    })
+
   test
     .stdout()
     .command(['sdk-key list', '--environment', 'production'])
