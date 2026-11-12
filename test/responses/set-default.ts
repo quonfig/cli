@@ -111,6 +111,15 @@ const metadataResponse = {
       description: 'A boolean flag with targeting rules in Development',
     },
     {
+      key: 'rollout.flag',
+      type: 'feature_flag',
+      valueType: 'bool',
+      version: 1,
+      id: 1011,
+      name: 'Rollout Flag',
+      description: 'A boolean flag mid-rollout: sticky on organization.key in Development, non-sticky in Staging',
+    },
+    {
       key: 'targeting-only.flag',
       type: 'feature_flag',
       valueType: 'bool',
@@ -217,6 +226,35 @@ const targetingOnlyFlagResponse = {
   commitSha: 'abc104',
   environments: [{id: 'Development', rules: [emailRule('staff@example.test', {type: 'bool', value: true})]}],
   default: {rules: [emailRule('vip@example.test', {type: 'bool', value: true})]},
+}
+
+// qfg-cs4vu: a flag already mid-rollout. Development buckets on a custom
+// sticky property; Staging uses a blank one (a fresh random draw per eval).
+// A re-ramp without --hash-by must carry each forward, not reset to user.key.
+const rolloutFallback = (hashByPropertyName: string) => ({
+  criteria: [{operator: 'ALWAYS_TRUE'}],
+  value: {
+    type: 'weighted_values',
+    value: {
+      hashByPropertyName,
+      weightedValues: [
+        {value: {type: 'bool', value: true}, weight: 10_000},
+        {value: {type: 'bool', value: false}, weight: 90_000},
+      ],
+    },
+  },
+})
+
+const rolloutFlagResponse = {
+  key: 'rollout.flag',
+  type: 'feature_flag',
+  valueType: 'bool',
+  commitSha: 'abc105',
+  environments: [
+    {id: 'Development', rules: [rolloutFallback('organization.key')]},
+    {id: 'Staging', rules: [rolloutFallback('')]},
+  ],
+  default: {rules: [{criteria: [{operator: 'ALWAYS_TRUE'}], value: {type: 'bool', value: false}}]},
 }
 
 // A log level whose targeting lives only in `default.rules` — the shape
@@ -412,6 +450,10 @@ const getByKeyHandler = http.post(`${getApiBase()}/api/v1/metadata/getByKey`, as
 
   if (key === 'targeting-only.flag') {
     return HttpResponse.json({json: targetingOnlyFlagResponse})
+  }
+
+  if (key === 'rollout.flag') {
+    return HttpResponse.json({json: rolloutFlagResponse})
   }
 
   if (key === 'log-level.test-app') {
