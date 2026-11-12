@@ -1,7 +1,7 @@
 import {expect, test} from '@oclif/test'
 
 import {resetClientCache} from '../../src/util/get-client.js'
-import {resetSchemaStore, server} from '../responses/schema.js'
+import {resetSchemaStore, schemaUpdateCapture, server} from '../responses/schema.js'
 import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 
 const createdSchema = {
@@ -91,6 +91,39 @@ describe('schema', () => {
         protected: true,
         schema: updatedSchema,
       })
+    })
+
+  // qfg-2o7ms: omitting --protected on an update must leave the schema's
+  // tier alone. The CLI used to send an explicit `protected: false`, which
+  // the server honors by moving schemas-protected/x.json to schemas/x.json.
+  test
+    .stdout()
+    .command(['schema', 'protected.schema', `--set-json-schema=${JSON.stringify(updatedSchema)}`, '--json'])
+    .it('keeps a protected schema protected when --protected is omitted on update', (ctx) => {
+      expect(schemaUpdateCapture.input, 'schemas/update was never called').to.not.be.null
+      expect(schemaUpdateCapture.input, 'no protected key on the wire').to.not.have.property('protected')
+      expect(JSON.parse(ctx.stdout).protected).to.equal(true)
+    })
+
+  test
+    .stdout()
+    .command([
+      'schema',
+      'protected.schema',
+      `--set-json-schema=${JSON.stringify(updatedSchema)}`,
+      '--no-protected',
+      '--json',
+    ])
+    .it('--no-protected moves a protected schema to standard storage', (ctx) => {
+      expect(schemaUpdateCapture.input!.protected).to.equal(false)
+      expect(JSON.parse(ctx.stdout).protected).to.equal(false)
+    })
+
+  test
+    .stdout()
+    .command(['schema', 'brand-new.schema', `--set-json-schema=${JSON.stringify(createdSchema)}`, '--json'])
+    .it('creates a standard schema when --protected is omitted', (ctx) => {
+      expect(JSON.parse(ctx.stdout).protected).to.equal(false)
     })
 
   test

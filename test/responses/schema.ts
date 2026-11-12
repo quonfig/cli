@@ -32,6 +32,22 @@ const seedSchemaStore = (): Map<string, StoredSchema> =>
       },
     ],
     [
+      'protected.schema',
+      {
+        commitSha: makeCommitSha(3),
+        protected: true,
+        schema: {
+          $schema: 'https://json-schema.org/draft/2020-12/schema',
+          description: 'Lives in schemas-protected/',
+          properties: {
+            limit: {type: 'integer'},
+          },
+          title: 'Protected schema',
+          type: 'object',
+        },
+      },
+    ],
+    [
       'my.schema',
       {
         commitSha: makeCommitSha(2),
@@ -52,9 +68,13 @@ const seedSchemaStore = (): Map<string, StoredSchema> =>
 let schemaStore = seedSchemaStore()
 let commitCounter = 10
 
+// The last /schemas/update input, so tests can assert what went on the wire.
+export const schemaUpdateCapture: {input: Record<string, unknown> | null} = {input: null}
+
 export const resetSchemaStore = () => {
   schemaStore = seedSchemaStore()
   commitCounter = 10
+  schemaUpdateCapture.input = null
 }
 
 function nextCommitSha(): string {
@@ -121,6 +141,7 @@ const updateSchemaHandler = http.post(`${getApiBase()}/api/v1/schemas/update`, a
   const body = (await request.json()) as any
   const input = body?.json
 
+  schemaUpdateCapture.input = input ?? null
   const key = input?.schemaKey
   const stored = schemaStore.get(key)
   if (!stored) {
