@@ -461,7 +461,9 @@ function segmentRuleDnf(rule: FlagsmithSegmentRule): Dnf {
   for (const cond of rule.conditions ?? []) {
     const result = mapCondition(cond)
     if ('drop' in result) {
-      throw new SegmentNotRepresentable(`condition on "${cond.property ?? ''}" (${cond.operator}) dropped: ${result.reason}`)
+      throw new SegmentNotRepresentable(
+        `condition on "${cond.property ?? ''}" (${cond.operator}) dropped: ${result.reason}`,
+      )
     }
 
     mapped.push(result.criterion)

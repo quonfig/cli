@@ -743,7 +743,11 @@ describe('migrate/sources/flagsmith/translate', () => {
           {
             conditions: [],
             rules: [
-              {conditions: [eq('plan', 'enterprise'), {operator: 'MODULO', property: 'id', value: '2|0'}], rules: [], type: 'ANY'},
+              {
+                conditions: [eq('plan', 'enterprise'), {operator: 'MODULO', property: 'id', value: '2|0'}],
+                rules: [],
+                type: 'ANY',
+              },
             ],
             type: 'ALL',
           },
@@ -757,13 +761,9 @@ describe('migrate/sources/flagsmith/translate', () => {
 
     it('NONE with conditions is still dropped with a note', () => {
       const report = new ConversionReport()
-      const out = translateSegment(
-        seg([{conditions: [eq('plan', 'free')], rules: [], type: 'NONE'}]),
-        report,
-      )
+      const out = translateSegment(seg([{conditions: [eq('plan', 'free')], rules: [], type: 'NONE'}]), report)
       expect(rulesOf(out)).to.deep.equal([FALSE_CATCH_ALL])
       expect(report.byCategory('skipped-rule')[0].detail).to.contain('NONE')
     })
   })
 })
-

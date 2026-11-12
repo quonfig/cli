@@ -383,4 +383,3 @@ describe('migrate/sources/flagsmith — converter sdk-node round-trip', () => {
     })
   })
 })
-
