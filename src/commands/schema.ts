@@ -52,11 +52,16 @@ export default class Schema extends APICommand {
     '<%= config.bin %> <%= command.id %> my-schema --get',
     '<%= config.bin %> <%= command.id %> my-schema --set-json-schema=\'{"type":"object","properties":{}}\'',
     '<%= config.bin %> <%= command.id %> my-schema --set-json-schema=@schemas/my-schema.json --protected',
+    '<%= config.bin %> <%= command.id %> my-schema --set-json-schema=@schemas/my-schema.json --no-protected',
   ]
 
   static flags = {
     get: Flags.boolean({description: 'get the schema document'}),
-    protected: Flags.boolean({default: false, description: 'store the schema in protected storage'}),
+    protected: Flags.boolean({
+      allowNo: true,
+      description:
+        'store the schema in protected storage (--no-protected moves it to standard storage). Omit on an update to keep its current storage; a new schema defaults to standard.',
+    }),
     'set-json-schema': Flags.string({
       description: 'set a plain JSON Schema document (inline JSON or @file path)',
     }),
@@ -93,12 +98,12 @@ export default class Schema extends APICommand {
   private async createSchema(
     schemaKey: string,
     schema: SchemaDocument,
-    protectedSchema: boolean,
+    protectedSchema: boolean | undefined,
   ): Promise<JsonObj | void> {
     const request = await this.apiClient.post('/api/v1/schemas/create', {
       workspaceId: this.workspaceId,
       schemaKey,
-      protected: protectedSchema,
+      protected: protectedSchema ?? false,
       schema,
     })
 
@@ -191,12 +196,15 @@ export default class Schema extends APICommand {
     schemaKey: string,
     schema: SchemaDocument,
     existing: SchemaDetailResponse,
-    protectedSchema: boolean,
+    protectedSchema: boolean | undefined,
   ): Promise<JsonObj | void> {
+    // qfg-2o7ms: send `protected` only when --protected / --no-protected was
+    // given. The server keeps the schema's current tier when it is absent; an
+    // explicit false would move schemas-protected/<key>.json to schemas/.
     const request = await this.apiClient.post('/api/v1/schemas/update', {
       workspaceId: this.workspaceId,
       schemaKey,
-      protected: protectedSchema,
+      ...(protectedSchema === undefined ? {} : {protected: protectedSchema}),
       schema,
       expectedCommitSha: existing.commitSha,
     })
@@ -222,7 +230,7 @@ export default class Schema extends APICommand {
   private async upsertSchema(
     schemaKey: string,
     schemaInput: string,
-    protectedSchema: boolean,
+    protectedSchema: boolean | undefined,
   ): Promise<JsonObj | void> {
     const schema = loadSchemaDocument(schemaInput)
 

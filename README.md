@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.9.0 darwin-arm64 node-v24.4.1
+@quonfig/cli/0.9.0 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -1958,7 +1958,8 @@ ARGUMENTS
 
 FLAGS
   --get                      get the schema document
-  --protected                store the schema in protected storage
+  --[no-]protected           store the schema in protected storage (--no-protected moves it to standard storage). Omit
+                             on an update to keep its current storage; a new schema defaults to standard.
   --set-json-schema=<value>  set a plain JSON Schema document (inline JSON or @file path)
   --set-zod=<value>          compatibility alias for --set-json-schema; now expects plain JSON Schema
 
@@ -1978,6 +1979,8 @@ EXAMPLES
   $ qfg schema my-schema --set-json-schema='{"type":"object","properties":{}}'
 
   $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --protected
+
+  $ qfg schema my-schema --set-json-schema=@schemas/my-schema.json --no-protected
 ```
 
 _See code: [src/commands/schema.ts](https://github.com/quonfig/cli/blob/v0.9.0/src/commands/schema.ts)_
