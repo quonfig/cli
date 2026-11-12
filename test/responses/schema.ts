@@ -32,22 +32,6 @@ const seedSchemaStore = (): Map<string, StoredSchema> =>
       },
     ],
     [
-      'protected.schema',
-      {
-        commitSha: makeCommitSha(3),
-        protected: true,
-        schema: {
-          $schema: 'https://json-schema.org/draft/2020-12/schema',
-          description: 'Lives in schemas-protected/',
-          properties: {
-            limit: {type: 'integer'},
-          },
-          title: 'Protected schema',
-          type: 'object',
-        },
-      },
-    ],
-    [
       'my.schema',
       {
         commitSha: makeCommitSha(2),
@@ -59,6 +43,22 @@ const seedSchemaStore = (): Map<string, StoredSchema> =>
             enabled: {type: 'boolean'},
           },
           title: 'My schema',
+          type: 'object',
+        },
+      },
+    ],
+    [
+      'protected.schema',
+      {
+        commitSha: makeCommitSha(3),
+        protected: true,
+        schema: {
+          $schema: 'https://json-schema.org/draft/2020-12/schema',
+          description: 'Lives in schemas-protected/',
+          properties: {
+            limit: {type: 'integer'},
+          },
+          title: 'Protected schema',
           type: 'object',
         },
       },
