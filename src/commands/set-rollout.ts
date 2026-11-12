@@ -398,8 +398,7 @@ To inspect the current rollout:
  */
 export function carriedHashByPropertyName(rules: unknown[]): string | undefined {
   const fallback = rules.find((rule) => isCatchAllRule(rule)) as
-    | {value?: {type?: unknown; value?: {hashByPropertyName?: unknown}}}
-    | undefined
+    {value?: {type?: unknown; value?: {hashByPropertyName?: unknown}}} | undefined
   if (fallback?.value?.type !== 'weighted_values') return undefined
   const hashBy = fallback.value.value?.hashByPropertyName
   return typeof hashBy === 'string' ? hashBy : undefined

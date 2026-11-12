@@ -228,7 +228,14 @@ describe('set-rollout', () => {
 
     test
       .stdout()
-      .command(['set-rollout', 'rollout.flag', '--environment=Development', '--true-percent=50', '--hash-by=', '--confirm'])
+      .command([
+        'set-rollout',
+        'rollout.flag',
+        '--environment=Development',
+        '--true-percent=50',
+        '--hash-by=',
+        '--confirm',
+      ])
       .it('--hash-by "" authors a non-sticky split', () => {
         expect(fallbackHashBy('Development')).to.equal('')
       })
