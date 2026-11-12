@@ -16,7 +16,7 @@ from the live side so a future matrix change has to update both at once.
 ## Totals (current commit)
 
 - features: 20 (boolean/string/int + MV + cross-env + segov + idov + edge)
-- segments: 24 (structural + per-operator)
+- segments: 25 (structural + per-operator; one hand-authored, see below)
 - KNOWN_GAPS: 9 (mirrors live CORPUS.md)
 - expected files: one per fixture, under `expected/<fixture>/<feature-flags|segments>/<key>.json`
 
@@ -28,12 +28,20 @@ from the live side so a future matrix change has to update both at once.
 | 2 lifecycle/metadata    | fx-meta-with-description, fx-meta-tag-multi                                                                                                                                                                                                                                                                           |
 | 3 multivariate          | fx-mv-string-3way, fx-mv-boolean-2way, fx-mv-per-env-divergence, fx-mv-with-disabled-default                                                                                                                                                                                                                          |
 | 4 per-env divergence    | fx-env-enabled-diverges, fx-env-value-diverges                                                                                                                                                                                                                                                                        |
-| 5 segments              | fx-seg-single-condition, fx-seg-and-within-rule, fx-seg-or-within-rule, fx-seg-none-within-rule, fx-seg-and-of-rules, fx-seg-empty-conditions, fx-seg-with-description                                                                                                                                                |
+| 5 segments              | fx-seg-single-condition, fx-seg-and-within-rule, fx-seg-or-within-rule, fx-seg-none-within-rule, fx-seg-and-of-rules, fx-seg-dashboard-any-blocks, fx-seg-empty-conditions, fx-seg-with-description                                                                                                                   |
 | 6 segment-condition ops | fx-op-equal, fx-op-not-equal, fx-op-greater-than, fx-op-greater-than-inclusive, fx-op-less-than, fx-op-contains, fx-op-not-contains, fx-op-regex, fx-op-in, fx-op-is-set, fx-op-is-not-set, fx-op-modulo, fx-op-percentage-split, fx-op-semver-equal, fx-op-semver-greater, fx-op-semver-less, fx-op-semver-inclusive |
 | 7 segment overrides     | fx-segov-single, fx-segov-changes-value, fx-segov-multiple-priorities                                                                                                                                                                                                                                                 |
 | 8 identity overrides    | fx-idov-single, fx-idov-on-boolean, fx-idov-and-segov-conflict                                                                                                                                                                                                                                                        |
 | 9 versioning / CRs      | not in corpus — paywalled (see KNOWN_GAPS)                                                                                                                                                                                                                                                                            |
 | 10 edge cases           | fx-edge-empty-string-value                                                                                                                                                                                                                                                                                            |
+
+## Hand-authored fixtures
+
+- **fx-seg-dashboard-any-blocks** (segment) — not exported from Test1. It has
+  the shape the Flagsmith dashboard saves: an empty top-level `ALL` rule
+  wrapping one `ANY` rule per UI block, so `(plan is enterprise OR scale) AND
+region is us-east`. Added for qfg-ug6kd, where ANY rules were dropped. The
+  next live export should replace it with a real dashboard-built segment.
 
 ## KNOWN_GAPS (matrix rows we deliberately do NOT have)
 

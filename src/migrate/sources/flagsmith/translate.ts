@@ -419,51 +419,108 @@ function makeNumericCriterion(
 }
 
 /**
- * Convert a Flagsmith segment rule subtree (possibly nested with type=ALL/ANY/NONE)
- * into a flat list of Quonfig criteria. Quonfig has no within-rule OR, so:
- *  - ALL (AND) is honored: each child contributes its criteria, ANDed.
- *  - ANY (OR) on a sibling rule list is a structural mismatch — we drop the
- *    rule with a precise reason rather than silently AND it.
- *  - NONE (NOT-ANY) — same: drop with reason.
- *
- * Returns null when the subtree cannot be flattened (some child dropped).
+ * A segment's match condition in disjunctive normal form: an OR of
+ * conjunctions, each an AND of criteria. `[[]]` matches everyone (one empty
+ * conjunction); `[]` matches no one.
  */
-function flattenSegmentRuleForSegment(
-  rule: FlagsmithSegmentRule,
-  segment: FlagsmithSegment,
-  report: ConversionReport,
-): null | QuonfigCriterion[] {
-  if (rule.type !== 'ALL') {
-    report.add(
-      'skipped-rule',
-      segment.name,
-      `Flagsmith segment rule with type=${rule.type} cannot be expressed in Quonfig (no within-rule OR); whole rule dropped`,
-    )
-    return null
+type Dnf = QuonfigCriterion[][]
+
+/**
+ * Upper bound on the conjunctions one segment may expand to. Distributing AND
+ * over OR multiplies the ANY blocks' sizes; past this the segment is reported
+ * and left matching no one rather than emitting thousands of rules.
+ */
+const MAX_SEGMENT_CONJUNCTIONS = 64
+
+class SegmentNotRepresentable extends Error {}
+
+/** AND two DNFs: every pairing of their conjunctions. */
+function andDnf(a: Dnf, b: Dnf): Dnf {
+  const out: Dnf = []
+  for (const left of a) {
+    for (const right of b) {
+      out.push([...left, ...right])
+      if (out.length > MAX_SEGMENT_CONJUNCTIONS) {
+        throw new SegmentNotRepresentable(
+          `expands to more than ${MAX_SEGMENT_CONJUNCTIONS} Quonfig rules (too many ANY combinations)`,
+        )
+      }
+    }
   }
 
-  const criteria: QuonfigCriterion[] = []
-  for (const cond of rule.conditions) {
-    const mapped = mapCondition(cond)
-    if ('drop' in mapped) {
-      report.add(
-        'skipped-rule',
-        segment.name,
-        `condition on "${cond.property ?? ''}" (${cond.operator}) dropped: ${mapped.reason}`,
+  return out
+}
+
+/**
+ * One Flagsmith segment rule as a DNF, following the Flagsmith engine: the
+ * rule's conditions are combined by its type (ALL = every, ANY = some, NONE =
+ * none; no conditions = true), and every sub-rule must also match.
+ */
+function segmentRuleDnf(rule: FlagsmithSegmentRule): Dnf {
+  const mapped: QuonfigCriterion[] = []
+  for (const cond of rule.conditions ?? []) {
+    const result = mapCondition(cond)
+    if ('drop' in result) {
+      throw new SegmentNotRepresentable(
+        `condition on "${cond.property ?? ''}" (${cond.operator}) dropped: ${result.reason}`,
       )
-      return null
     }
 
-    criteria.push(mapped.criterion)
+    mapped.push(result.criterion)
+  }
+
+  let dnf: Dnf
+  if (mapped.length === 0) {
+    dnf = [[]]
+  } else if (rule.type === 'ALL') {
+    dnf = [mapped]
+  } else if (rule.type === 'ANY') {
+    dnf = mapped.map((criterion) => [criterion])
+  } else {
+    // NONE (not any) needs a negated operator per condition, which the
+    // converter does not do yet.
+    throw new SegmentNotRepresentable(
+      `Flagsmith segment rule with type=${rule.type} and conditions cannot be expressed in Quonfig yet`,
+    )
   }
 
   for (const child of rule.rules ?? []) {
-    const sub = flattenSegmentRuleForSegment(child, segment, report)
-    if (sub === null) return null
-    criteria.push(...sub)
+    dnf = andDnf(dnf, segmentRuleDnf(child))
   }
 
-  return criteria
+  return dnf
+}
+
+/**
+ * Convert a Flagsmith segment's rule tree into Quonfig rule criteria lists
+ * (qfg-ug6kd). Top-level rules are ANDed, as the Flagsmith engine does, and
+ * ANY (OR) is expressed as separate first-match-wins Quonfig rules.
+ *
+ * Returns [] (the segment matches no one) when any part cannot be translated,
+ * after recording one `skipped-rule` note: dropping one AND term would widen
+ * the segment and dropping one OR term would narrow it, both silently.
+ */
+function segmentConjunctions(segment: FlagsmithSegment, report: ConversionReport): Dnf {
+  const topLevel = segment.rules ?? []
+  // The engine matches nobody for a segment without rules.
+  if (topLevel.length === 0) return []
+
+  try {
+    let dnf: Dnf = [[]]
+    for (const rule of topLevel) dnf = andDnf(dnf, segmentRuleDnf(rule))
+    // Two identical conjunctions are one rule.
+    const seen = new Set<string>()
+    return dnf.filter((conjunction) => {
+      const id = JSON.stringify(conjunction)
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  } catch (error) {
+    if (!(error instanceof SegmentNotRepresentable)) throw error
+    report.add('skipped-rule', segment.name, `${error.message}; segment rules dropped, so it matches no one`)
+    return []
+  }
 }
 
 /**
@@ -895,15 +952,14 @@ function buildSegmentOverrideRule(
  *
  * Quonfig segments are boolean ("is the context in the segment?") and have no
  * per-environment state, so all rules collapse into `default.rules`,
- * first-match-wins. A rule whose conditions all map yields a true-valued rule;
- * a trailing ALWAYS_TRUE serves false (not in segment).
+ * first-match-wins. Each conjunction of the segment's match condition (see
+ * `segmentConjunctions`) yields a true-valued rule; a trailing ALWAYS_TRUE
+ * serves false (not in segment).
  */
 export function translateSegment(segment: FlagsmithSegment, report: ConversionReport): Record<string, unknown> {
   const rules: QuonfigRule[] = []
 
-  for (const rule of segment.rules ?? []) {
-    const criteria = flattenSegmentRuleForSegment(rule, segment, report)
-    if (criteria === null) continue
+  for (const criteria of segmentConjunctions(segment, report)) {
     rules.push({
       criteria: criteria.length > 0 ? criteria : [ALWAYS_TRUE],
       value: {type: 'bool', value: true},

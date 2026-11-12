@@ -47,6 +47,10 @@ const RAW_DIR = join(FIXTURE_DIR, 'raw')
 const SEGMENT_FIXTURE_KEYS = [
   'fx-seg-single-condition',
   'fx-seg-and-within-rule',
+  'fx-seg-or-within-rule',
+  'fx-seg-nested-subrule',
+  'fx-seg-and-of-rules',
+  'fx-seg-dashboard-any-blocks',
   'fx-op-equal',
   'fx-op-greater-than',
   'fx-op-regex',
@@ -344,6 +348,38 @@ describe('migrate/sources/flagsmith — converter sdk-node round-trip', () => {
       const q = await makeClient(datadir, 'development')
       expect(q.getBool('fx-op-semver-greater', ctx({identifier: 'u1', traits: {version: '5.0.0'}}))).to.equal(true)
       expect(q.getBool('fx-op-semver-greater', ctx({identifier: 'u2', traits: {version: '4.0.0'}}))).to.equal(false)
+    })
+  })
+
+  // qfg-ug6kd: ANY (OR) rules and nested rules evaluate like Flagsmith's
+  // engine, not dropped (which left the segment matching no one) and not
+  // ORed at the top level (which widened an AND of rules).
+  describe('segment rule-structure round-trips (qfg-ug6kd)', () => {
+    const inSegment = async (key: string, traits: Record<string, string>) =>
+      (await makeClient(datadir, 'development')).getBool(key, ctx({identifier: 'u', traits}))
+
+    it('fx-seg-or-within-rule — ANY: plan is enterprise OR scale', async () => {
+      expect(await inSegment('fx-seg-or-within-rule', {plan: 'enterprise'})).to.equal(true)
+      expect(await inSegment('fx-seg-or-within-rule', {plan: 'scale'})).to.equal(true)
+      expect(await inSegment('fx-seg-or-within-rule', {plan: 'free'})).to.equal(false)
+    })
+
+    it('fx-seg-nested-subrule — plan=enterprise AND (region us-east OR us-west)', async () => {
+      expect(await inSegment('fx-seg-nested-subrule', {plan: 'enterprise', region: 'us-west'})).to.equal(true)
+      expect(await inSegment('fx-seg-nested-subrule', {plan: 'enterprise', region: 'eu'})).to.equal(false)
+      expect(await inSegment('fx-seg-nested-subrule', {plan: 'free', region: 'us-east'})).to.equal(false)
+    })
+
+    it('fx-seg-and-of-rules — two top-level rules are ANDed', async () => {
+      expect(await inSegment('fx-seg-and-of-rules', {plan: 'enterprise', region: 'us-east'})).to.equal(true)
+      expect(await inSegment('fx-seg-and-of-rules', {plan: 'enterprise', region: 'eu'})).to.equal(false)
+      expect(await inSegment('fx-seg-and-of-rules', {plan: 'free', region: 'us-east'})).to.equal(false)
+    })
+
+    it('fx-seg-dashboard-any-blocks — (enterprise OR scale) AND us-east', async () => {
+      expect(await inSegment('fx-seg-dashboard-any-blocks', {plan: 'scale', region: 'us-east'})).to.equal(true)
+      expect(await inSegment('fx-seg-dashboard-any-blocks', {plan: 'scale', region: 'eu'})).to.equal(false)
+      expect(await inSegment('fx-seg-dashboard-any-blocks', {plan: 'free', region: 'us-east'})).to.equal(false)
     })
   })
 })

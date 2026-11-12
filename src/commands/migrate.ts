@@ -89,7 +89,7 @@ export default class Migrate extends BaseCommand {
     project: Flags.string({
       description:
         'Source-system project identifier. For --from launchdarkly this is the project KEY (default: "default"; ' +
-        'env: LAUNCHDARKLY_PROJECT_KEY). For --from flagsmith this is the numeric project ID (env: FLAGSMITH_PROJECT_ID). ' +
+        'env: LAUNCHDARKLY_PROJECT_KEY). For --from flagsmith this is the numeric project ID, required (env: FLAGSMITH_PROJECT_ID). ' +
         'Ignored by --from launch.',
     }),
     push: Flags.boolean({
@@ -212,12 +212,23 @@ export default class Migrate extends BaseCommand {
 
     if (flags.from === 'flagsmith') {
       // Flagsmith projects are numeric IDs. --project is a string flag because
-      // it's source-shared; we just pass it through. The Flagsmith source's
-      // own resolveProjectId() honours FLAGSMITH_PROJECT_ID at module-load if
-      // --project isn't passed.
+      // it's source-shared. It is required (qfg-ug6kd): there is no sensible
+      // default project, and the old silent fallback to project 1 migrated
+      // the wrong project or failed with an unexplained 404.
+      const projectId = (flags.project ?? process.env.FLAGSMITH_PROJECT_ID)?.trim()
+      if (!projectId) {
+        return this.err(
+          '--from flagsmith requires --project <id> (or FLAGSMITH_PROJECT_ID): the numeric project ID, ' +
+            'shown in the Flagsmith dashboard URL as /project/<id>/.',
+        )
+      }
+
+      if (!/^\d+$/.test(projectId)) {
+        return this.err(`--project for --from flagsmith must be the numeric project ID, got "${projectId}".`)
+      }
+
       applyFlagsmithBaseUrl()
-      const projectId = flags.project ?? process.env.FLAGSMITH_PROJECT_ID
-      if (projectId) setFlagsmithProjectId(projectId)
+      setFlagsmithProjectId(projectId)
     }
 
     let source

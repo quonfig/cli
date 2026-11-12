@@ -1601,7 +1601,7 @@ FLAGS
                                 imports — pass --reset to re-import everything from scratch with this flag.
       --project=<value>         Source-system project identifier. For --from launchdarkly this is the project KEY
                                 (default: "default"; env: LAUNCHDARKLY_PROJECT_KEY). For --from flagsmith this is the
-                                numeric project ID (env: FLAGSMITH_PROJECT_ID). Ignored by --from launch.
+                                numeric project ID, required (env: FLAGSMITH_PROJECT_ID). Ignored by --from launch.
       --push                    After migrating to a local dir, also push to the given --workspace on Quonfig cloud
       --recent=<value>          Import only the last N changes (useful for tire-kicking)
       --reset                   Ignore the delta cursor and re-import everything from scratch

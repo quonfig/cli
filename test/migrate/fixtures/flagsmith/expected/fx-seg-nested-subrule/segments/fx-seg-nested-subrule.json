@@ -7,6 +7,54 @@
       {
         "criteria": [
           {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["enterprise"]
+            }
+          },
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "region",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["us-east"]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["enterprise"]
+            }
+          },
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "region",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["us-west"]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
             "operator": "ALWAYS_TRUE"
           }
         ],

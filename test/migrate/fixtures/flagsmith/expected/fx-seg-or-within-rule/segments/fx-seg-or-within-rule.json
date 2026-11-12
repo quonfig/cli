@@ -7,6 +7,38 @@
       {
         "criteria": [
           {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["enterprise"]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
+            "operator": "PROP_IS_ONE_OF",
+            "propertyName": "plan",
+            "valueToMatch": {
+              "type": "string_list",
+              "value": ["scale"]
+            }
+          }
+        ],
+        "value": {
+          "type": "bool",
+          "value": true
+        }
+      },
+      {
+        "criteria": [
+          {
             "operator": "ALWAYS_TRUE"
           }
         ],
