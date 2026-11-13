@@ -60,6 +60,8 @@ export type RequestSuccess = {
 export type RequestFailure = {
   error: JsonObj
   ok: false
+  /** The server's own message, when a 403 body carried one (qfg-5bjew.17). */
+  serverMessage?: string
   status: number
 }
 

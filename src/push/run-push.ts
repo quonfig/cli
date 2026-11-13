@@ -27,6 +27,7 @@ import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
 import {FileDelta, summarizeDiff} from './diff-summary.js'
 import {type BuildPackOptions, type CurrentBranchResult, ZERO_OID} from './git-pack.js'
+import {absoluteUrl} from '../change-requests/render.js'
 
 /** All-zeros object id, the git-protocol convention for "no such ref". */
 
@@ -186,9 +187,31 @@ export interface GitPushInput {
   /** Local HEAD being published. Server returns this back as commitSha. */
   newSha: string
   pack: Uint8Array
+  /**
+   * qfg-5bjew.17: open (or update) a change request for this branch. Sent
+   * on the wire only when set, so a plain push's payload is unchanged.
+   */
+  propose?: ProposeInput
   /** `refs/heads/main` or `refs/heads/<branch>`. */
   targetRef: string
   workspaceId: string
+}
+
+/** `--propose [--title] [--description]` (qfg-5bjew.17). */
+export interface ProposeInput {
+  description?: string
+  title?: string
+}
+
+/**
+ * The change request a branch push opened or updated (app-quonfig
+ * git-push-handler.ts `GitPushChangeRequest`). `url` is the app-relative
+ * page path.
+ */
+export interface GitPushChangeRequest {
+  number: number
+  status: string
+  url: string
 }
 
 /**
@@ -216,7 +239,7 @@ export type SuggestedRecovery = {
 }
 
 export type GitPushResult =
-  | {kind: 'success'; commitSha: string; ref: string}
+  | {kind: 'success'; commitSha: string; ref: string; changeRequest?: GitPushChangeRequest}
   | {kind: 'conflict'; message: string}
   | {kind: 'bad-request'; message: string}
   | {kind: 'denied'; denials: GitPushDenial[]; suggestedRecovery?: SuggestedRecovery}
@@ -251,6 +274,12 @@ export interface RunPushInput {
    * slash form.
    */
   orgSlug?: string
+  /**
+   * qfg-5bjew.17: `--propose` (with optional `--title`/`--description`).
+   * Clone path, non-main branch only. Nothing goes live, so no confirm
+   * prompt and no `--yes` needed; the merge is the confirmation.
+   */
+  propose?: ProposeInput
   /** `--workspace` flag, or the active profile's workspace UUID. Must be non-empty. */
   requestedTarget: string
   /** `--skip-validate` — suppress the validate step. */
@@ -298,16 +327,52 @@ export interface RunPushDeps {
 
 export type RunPushResult =
   | {kind: 'aborted'; reason: string}
-  | {kind: 'pushed'; dispatchedAs: 'clone-path' | 'bare-path'; commitSha?: string | null}
+  | {
+      kind: 'pushed'
+      dispatchedAs: 'clone-path' | 'bare-path'
+      commitSha?: string | null
+      /** Set when a change request was opened or updated (qfg-5bjew.17). */
+      branch?: string
+      changeRequest?: GitPushChangeRequest
+    }
   | {kind: 'no-op'; reason: string}
 
 export class PushFatalError extends Error {
   code: string
-  constructor(message: string, code = 'PUSH_FATAL') {
+  /**
+   * qfg-5bjew.17 (decision 5, rule 2.11): true on a refused MAIN push on the
+   * clone path, where the CLI printed how to propose the change instead.
+   */
+  proposable?: true
+  constructor(message: string, code = 'PUSH_FATAL', opts: {proposable?: true} = {}) {
     super(message)
     this.code = code
     this.name = 'PushFatalError'
+    if (opts.proposable) this.proposable = true
   }
+}
+
+/** Printed after the denial lines of a refused main push (clone path only). */
+export const PROPOSE_INSTEAD_HINT = [
+  '',
+  'You can propose this change instead; someone with rights merges it:',
+  '  git switch -c <branch-name>',
+  '  git branch -f main origin/main',
+  '  qfg push --propose',
+]
+
+const PROPOSE_NEEDS_BRANCH = '--propose needs a branch: commits on main go live when pushed.'
+
+/** Lines that announce an opened/updated change request (qfg-5bjew.17). */
+export function changeRequestLines(cr: GitPushChangeRequest, opts: {branch: string; proposed: boolean}): string[] {
+  return [
+    opts.proposed
+      ? `Proposed change request #${cr.number} from branch ${opts.branch}.`
+      : `Updated change request #${cr.number} with this push.`,
+    `  ${absoluteUrl(cr.url)}`,
+    'NOT LIVE',
+    `It goes live only when someone with rights merges it. Check on it: qfg cr show ${cr.number}`,
+  ]
 }
 
 /**
@@ -457,6 +522,15 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   const isClonePath = hasGit && remoteOriginUrl !== undefined && sameRepo(remoteOriginUrl, backend.repoUrl)
   const dispatchedAs: 'bare-path' | 'clone-path' = isClonePath ? 'clone-path' : 'bare-path'
 
+  // qfg-5bjew.17: proposing needs a branch, and in this step only the clone
+  // path can push one. Refuse before any write.
+  if (input.propose && !isClonePath) {
+    throw new PushFatalError(
+      '--propose needs a git clone of the workspace in this step. Run qfg pull, create a branch, commit, then qfg push --propose.',
+      'PROPOSE_NEEDS_CLONE',
+    )
+  }
+
   // Clone path: align origin with the backend so the gitOps.fetch + diff
   // walk authenticates against the read URL we minted. The bare path's
   // probe-clone path bypasses local origin entirely.
@@ -477,6 +551,33 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     await deps.gitOps.setRemoteOrigin(input.dir, backend.repoUrl)
     log('Fetching from remote...')
     await deps.gitOps.fetch(input.dir)
+
+    // qfg-5bjew.17: commits on main go live when pushed, so --propose needs a
+    // branch. Tell the user how to move unpushed commits; never move their
+    // branches for them.
+    if (input.propose && currentBranch.name === 'main') {
+      const originMain = await deps.gitOps.getOriginMainSha(input.dir)
+      const ahead =
+        originMain === undefined
+          ? 0
+          : await deps.gitOps.countCommitsBetween(input.dir, originMain, await deps.gitOps.getHeadSha(input.dir))
+      throw new PushFatalError(
+        (ahead > 0
+          ? [
+              PROPOSE_NEEDS_BRANCH,
+              `Move your ${ahead} unpushed commit(s) to a branch (this CLI will not move your branches for you):`,
+              '  git switch -c <branch-name>',
+              '  git branch -f main origin/main',
+              'Then run: qfg push --propose',
+            ]
+          : [
+              PROPOSE_NEEDS_BRANCH,
+              'Create a branch (git switch -c <branch-name>), commit, then run qfg push --propose.',
+            ]
+        ).join('\n'),
+        'PROPOSE_ON_MAIN',
+      )
+    }
 
     // Guard 4 (qfg-fboj): refuse to push when local HEAD is behind or has
     // diverged from origin/main. The §4.1 server-side fast-forward check
@@ -548,17 +649,21 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     return {kind: 'no-op', reason: 'Local tree matches remote HEAD. Nothing to push.'}
   }
 
-  const decision = await decideConfirm({
-    destructive: summary.isDestructive,
-    requiresTypedSlug,
-    yes: input.yes,
-    interactive: input.interactive,
-    workspaceSlug: backend.workspaceSlug,
-    confirmIO: deps.confirmIO,
-  })
-  if (!decision.ok) {
-    log('Aborted, nothing pushed.')
-    return {kind: 'aborted', reason: decision.reason}
+  // qfg-5bjew.17: a propose push changes nothing live (merging it is the
+  // confirmation), so it neither prompts nor needs --yes.
+  if (!input.propose) {
+    const decision = await decideConfirm({
+      destructive: summary.isDestructive,
+      requiresTypedSlug,
+      yes: input.yes,
+      interactive: input.interactive,
+      workspaceSlug: backend.workspaceSlug,
+      confirmIO: deps.confirmIO,
+    })
+    if (!decision.ok) {
+      log('Aborted, nothing pushed.')
+      return {kind: 'aborted', reason: decision.reason}
+    }
   }
 
   // Pack-push branch (qfg-7429.4): clone-path now ships actual git
@@ -566,6 +671,8 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   // the unchanged file-delta wire shape used by the UI and CI pushes
   // that don't carry a `.git/`.
   let pushedCommitSha: string | null | undefined
+  let changeRequest: GitPushChangeRequest | undefined
+  let pushedBranch: string | undefined
   if (isClonePath && currentBranch && currentBranch.kind === 'branch') {
     const branchName = currentBranch.name
     const targetRef = `refs/heads/${branchName}`
@@ -602,6 +709,7 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       newSha,
       pack,
       hasUpstreamRemote,
+      ...(input.propose ? {propose: input.propose} : {}),
     })
 
     if (packResult.kind === 'denied') {
@@ -622,9 +730,17 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
           /* non-fatal — the recovery message is the load-bearing part */
         }
       }
+      // qfg-5bjew.17 (rule 2.11): on the clone path a refused MAIN push can
+      // be proposed instead. Branch denials and the bare path are unchanged.
+      const proposable = branchName === 'main'
+      if (proposable) {
+        for (const line of PROPOSE_INSTEAD_HINT) errLog(line)
+      }
+
       throw new PushFatalError(
         `Push denied for ${packResult.denials.length} commit(s). See errors above.`,
         'PUSH_DENIED',
+        proposable ? {proposable: true} : {},
       )
     }
 
@@ -698,6 +814,23 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
 
     const commitCount = await deps.gitOps.countCommitsBetween(input.dir, expectedSha, newSha)
     log(`Pushed ${commitCount} commit(s) to origin/${targetRef} as ${newSha.slice(0, 7)}. Local repo in sync.`)
+
+    // qfg-5bjew.17 (rule 2.12): a server that predates change requests strips
+    // `propose` and does a plain branch push. Without a number, fail.
+    if (input.propose && !packResult.changeRequest) {
+      throw new PushFatalError(
+        `Branch ${branchName} was pushed, but the server did not open a change request (it may be older than this CLI). Nothing is proposed and nothing went live.`,
+        'PROPOSE_UNSUPPORTED',
+      )
+    }
+
+    if (packResult.changeRequest) {
+      changeRequest = packResult.changeRequest
+      pushedBranch = branchName
+      for (const line of changeRequestLines(changeRequest, {branch: branchName, proposed: Boolean(input.propose)})) {
+        log(line)
+      }
+    }
   } else {
     const baseMessage = input.message ?? `qfg push: ${summary.totals.filesTouched} file change(s)`
     const commitMessage = withPushedViaTrailer(baseMessage)
@@ -767,7 +900,9 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     }
   }
 
-  return {kind: 'pushed', dispatchedAs, commitSha: pushedCommitSha}
+  return changeRequest
+    ? {kind: 'pushed', dispatchedAs, commitSha: pushedCommitSha, branch: pushedBranch, changeRequest}
+    : {kind: 'pushed', dispatchedAs, commitSha: pushedCommitSha}
 }
 
 const toServerKind = (kind: FileDelta['kind']): ServerFileKind => {

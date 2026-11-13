@@ -20,6 +20,7 @@ import {
 import {
   PushFatalError,
   runPush,
+  type RunPushResult,
   type ConfigPushInput,
   type GitPushInput,
   type GiteaTokenMintResult,
@@ -31,6 +32,33 @@ import {computeClonePathDiff} from '../push/clone-path-diff.js'
 import {callConfigsGitPush, callConfigsPush} from '../push/config-push-client.js'
 import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
+import {absoluteUrl} from '../change-requests/render.js'
+
+/**
+ * `qfg push --json` for a successful push. A plain push keeps its shape
+ * ({pushed, via, commitSha}); a push that opened or updated a change request
+ * adds `changeRequest`, and a propose push reports that nothing went live
+ * (qfg-5bjew.17).
+ */
+export function pushResultJson(result: Extract<RunPushResult, {kind: 'pushed'}>, proposed: boolean): JsonObj {
+  const changeRequest = result.changeRequest
+    ? {
+        number: result.changeRequest.number,
+        url: absoluteUrl(result.changeRequest.url),
+        status: result.changeRequest.status,
+      }
+    : undefined
+  if (proposed) {
+    return {proposed: true, applied: false, branch: result.branch, commitSha: result.commitSha ?? null, changeRequest}
+  }
+
+  return {
+    pushed: true,
+    via: result.dispatchedAs,
+    commitSha: result.commitSha ?? null,
+    ...(changeRequest ? {changeRequest} : {}),
+  }
+}
 
 export default class Push extends BaseCommand {
   static description = `Push local config changes up to your workspace on Quonfig cloud.
@@ -45,12 +73,18 @@ Enforces three guards before touching the remote:
   qfg push --dir ./our-config
   qfg push --dir ./our-config --workspace acme-prod
   qfg push --dir ./our-config --yes        # skip normal Y/N (never skips typed-slug)
-  qfg push --dir ./our-config --skip-validate`
+  qfg push --dir ./our-config --skip-validate
+
+Propose instead of going live (a change request; someone with rights merges it):
+  git switch -c my-change && git commit -am "..."
+  qfg push --propose --title "Turn on checkout for beta"
+  qfg cr show <n>`
 
   static examples = [
     '<%= config.bin %> push --dir ./our-config',
     '<%= config.bin %> push --workspace acme-prod --dir ./our-config',
     '<%= config.bin %> push --dir ./our-config --yes',
+    '<%= config.bin %> push --propose --title "Turn on checkout for beta"',
   ]
 
   static flags = {
@@ -77,6 +111,19 @@ Enforces three guards before touching the remote:
     message: Flags.string({
       char: 'm',
       description: 'Commit message for bare-path pushes (ignored on clone-path; push what is already committed)',
+    }),
+    propose: Flags.boolean({
+      default: false,
+      description:
+        'Push this branch as a change request instead of going live. Needs a clone on a branch other than main. No --yes needed: nothing goes live until someone with rights merges it (qfg cr merge).',
+    }),
+    title: Flags.string({
+      dependsOn: ['propose'],
+      description: 'Change request title (with --propose; defaults on the server)',
+    }),
+    description: Flags.string({
+      dependsOn: ['propose'],
+      description: 'Change request description (with --propose)',
     }),
   }
 
@@ -114,6 +161,14 @@ Enforces three guards before touching the remote:
           skipValidate: flags['skip-validate'],
           noPinWrite: flags['no-pin-write'],
           message: flags.message,
+          ...(flags.propose
+            ? {
+                propose: {
+                  ...(flags.title === undefined ? {} : {title: flags.title}),
+                  ...(flags.description === undefined ? {} : {description: flags.description}),
+                },
+              }
+            : {}),
         },
         deps,
       )
@@ -128,11 +183,15 @@ Enforces three guards before touching the remote:
         return {noop: true, reason: result.reason}
       }
 
+      if (flags.propose) return pushResultJson(result, true)
+
       this.log(`Pushed via ${result.dispatchedAs}.`)
-      return {pushed: true, via: result.dispatchedAs, commitSha: result.commitSha ?? null}
+      return pushResultJson(result, false)
     } catch (error: unknown) {
       if (error instanceof PushFatalError) {
-        return this.err(error.message)
+        // qfg-5bjew.17: a refused main push on the clone path can be proposed
+        // instead (decision 5); --json carries that as `proposable: true`.
+        return error.proposable ? this.err(error.message, {proposable: true}) : this.err(error.message)
       }
 
       throw error
