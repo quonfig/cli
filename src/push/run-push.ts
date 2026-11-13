@@ -50,10 +50,16 @@ export interface GitOps {
   /**
    * Pack-push — count of commits in `<expectedSha>..<newSha>`. Drives
    * the final "Pushed N commit(s)" log line. Returns 0 for a no-op
-   * push (already at the tip) and best-effort for new branches with
-   * a zero-OID base.
+   * push (already at the tip). A zero-OID base counts all of newSha's
+   * history, so a branch push also passes `excludeShas` (origin/main)
+   * to leave out commits the server already has (qfg-5bjew.24).
    */
-  countCommitsBetween(dir: string, expectedSha: string, newSha: string): Promise<number>
+  countCommitsBetween(
+    dir: string,
+    expectedSha: string,
+    newSha: string,
+    options?: {excludeShas?: string[]},
+  ): Promise<number>
   /** Number of tracked files on origin/main (used for the destructive-ratio heuristic). */
   countFilesInRemote(dir: string): Promise<number>
   /**
@@ -812,7 +818,12 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       /* non-fatal — the push itself succeeded */
     }
 
-    const commitCount = await deps.gitOps.countCommitsBetween(input.dir, expectedSha, newSha)
+    // qfg-5bjew.24: on a branch, count only commits not already on origin/main
+    // (a new branch's zero-OID base would otherwise count main's history).
+    const commitCount =
+      originMainForBranch === undefined
+        ? await deps.gitOps.countCommitsBetween(input.dir, expectedSha, newSha)
+        : await deps.gitOps.countCommitsBetween(input.dir, expectedSha, newSha, {excludeShas: [originMainForBranch]})
     log(`Pushed ${commitCount} commit(s) to origin/${targetRef} as ${newSha.slice(0, 7)}. Local repo in sync.`)
 
     // qfg-5bjew.17 (rule 2.12): a server that predates change requests strips
