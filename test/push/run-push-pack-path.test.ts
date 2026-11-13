@@ -621,6 +621,148 @@ describe('runPush pack-push dispatch (qfg-7429.4)', () => {
     })
   })
 
+  // qfg-5bjew.9: branches are updated by `git merge origin/main`, then
+  // `qfg push`. The pack must leave main's objects out, a 409 must show the
+  // server's message (not "run qfg pull"), and the summary names the branch.
+  describe('branch push after merging origin/main (qfg-5bjew.9)', () => {
+    async function captureError(fn: () => Promise<unknown>): Promise<unknown> {
+      try {
+        await fn()
+      } catch (error) {
+        return error
+      }
+
+      return undefined
+    }
+
+    it('excludes origin/main from the pack on a non-main branch', async () => {
+      const dir = setUpDir()
+      try {
+        const originMain = 'aaaa22222222222222222222222222222222aaaa'
+        const remoteBranchSha = 'cafe11111111111111111111111111111111cafe'
+        const calls: unknown[][] = []
+        const {deps} = makeDeps({
+          branch: {kind: 'branch', name: 'feature/awesome'},
+          remoteBranchSha,
+          expectedSha: originMain,
+          gitOps: {
+            async buildPack(...args: unknown[]) {
+              calls.push(args)
+              return FAKE_PACK
+            },
+          },
+        })
+        await runPush(baseInput(dir), deps)
+        expect(calls).to.have.length(1)
+        expect(calls[0]).to.deep.equal([dir, remoteBranchSha, FAKE_NEW_SHA, {excludeShas: [originMain]}])
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('builds the main pack exactly as before (no extra excludes)', async () => {
+      const dir = setUpDir()
+      try {
+        const calls: unknown[][] = []
+        const {deps} = makeDeps({
+          gitOps: {
+            async buildPack(...args: unknown[]) {
+              calls.push(args)
+              return FAKE_PACK
+            },
+          },
+        })
+        await runPush(baseInput(dir), deps)
+        expect(calls).to.deep.equal([[dir, FAKE_EXPECTED_SHA, FAKE_NEW_SHA]])
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('prints the server message on a branch 409, not the qfg pull hint', async () => {
+      const dir = setUpDir()
+      try {
+        const serverMessage =
+          'Origin refs/heads/feature/awesome moved. Expected cafe, got beef. Merge origin/main into the branch and push again.'
+        const {deps} = makeDeps({
+          branch: {kind: 'branch', name: 'feature/awesome'},
+          remoteBranchSha: 'cafe11111111111111111111111111111111cafe',
+          packResult: {kind: 'conflict', message: serverMessage},
+        })
+        const caught = await captureError(() => runPush(baseInput(dir), deps))
+        expect(caught).to.be.instanceOf(PushFatalError)
+        expect((caught as PushFatalError).code).to.equal('CONFLICT')
+        const {message} = caught as PushFatalError
+        expect(message).to.include(serverMessage)
+        expect(message).to.include('feature/awesome')
+        expect(message).to.not.include('qfg pull')
+        expect(message).to.not.include('Remote moved while preparing this push')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('prints the server message verbatim when the branch was deleted', async () => {
+      const dir = setUpDir()
+      try {
+        const serverMessage = 'Branch feature/awesome no longer exists on the server (it was merged or closed).'
+        const {deps} = makeDeps({
+          branch: {kind: 'branch', name: 'feature/awesome'},
+          remoteBranchSha: 'cafe11111111111111111111111111111111cafe',
+          packResult: {kind: 'conflict', message: serverMessage},
+        })
+        const caught = await captureError(() => runPush(baseInput(dir), deps))
+        expect(caught).to.be.instanceOf(PushFatalError)
+        expect((caught as PushFatalError).message).to.include(serverMessage)
+        expect((caught as PushFatalError).message).to.not.include('qfg pull')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('keeps the main 409 wording unchanged', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps} = makeDeps({
+          packResult: {kind: 'conflict', message: 'OriginMoved: expected x, current y'},
+        })
+        const caught = await captureError(() => runPush(baseInput(dir), deps))
+        expect((caught as PushFatalError).message).to.equal(
+          'Remote moved while preparing this push (OriginMoved: expected x, current y). Run `qfg pull` and retry.',
+        )
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('names the current branch in the change summary', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({
+          branch: {kind: 'branch', name: 'feature/awesome'},
+          remoteBranchSha: 'cafe11111111111111111111111111111111cafe',
+        })
+        await runPush(baseInput(dir), deps)
+        const branchLine = captured.logs.join('\n').match(/Branch:\s+(\S+)/)
+        expect(branchLine, captured.logs.join('\n')).to.not.equal(null)
+        expect(branchLine?.[1]).to.equal('feature/awesome')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+
+    it('still names main in the change summary on a main push', async () => {
+      const dir = setUpDir()
+      try {
+        const {deps, captured} = makeDeps({})
+        await runPush(baseInput(dir), deps)
+        expect(captured.logs.join('\n').match(/Branch:\s+(\S+)/)?.[1]).to.equal('main')
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true})
+      }
+    })
+  })
+
   describe('bare-path fallback', () => {
     it('uses the existing configs.push wire when the dir has no .git/', async () => {
       const dir = setUpDir()

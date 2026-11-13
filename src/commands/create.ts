@@ -53,7 +53,7 @@ For a percentage rollout (gradual rollout / A/B test / canary deploy), use:
 
 Or edit the JSON config file directly for complex targeting rules:
   qfg config-schema          # full operator reference + examples
-  qfg pull --dir ./config    # clone workspace, then edit JSON and git push
+  qfg pull --dir ./config    # clone workspace, then edit JSON, commit, and qfg push
 
 Log levels:
   qfg create log-level.my-app --type log_level --value WARN

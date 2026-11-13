@@ -26,7 +26,7 @@ import {readWorkspaceSlug, tryParseWorkspacePin, writeWorkspaceSlug} from '../ut
 import {checkIdentity} from './identity-check.js'
 import {confirmTypedSlug, confirmYesNo} from './confirm.js'
 import {FileDelta, summarizeDiff} from './diff-summary.js'
-import {type CurrentBranchResult, ZERO_OID} from './git-pack.js'
+import {type BuildPackOptions, type CurrentBranchResult, ZERO_OID} from './git-pack.js'
 
 /** All-zeros object id, the git-protocol convention for "no such ref". */
 
@@ -45,7 +45,7 @@ export interface GitOps {
    * open Q #7; throws on overflow so callers see a concrete error
    * before any HTTP traffic.
    */
-  buildPack(dir: string, expectedSha: string, newSha: string): Promise<Uint8Array>
+  buildPack(dir: string, expectedSha: string, newSha: string, options?: BuildPackOptions): Promise<Uint8Array>
   /**
    * Pack-push — count of commits in `<expectedSha>..<newSha>`. Drives
    * the final "Pushed N commit(s)" log line. Returns 0 for a no-op
@@ -538,7 +538,7 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     summary.renderText({
       workspaceSlug: backend.workspaceSlug,
       repoUrl: stripAuth(backend.repoUrl),
-      branch: 'main',
+      branch: currentBranch?.kind === 'branch' ? currentBranch.name : 'main',
       localDir: input.dir,
     }),
   )
@@ -580,7 +580,14 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
     const newSha = await deps.gitOps.getHeadSha(input.dir)
 
     log('Building pack...')
-    const pack = await deps.gitOps.buildPack(input.dir, expectedSha, newSha)
+    // qfg-5bjew.9: a branch is updated by `git merge origin/main`, so its
+    // new commits reach main's history. The server already has main, so
+    // leave origin/main's objects out. A main push is unchanged.
+    const originMainForBranch = branchName === 'main' ? undefined : await deps.gitOps.getOriginMainSha(input.dir)
+    const pack =
+      originMainForBranch === undefined
+        ? await deps.gitOps.buildPack(input.dir, expectedSha, newSha)
+        : await deps.gitOps.buildPack(input.dir, expectedSha, newSha, {excludeShas: [originMainForBranch]})
 
     // §6 / qfg-7429.5: tell the server whether the local clone has a
     // non-Quonfig upstream so it can decide whether to attach a
@@ -658,6 +665,13 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
           `Legacy orphan-commit divergence with origin/${branchName}. Run \`git reset --hard origin/${branchName}\` and retry.`,
           'CONFLICT_LEGACY_DIVERGE',
         )
+      }
+
+      // qfg-5bjew.9: a branch is updated by merging origin/main, not by
+      // `qfg pull` (which only updates main). The server's message carries
+      // the right advice for each case (moved tip, deleted branch).
+      if (branchName !== 'main') {
+        throw new PushFatalError(`Push to branch ${branchName} was rejected: ${packResult.message}`, 'CONFLICT')
       }
 
       throw new PushFatalError(

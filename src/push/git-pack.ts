@@ -80,6 +80,13 @@ export class PackTooLargeError extends Error {
 }
 
 export interface BuildPackOptions {
+  /**
+   * More commits whose reachable objects the server already has. A branch
+   * push passes origin/main here: after `git merge origin/main` the new
+   * merge commit's ancestry includes main's commits, and excluding only
+   * `expectedSha` would re-ship all of them (qfg-5bjew.9).
+   */
+  excludeShas?: string[]
   /** Override the size cap. Defaults to MAX_PACK_BYTES. */
   maxBytes?: number
 }
@@ -105,6 +112,10 @@ export interface BuildPackOptions {
  * (pack-objects' stdin takes revs and `--not` only, not `--remotes`, so
  * the refs are resolved with `git for-each-ref` first.)
  *
+ * `options.excludeShas` adds more commits to leave out. A branch push
+ * passes origin/main so a branch that merged origin/main does not re-ship
+ * main's objects, which the server already has (qfg-5bjew.9).
+ *
  * Returns an empty `Uint8Array` when `expectedSha === newSha` — there
  * are no new commits, so `pack-objects` would either error on stdin
  * with no candidate revs or produce an empty pack. Skipping the spawn
@@ -121,7 +132,8 @@ export async function buildPack(
   }
 
   const limit = options.maxBytes ?? MAX_PACK_BYTES
-  const excludes = expectedSha === ZERO_OID ? await originRefShas(dir) : [expectedSha]
+  const baseExcludes = expectedSha === ZERO_OID ? await originRefShas(dir) : [expectedSha]
+  const excludes = [...new Set([...baseExcludes, ...(options.excludeShas ?? [])])]
 
   return new Promise<Uint8Array>((resolve, reject) => {
     const env = {...process.env, ...GIT_SAFE_ENV}
