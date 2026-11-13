@@ -889,7 +889,7 @@ USAGE
   $ qfg cr show REF [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
 
 ARGUMENTS
-  REF  Change request number (7 or #7) or its branch name
+  REF  Change request number (7 or #7) or its branch name (refs/heads/<name> for a branch named like a number)
 
 FLAGS
   -w, --workspace=<value>  Workspace as <org>/<workspace> or a UUID (defaults to the workspace dir pin, then the active

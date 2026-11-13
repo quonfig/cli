@@ -153,6 +153,24 @@ describe('qfg cr (qfg-5bjew.17)', () => {
         expect(error.message).to.equal('Change request #404 not found in this workspace.')
       })
       .it('404 prints a clear message')
+
+    test
+      .stdout()
+      .stderr()
+      .command(['cr show', '99999999999'])
+      .catch((error) => {
+        expect(error.message).to.equal('Not a change request number: 99999999999')
+      })
+      .it('an out-of-range number is refused locally, never sent', () => {
+        expect(captured.get).to.have.length(0)
+      })
+
+    test
+      .stdout()
+      .command(['cr show', 'refs/heads/123'])
+      .it('a branch named like a number is looked up with refs/heads/', () => {
+        expect(captured.get).to.deep.equal([{workspaceId: WS, branch: '123'}])
+      })
   })
 
   describe('cr merge (T10)', () => {
