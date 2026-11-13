@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.10.0 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.10.0 darwin-arm64 node-v24.4.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -827,7 +827,7 @@ DESCRIPTION
 
   Or edit the JSON config file directly for complex targeting rules:
   qfg config-schema          # full operator reference + examples
-  qfg pull --dir ./config    # clone workspace, then edit JSON and git push
+  qfg pull --dir ./config    # clone workspace, then edit JSON, commit, and qfg push
 
   Log levels:
   qfg create log-level.my-app --type log_level --value WARN
@@ -1833,7 +1833,14 @@ DESCRIPTION
 
   After editing files:
   qfg verify <dir>               # validate JSON before pushing
-  git -C <dir> add -A && git -C <dir> commit -m "feat: ..." && git -C <dir> push
+  git -C <dir> add -A && git -C <dir> commit -m "feat: ..."
+  qfg push --dir <dir>           # push with qfg push, not git push
+
+  main is append-only. To update a branch other than main, merge main into it
+  and push again:
+  git -C <dir> fetch origin && git -C <dir> merge origin/main
+  qfg push --dir <dir>
+  Rewriting a branch (rebase, force push) is not supported yet.
 
   CLI shortcuts (no JSON editing needed for simple cases):
   qfg set-rollout my.flag --environment production --true-percent 20

@@ -229,6 +229,58 @@ describe('git-pack: buildPack', () => {
     }
   })
 
+  // qfg-5bjew.9: a branch is updated by `git merge origin/main`. The merge
+  // commit's ancestry then includes main's new commits, which the server
+  // already has. Excluding only expectedSha (origin/<branch>) would re-ship
+  // them all; run-push passes origin/main in `excludeShas` for branch pushes.
+  it('leaves origin/main objects out of the pack for a branch that merged origin/main', async () => {
+    const server = tmpDir('qfg-pack-server-')
+    const src = makeRepo()
+    const other = tmpDir('qfg-pack-other-')
+    try {
+      run(server, 'init', '--bare', '--initial-branch=main')
+      run(src, 'remote', 'add', 'origin', server)
+      run(src, 'push', '-q', 'origin', 'main')
+
+      // The branch is pushed once: origin/feature = branchTip.
+      run(src, 'checkout', '-q', '-b', 'feature')
+      const branchTip = commitFile(src, 'configs/a.json', '{"a":1}\n', 'add a')
+      run(src, 'push', '-q', 'origin', 'feature')
+
+      // Someone else advances main on the server.
+      fs.rmSync(other, {recursive: true, force: true})
+      execFileSync('git', ['clone', '-q', server, other])
+      run(other, 'config', 'user.email', 'other@test')
+      run(other, 'config', 'user.name', 'Other')
+      commitFile(other, 'configs/b.json', '{"b":2}\n', 'add b on main')
+      run(other, 'push', '-q', 'origin', 'main')
+
+      // The branch merges origin/main in.
+      run(src, 'fetch', '-q', 'origin')
+      run(src, 'merge', '-q', '--no-edit', 'origin/main')
+      const mergeSha = run(src, 'rev-parse', 'HEAD')
+      const originMain = run(src, 'rev-parse', 'origin/main')
+
+      const pack = await buildPack(src, branchTip, mergeSha, {excludeShas: [originMain]})
+
+      // Only the merge commit, its root tree and its configs/ subtree are
+      // new. Main's commit, trees and the b.json blob are left out.
+      expect(Buffer.from(pack).readUInt32BE(8)).to.equal(3)
+
+      // The server (which has main and the branch) can ingest it.
+      const ingest = spawnSync('git', ['-C', server, 'index-pack', '--strict', '--stdin'], {
+        input: Buffer.from(pack),
+        encoding: 'buffer',
+      })
+      expect(ingest.status, ingest.stderr?.toString()).to.equal(0)
+      expect(spawnSync('git', ['-C', server, 'cat-file', '-e', mergeSha]).status).to.equal(0)
+    } finally {
+      fs.rmSync(src, {recursive: true, force: true})
+      fs.rmSync(server, {recursive: true, force: true})
+      fs.rmSync(other, {recursive: true, force: true})
+    }
+  })
+
   it('packs the full history for the zero OID when there are no origin refs', async () => {
     const ZERO_OID = '0000000000000000000000000000000000000000'
     const src = makeRepo()
