@@ -583,7 +583,9 @@ To target specific organizations or users, write rules on their KEY
     const errMsg =
       request.status === 400
         ? `Failed to change default: ${request.status} -- is ${shownValue || envVar} a valid value?`
-        : `Failed to change default: ${request.status}`
+        : request.status === 403 && request.serverMessage
+          ? `Failed to change default: ${request.status}: ${request.serverMessage}`
+          : `Failed to change default: ${request.status}`
 
     return this.err(errMsg, {key, serverError: request.error})
   }

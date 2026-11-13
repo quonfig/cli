@@ -135,6 +135,10 @@ script doesn't need to know which env it's running in.
 * [`qfg config-schema`](#qfg-config-schema)
 * [`qfg contexts`](#qfg-contexts)
 * [`qfg contexts search CONTEXTTYPE QUERY`](#qfg-contexts-search-contexttype-query)
+* [`qfg cr close NUMBER`](#qfg-cr-close-number)
+* [`qfg cr list`](#qfg-cr-list)
+* [`qfg cr merge NUMBER`](#qfg-cr-merge-number)
+* [`qfg cr show REF`](#qfg-cr-show-ref)
 * [`qfg create NAME`](#qfg-create-name)
 * [`qfg delete NAME`](#qfg-delete-name)
 * [`qfg environments`](#qfg-environments)
@@ -759,6 +763,161 @@ EXAMPLES
 ```
 
 _See code: [src/commands/contexts/search.ts](https://github.com/quonfig/cli/blob/v0.10.0/src/commands/contexts/search.ts)_
+
+## `qfg cr close NUMBER`
+
+Close a change request without merging it. Nothing goes live.
+
+```
+USAGE
+  $ qfg cr close NUMBER [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--note <value>]
+
+ARGUMENTS
+  NUMBER  Change request number (for example 7 or #7)
+
+FLAGS
+  -w, --workspace=<value>  Workspace as <org>/<workspace> or a UUID (defaults to the workspace dir pin, then the active
+                           profile)
+      --note=<value>       Why it was closed (shown on the change request)
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Close a change request without merging it. Nothing goes live.
+
+  The proposer can always close their own request; anyone else needs the
+  permissions a merge of it would need. The branch is deleted on the server if
+  it still points at the proposed commit.
+
+EXAMPLES
+  $ qfg cr close 7
+
+  $ qfg cr close 7 --note "superseded by #8"
+```
+
+_See code: [src/commands/cr/close.ts](https://github.com/quonfig/cli/blob/v0.10.0/src/commands/cr/close.ts)_
+
+## `qfg cr list`
+
+List change requests in the workspace (open ones by default).
+
+```
+USAGE
+  $ qfg cr list [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--mine] [--status
+    open|merged|closed|all] [--limit <value>]
+
+FLAGS
+  -w, --workspace=<value>  Workspace as <org>/<workspace> or a UUID (defaults to the workspace dir pin, then the active
+                           profile)
+      --limit=<value>      Most rows to return (1-200; server default 50)
+      --mine               Only change requests you proposed
+      --status=<option>    Which change requests to list (default: open)
+                           <options: open|merged|closed|all>
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  List change requests in the workspace (open ones by default).
+
+  A change request is a proposed change on a branch (qfg push --propose). It is
+  not live until someone with rights merges it (qfg cr merge).
+
+EXAMPLES
+  $ qfg cr list
+
+  $ qfg cr list --mine
+
+  $ qfg cr list --status merged --limit 10 --json
+```
+
+_See code: [src/commands/cr/list.ts](https://github.com/quonfig/cli/blob/v0.10.0/src/commands/cr/list.ts)_
+
+## `qfg cr merge NUMBER`
+
+Merge a change request into main. It goes live.
+
+```
+USAGE
+  $ qfg cr merge NUMBER [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--yes]
+
+ARGUMENTS
+  NUMBER  Change request number (for example 7 or #7)
+
+FLAGS
+  -w, --workspace=<value>  Workspace as <org>/<workspace> or a UUID (defaults to the workspace dir pin, then the active
+                           profile)
+      --yes                Skip the confirmation prompt
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Merge a change request into main. It goes live.
+
+  Shows the changes that would land, asks for confirmation, then merges only if
+  the branch still points at the commit you were shown (if the proposer pushed
+  since, nothing is merged and you are asked to look again). The server checks
+  your permissions on every changed file against main as it is now.
+
+  Agents: never merge a change request you did not author without a human telling you to.
+
+EXAMPLES
+  $ qfg cr merge 7
+
+  $ qfg cr merge 7 --yes
+```
+
+_See code: [src/commands/cr/merge.ts](https://github.com/quonfig/cli/blob/v0.10.0/src/commands/cr/merge.ts)_
+
+## `qfg cr show REF`
+
+Show a change request: the changes a merge would land (read these first),
+
+```
+USAGE
+  $ qfg cr show REF [--json] [--interactive] [--no-color] [--verbose] [-w <value>]
+
+ARGUMENTS
+  REF  Change request number (7 or #7) or its branch name
+
+FLAGS
+  -w, --workspace=<value>  Workspace as <org>/<workspace> or a UUID (defaults to the workspace dir pin, then the active
+                           profile)
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Show a change request: the changes a merge would land (read these first),
+  then its status, who proposed it, conflicts with main, and whether you can
+  merge or close it.
+
+  The title and description are the proposer's own words and are not checked
+  by Quonfig; the diff is what lands.
+
+EXAMPLES
+  $ qfg cr show 7
+
+  $ qfg cr show my-branch
+
+  $ qfg cr show 7 --json
+```
+
+_See code: [src/commands/cr/show.ts](https://github.com/quonfig/cli/blob/v0.10.0/src/commands/cr/show.ts)_
 
 ## `qfg create NAME`
 
@@ -1861,16 +2020,21 @@ Push local config changes up to your workspace on Quonfig cloud.
 ```
 USAGE
   $ qfg push [--json] [--interactive] [--no-color] [--verbose] [--dir <value>] [-w <value>] [--yes]
-    [--skip-validate] [--no-pin-write] [-m <value>]
+    [--skip-validate] [--no-pin-write] [-m <value>] [--title <value> --propose] [--description <value> ]
 
 FLAGS
-  -m, --message=<value>    Commit message for bare-path pushes (ignored on clone-path; push what is already committed)
-  -w, --workspace=<value>  Workspace slug or UUID (defaults to active profile)
-      --dir=<value>        Local directory to push (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR
-                           env var)
-      --no-pin-write       Do not offer to write workspace slug into quonfig.json on success
-      --skip-validate      Skip `qfg validate` preflight
-      --yes                Skip the standard Y/N confirm. Never skips typed-slug prompts.
+  -m, --message=<value>      Commit message for bare-path pushes (ignored on clone-path; push what is already committed)
+  -w, --workspace=<value>    Workspace slug or UUID (defaults to active profile)
+      --description=<value>  Change request description (with --propose)
+      --dir=<value>          Local directory to push (defaults to cwd / nearest ancestor with quonfig.json / QUONFIG_DIR
+                             env var)
+      --no-pin-write         Do not offer to write workspace slug into quonfig.json on success
+      --propose              Push this branch as a change request instead of going live. Needs a clone on a branch other
+                             than main. No --yes needed: nothing goes live until someone with rights merges it (qfg cr
+                             merge).
+      --skip-validate        Skip `qfg validate` preflight
+      --title=<value>        Change request title (with --propose; defaults on the server)
+      --yes                  Skip the standard Y/N confirm. Never skips typed-slug prompts.
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -1893,12 +2057,19 @@ DESCRIPTION
   qfg push --dir ./our-config --yes        # skip normal Y/N (never skips typed-slug)
   qfg push --dir ./our-config --skip-validate
 
+  Propose instead of going live (a change request; someone with rights merges it):
+  git switch -c my-change && git commit -am "..."
+  qfg push --propose --title "Turn on checkout for beta"
+  qfg cr show <n>
+
 EXAMPLES
   $ qfg push --dir ./our-config
 
   $ qfg push --workspace acme-prod --dir ./our-config
 
   $ qfg push --dir ./our-config --yes
+
+  $ qfg push --propose --title "Turn on checkout for beta"
 ```
 
 _See code: [src/commands/push.ts](https://github.com/quonfig/cli/blob/v0.10.0/src/commands/push.ts)_

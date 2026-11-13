@@ -255,12 +255,16 @@ export const unwrapRequest = async (command: APICommand, promise: Promise<Respon
     return {json, ok: true, status: request.status}
   }
 
-  // Handle 403 with a user-friendly message
+  // Handle 403 with a user-friendly message. The generic text is unchanged;
+  // the server's own message (which names the missing permission) rides
+  // along as `serverMessage` for commands that print it (qfg-5bjew.17).
   if (request.status === 403) {
+    const serverMessage = forbiddenServerMessage(await request.text().catch(() => ''))
     return {
       error: {error: 'You do not have permission to perform this action. Please check your workspace permissions.'},
       ok: false,
       status: request.status,
+      ...(serverMessage ? {serverMessage} : {}),
     }
   }
 
@@ -271,6 +275,15 @@ export const unwrapRequest = async (command: APICommand, promise: Promise<Respon
   }
 
   return {error, ok: false, status: request.status}
+}
+
+/** `message` from an oRPC error body (`{json: {message}}` or `{message}`), if any. */
+function forbiddenServerMessage(text: string): string | undefined {
+  const parsed = jsonMaybe(text)
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const body = parsed as {json?: {message?: unknown}; message?: unknown}
+  const message = body.json && typeof body.json === 'object' ? body.json.message : body.message
+  return typeof message === 'string' && message.trim() ? message.trim() : undefined
 }
 
 export default getClient

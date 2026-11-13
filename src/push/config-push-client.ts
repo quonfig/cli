@@ -19,6 +19,7 @@
 import type {
   ConfigPushInput,
   ConfigPushResult,
+  GitPushChangeRequest,
   GitPushInput,
   GitPushResult,
   PushDenial,
@@ -115,6 +116,8 @@ export const callConfigsGitPush = async (input: GitPushInput, orgSlug: string): 
     newSha: input.newSha,
     pack: Buffer.from(input.pack).toString('base64'),
     hasUpstreamRemote: input.hasUpstreamRemote,
+    // qfg-5bjew.17: only when proposing, so a plain push's payload is unchanged.
+    ...(input.propose ? {propose: input.propose} : {}),
   }
 
   const res = await fetch(`${apiUrl}/api/v1/configs/gitPush`, {
@@ -127,13 +130,14 @@ export const callConfigsGitPush = async (input: GitPushInput, orgSlug: string): 
   })
 
   if (res.ok) {
-    const body = (await res.json()) as OrpcEnvelope<{commitSha: string; ref: string}>
+    const body = (await res.json()) as OrpcEnvelope<{changeRequest?: unknown; commitSha: string; ref: string}>
     const commitSha = body.json?.commitSha
     const ref = body.json?.ref
     if (!commitSha || !ref) {
       throw new Error(`configs.gitPush returned 200 but missing commitSha/ref (body=${JSON.stringify(body)})`)
     }
-    return {kind: 'success', commitSha, ref}
+    const changeRequest = extractChangeRequest(body.json?.changeRequest)
+    return changeRequest ? {kind: 'success', commitSha, ref, changeRequest} : {kind: 'success', commitSha, ref}
   }
 
   const text = await res.text().catch(() => '')
@@ -193,6 +197,22 @@ function extractGitPushDenials(
     })
   }
   return out as never
+}
+
+/**
+ * qfg-5bjew.17: the change request a branch push opened or updated. Kept
+ * only with a positive integer number; anything else counts as absent, so a
+ * propose against a server that did not open one fails (rule 2.12).
+ */
+function extractChangeRequest(raw: unknown): GitPushChangeRequest | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as {number?: unknown; status?: unknown; url?: unknown}
+  if (typeof r.number !== 'number' || !Number.isInteger(r.number) || r.number <= 0) return undefined
+  return {
+    number: r.number,
+    url: typeof r.url === 'string' ? r.url : '',
+    status: typeof r.status === 'string' ? r.status : 'open',
+  }
 }
 
 function extractSuggestedRecovery(data: unknown): SuggestedRecovery | undefined {
