@@ -379,12 +379,13 @@ export function buildRealDeps(
       const {buildPack} = await import('../push/git-pack.js')
       return buildPack(dir, expectedSha, newSha)
     },
-    async countCommitsBetween(dir, expectedSha, newSha) {
+    async countCommitsBetween(dir, expectedSha, newSha, options) {
       if (expectedSha === newSha) return 0
       const ZERO = '0000000000000000000000000000000000000000'
-      const range = expectedSha === ZERO ? newSha : `${expectedSha}..${newSha}`
+      const range = expectedSha === ZERO ? [newSha] : [`${expectedSha}..${newSha}`]
+      const excludes = (options?.excludeShas ?? []).map((sha) => `^${sha}`)
       try {
-        const {stdout} = await runGit(['-C', dir, 'rev-list', '--count', range])
+        const {stdout} = await runGit(['-C', dir, 'rev-list', '--count', ...range, ...excludes])
         return Number.parseInt(stdout.trim(), 10) || 0
       } catch {
         return 0
