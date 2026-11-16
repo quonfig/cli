@@ -24,6 +24,10 @@ jobs:
         node_version: [20.9.0, lts/*, latest]
       fail-fast: false
     runs-on: ${{ matrix.os }}
+    # A healthy leg takes 2-5 min. Without a cap, a hung Windows test step
+    # (seen 2026-11-16 on windows/20.9.0) sits until GitHub's 6h default, and
+    # force-cancelling it loses the log. The cap fails the leg in 15 min instead.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
