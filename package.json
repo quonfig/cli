@@ -86,6 +86,11 @@
     "topicSeparator": " ",
     "helpClass": "./dist/help",
     "stacktrace": false,
+    "topics": {
+      "cr": {
+        "description": "Review, merge, and close change requests (proposed config changes waiting to go live)."
+      }
+    },
     "hooks": {
       "init": "./dist/hooks/init/friction-log"
     }
