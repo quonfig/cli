@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.11.0 - 2026-11-16
+
+- **feat(cr): change requests from a clone.** On a branch other than `main`, `qfg push --propose [--title] [--description]` pushes the branch and opens a change request, or updates the one already open for it. It prints the request number and link, and says the change is not live until someone with rights merges it. `--propose` on `main` refuses and prints the git commands to move your unpushed commits to a branch. A plain push to a branch with an open request says it updated that request. (qfg-5bjew.17)
+
+- **feat(cr): `qfg cr list`, `qfg cr show <n>`, `qfg cr merge <n>` and `qfg cr close <n>`**, all with `--json`. `show` leads with the computed diff and any conflicts with `main`. `merge` shows what will land, asks to confirm, and refuses if the request changed since it was shown. (qfg-5bjew.17)
+
+- **feat(push): a refused push to `main` says how to propose instead.** After the unchanged denial lines, the CLI prints how to push to a branch and run `qfg push --propose`. `--json` adds `proposable: true`. (qfg-5bjew.17)
+
+- **fix(push): branch pushes.** A branch that ran `git merge origin/main` no longer re-uploads main's objects. A refused branch push shows the server's reason (for example: merge `origin/main` and push again, or only the proposer can push to this branch) instead of "Run `qfg pull` and retry". The summary names the branch, and "Pushed N commit(s)" counts only the commits not on `origin/main`. Pushes to `main` are unchanged. (qfg-5bjew.9, qfg-5bjew.24)
+
+- **fix(set-default): a 403 prints the server's message.** (qfg-5bjew.17)
+
+- **docs: `qfg pull --help` and `qfg create --help`** explain that `main` is append-only, how to update a branch with `git merge origin/main` and `qfg push`, and that rewriting a branch is not supported yet. (qfg-5bjew.9)
+
 ## 0.10.0 - 2026-11-12
 
 - **fix(set-rollout): re-running `qfg set-rollout` keeps the rollout's sticky property (behavior change).** `--hash-by` defaulted to `user.key` and was always written, so changing the percentage on a rollout that bucketed on another property (such as `organization.key`), or on a non-sticky one, reset it to `user.key` and reshuffled every user. Without `--hash-by`, the existing rollout's property is now kept; a new rollout still defaults to `user.key`. `--hash-by ""` authors a non-sticky split. `--json` `hashByPropertyName` reports the value written. (qfg-cs4vu)
