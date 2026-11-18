@@ -12,8 +12,9 @@
  *   `[encrypted, changed]` when its ciphertext is not on the before side, so
  *   an untouched secret produces no diff and a changed one shows as changed.
  *   The web page compares the ciphertext at the same JSON path; this compares
- *   it against every ciphertext on the before side. Ciphertext is not reused
- *   for different plaintext, so the two differ only when a secret moves.
+ *   it against every ciphertext on the before side. The two differ only for a
+ *   secret that moved (here: [encrypted]) or one added at a path the before
+ *   side lacks (here: [encrypted, changed]); neither ever shows ciphertext.
  * - Confidential plaintext (`type` is a string, `confidential: true`, no
  *   `decryptWith`, `type` is not `provided`) shows as
  *   `[confidential *****<md5[0:5]>, N chars]`, the audit trail's form.
