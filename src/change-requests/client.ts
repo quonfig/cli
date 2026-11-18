@@ -12,6 +12,8 @@ import type {
   ChangeRequestSummary,
 } from './types.js'
 
+import type {ProposedChangeRequest} from './propose.js'
+
 import {getApiUrl} from '../util/domain-urls.js'
 import {getValidAccessTokenForOrgSlug} from '../util/get-valid-token.js'
 
@@ -30,7 +32,7 @@ export class ChangeRequestApiError extends Error {
   }
 }
 
-type Route = 'close' | 'get' | 'list' | 'merge'
+type Route = 'close' | 'get' | 'list' | 'merge' | 'propose'
 
 export async function postChangeRequestRoute<T>(
   route: Route,
@@ -90,3 +92,31 @@ export const mergeChangeRequest = (
 
 export const closeChangeRequest = (input: {note?: string; number: number; workspaceId: string}, orgSlug: string) =>
   postChangeRequestRoute<ChangeRequestCloseResult>('close', {...input}, orgSlug)
+
+/**
+ * `changeRequests.propose` (qfg-5bjew.37), for callers without an
+ * APICommand client (the bare-path `qfg push --propose`). Errors come back
+ * as a value so the caller can tell an old server (404) from a refusal.
+ */
+export async function proposeChangeRequest(
+  input: Record<string, unknown>,
+  orgSlug: string,
+): Promise<
+  | {changeRequest?: ProposedChangeRequest; kind: 'success'; message?: string}
+  | {data?: Record<string, unknown>; kind: 'error'; message?: string; status: number}
+> {
+  try {
+    const body = await postChangeRequestRoute<{changeRequest?: ProposedChangeRequest; message?: string}>(
+      'propose',
+      input,
+      orgSlug,
+    )
+    return {kind: 'success', ...(body && typeof body === 'object' ? body : {})}
+  } catch (error) {
+    if (error instanceof ChangeRequestApiError) {
+      return {kind: 'error', status: error.status, message: error.message, ...(error.data ? {data: error.data} : {})}
+    }
+
+    throw error
+  }
+}

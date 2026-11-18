@@ -261,7 +261,7 @@ export function proposeFailureMessage(
   status: number,
   message: string | undefined,
   data: Record<string, unknown> | undefined,
-  key: string | undefined,
+  key?: string,
 ): string {
   if (isMissingRoute(status, message)) return SERVER_TOO_OLD
   if (status === 409 && data?.reason === 'ChangedInChangeRequest') {
