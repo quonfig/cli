@@ -526,7 +526,7 @@ describe('resolve-workspace org/ws addressing', () => {
 
     expect(listCalled).to.equal(true)
     expect(result.workspaceId).to.equal('ws-mhw-prod-uuid')
-    expect(result.orgSlug).to.equal('')
+    expect(result.orgSlug).to.equal('mhw-works')
   })
 
   it('lists org-qualified pins in the API-key not-found error', async () => {
