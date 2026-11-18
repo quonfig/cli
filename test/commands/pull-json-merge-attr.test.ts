@@ -26,6 +26,10 @@ async function git(dir: string, ...args: string[]): Promise<string> {
   return stdout
 }
 
+// A flag file whose two edits below touch different lines, so a text merge
+// would combine them silently.
+const FLAG_BASE = '{\n  "a": 1,\n  "pad1": 0,\n  "pad2": 0,\n  "pad3": 0,\n  "b": 1\n}\n'
+
 const attributeLines = (clone: string) =>
   fs
     .readFileSync(path.join(clone, '.git', 'info', 'attributes'), 'utf8')
@@ -50,6 +54,7 @@ describe('qfg pull writes *.json -merge (qfg-5bjew.28)', function () {
     await git(seed, 'config', 'user.name', 'Test')
     await git(seed, 'config', 'commit.gpgsign', 'false')
     fs.writeFileSync(path.join(seed, 'quonfig.json'), '{"workspace":"test-organization/ws"}\n')
+    fs.writeFileSync(path.join(seed, 'flag.json'), FLAG_BASE)
     await git(seed, 'add', '-A')
     await git(seed, 'commit', '-q', '-m', 'seed')
     await git(seed, 'push', '-q', bare, 'main')
@@ -95,5 +100,33 @@ describe('qfg pull writes *.json -merge (qfg-5bjew.28)', function () {
     .command(['pull', '--dir', clone])
     .it('a further pull does not add it again', () => {
       expect(attributeLines(clone)).to.have.length(1)
+    })
+
+  test
+    .do(async () => {
+      // main moves "a"; the clone has a local commit that moves "b".
+      const seed = path.join(root, 'seed')
+      fs.writeFileSync(path.join(seed, 'flag.json'), FLAG_BASE.replace('"a": 1', '"a": 9'))
+      await git(seed, 'commit', '-q', '-am', 'main edit')
+      await git(seed, 'push', '-q', bare, 'main')
+      await git(clone, 'config', 'user.email', 'test@quonfig.test')
+      await git(clone, 'config', 'user.name', 'Test')
+      await git(clone, 'config', 'commit.gpgsign', 'false')
+      fs.writeFileSync(path.join(clone, 'flag.json'), FLAG_BASE.replace('"b": 1', '"b": 2'))
+      await git(clone, 'commit', '-q', '-am', 'local edit')
+    })
+    .stdout()
+    .command(['pull', '--dir', clone, '--rebase'])
+    .catch(/Rebase paused/)
+    .it('pull --rebase stops on a both-sides JSON edit and says how to see the local side', (ctx) => {
+      expect(ctx.stdout).to.contain('flag.json')
+      // With -merge git writes no conflict markers: the file holds main's
+      // version only, so the guidance must not promise markers.
+      const onDisk = fs.readFileSync(path.join(clone, 'flag.json'), 'utf8')
+      expect(onDisk).to.not.contain('<<<<<<<')
+      expect(ctx.stdout).to.not.contain('pick the values you want; remove the git conflict markers')
+      expect(ctx.stdout).to.contain("holds only origin/main's version")
+      expect(ctx.stdout).to.contain('git -C ' + clone + ' show REBASE_HEAD:<file>')
+      expect(ctx.stdout).to.contain('rebase --skip')
     })
 })

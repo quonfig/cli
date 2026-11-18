@@ -103,7 +103,7 @@ export const JSON_NO_MERGE_ATTRIBUTE = '*.json -merge'
  * `.git/info/attributes`. That file is local to the clone and never
  * committed, so the workspace's stored files do not change. Appends the line
  * only when it is missing and never rewrites other lines. Resolves the path
- * through `git rev-parse --git-path`, so it also works in a linked worktree.
+ * through `git rev-parse --git-common-dir`, so it also works in a linked worktree.
  *
  * Returns true when it wrote the line, false when it was already there.
  */
@@ -111,8 +111,10 @@ export const ensureJsonNoMergeAttribute = async (dir: string): Promise<boolean> 
   const {mkdir, readFile, appendFile} = await import('node:fs/promises')
   const pathMod = await import('node:path')
 
-  const {stdout} = await runGit(['-C', dir, 'rev-parse', '--path-format=absolute', '--git-path', 'info/attributes'])
-  const file = stdout.trim()
+  // `--git-common-dir` (git 2.5+) rather than `--path-format=absolute`
+  // (git 2.31+). info/ lives in the common dir, also for a linked worktree.
+  const {stdout} = await runGit(['-C', dir, 'rev-parse', '--git-common-dir'])
+  const file = pathMod.join(pathMod.resolve(dir, stdout.trim()), 'info', 'attributes')
 
   let existing = ''
   try {
