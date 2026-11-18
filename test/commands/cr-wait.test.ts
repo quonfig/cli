@@ -84,7 +84,7 @@ describe('qfg cr wait (qfg-5bjew.37)', () => {
     .it('exits 4 on a conflict with main and prints the fix for a cr/ request', (ctx) => {
       expect(ctx.stdout).to.contain('Conflicts with main: feature-flags/checkout.json')
       expect(ctx.stdout).to.contain(
-        'Fix: close it and propose again from current main (qfg cr close 7, then run your change again with --propose).',
+        'Fix: close it and propose again from the current state of main (qfg cr close 7, then run your change again with --propose).',
       )
     })
 
