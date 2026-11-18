@@ -21,6 +21,7 @@ import {
   getRemoteUrl,
   getOriginMainSha,
   displayUrl,
+  ensureJsonNoMergeAttributeOrWarn,
 } from '../../util/git-ops.js'
 
 /**
@@ -177,6 +178,8 @@ export default class WorkspaceBootstrap extends BaseCommand {
       this.log(`Setting remote origin...`)
     }
     await gitSetRemote(resolvedDir, repoUrl)
+    // Make git stop on a flag JSON file changed on both sides (qfg-5bjew.28).
+    await ensureJsonNoMergeAttributeOrWarn(resolvedDir, (m) => this.warn(m))
 
     await gitFetch(resolvedDir)
 

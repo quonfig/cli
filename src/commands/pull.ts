@@ -24,6 +24,7 @@ import {
   displayUrl,
   addAndCommitFile,
   dirtyTrackedFiles,
+  ensureJsonNoMergeAttributeOrWarn,
 } from '../util/git-ops.js'
 import {findQuonfigRemote} from '../push/identity-check.js'
 
@@ -46,6 +47,12 @@ main is append-only. To update a branch other than main, merge main into it
 and push again:
   git -C <dir> fetch origin && git -C <dir> merge origin/main
   qfg push --dir <dir>
+Do not rely on git to combine edits inside a flag file: git merges line by
+line and can mix main's rules with yours without reporting a conflict. qfg
+pull sets "*.json -merge" in <dir>/.git/info/attributes, so in a qfg clone the
+merge stops on every JSON file changed on both sides. Resolve each of those
+files by hand (edit it to the rules you want, then git add and git commit), or
+close the change request and propose again from current main.
 Rewriting a branch (rebase, force push) is not supported yet.
 
 CLI shortcuts (no JSON editing needed for simple cases):
@@ -143,6 +150,9 @@ CLI shortcuts (no JSON editing needed for simple cases):
 
       // Update the remote URL to use current (possibly refreshed) token
       await gitSetRemote(resolvedDir, repoUrl)
+      // Make git stop on a flag JSON file changed on both sides of a merge
+      // (qfg-5bjew.28). Runs on every pull so older clones pick it up too.
+      await ensureJsonNoMergeAttributeOrWarn(resolvedDir, (m) => this.warn(m))
 
       // Note: we intentionally don't pre-check for untracked or modified files.
       // Plain `git pull` is fine with untracked files, and `git merge --ff-only`
@@ -241,6 +251,9 @@ CLI shortcuts (no JSON editing needed for simple cases):
       }
 
       this.log(`Cloned successfully into ${resolvedDir}`)
+      // Make git stop on a flag JSON file changed on both sides of a merge
+      // (qfg-5bjew.28). Runs on every pull so older clones pick it up too.
+      await ensureJsonNoMergeAttributeOrWarn(resolvedDir, (m) => this.warn(m))
     }
 
     // Write QUONFIG_DIR to ~/.quonfig/config if not set

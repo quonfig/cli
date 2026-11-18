@@ -87,6 +87,66 @@ export const gitClone = async (repoUrl: string, dir: string): Promise<void> => {
 }
 
 /**
+ * The git attribute qfg puts in every clone it manages (qfg-5bjew.28).
+ *
+ * git merges text files line by line, so `git merge origin/main` on a change
+ * request branch can combine main's edit and the branch's edit inside one flag
+ * JSON file (for example main's new criteria with the branch's value) without
+ * reporting a conflict, and the merged file then lands. `-merge` makes git
+ * stop with a CONFLICT on any JSON file changed on both sides; a file changed
+ * on one side still merges normally.
+ */
+export const JSON_NO_MERGE_ATTRIBUTE = '*.json -merge'
+
+/**
+ * Ensure `JSON_NO_MERGE_ATTRIBUTE` is a line of the clone's
+ * `.git/info/attributes`. That file is local to the clone and never
+ * committed, so the workspace's stored files do not change. Appends the line
+ * only when it is missing and never rewrites other lines. Resolves the path
+ * through `git rev-parse --git-path`, so it also works in a linked worktree.
+ *
+ * Returns true when it wrote the line, false when it was already there.
+ */
+export const ensureJsonNoMergeAttribute = async (dir: string): Promise<boolean> => {
+  const {mkdir, readFile, appendFile} = await import('node:fs/promises')
+  const pathMod = await import('node:path')
+
+  const {stdout} = await runGit(['-C', dir, 'rev-parse', '--path-format=absolute', '--git-path', 'info/attributes'])
+  const file = stdout.trim()
+
+  let existing = ''
+  try {
+    existing = await readFile(file, 'utf8')
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+
+  if (existing.split(/\r?\n/).some((line) => line.trim() === JSON_NO_MERGE_ATTRIBUTE)) return false
+
+  await mkdir(pathMod.dirname(file), {recursive: true})
+  const separator = existing.length > 0 && !existing.endsWith('\n') ? '\n' : ''
+  await appendFile(file, `${separator}${JSON_NO_MERGE_ATTRIBUTE}\n`, 'utf8')
+  return true
+}
+
+/**
+ * `ensureJsonNoMergeAttribute` for commands that create or refresh a clone
+ * (pull, sync, workspace bootstrap). A failure is passed to `warn` rather than
+ * thrown: the command's own work has not failed, but the user must know the
+ * clone is missing the attribute.
+ */
+export const ensureJsonNoMergeAttributeOrWarn = async (dir: string, warn: (message: string) => void): Promise<void> => {
+  try {
+    await ensureJsonNoMergeAttribute(dir)
+  } catch (error: unknown) {
+    warn(
+      `Could not add "${JSON_NO_MERGE_ATTRIBUTE}" to ${dir}/.git/info/attributes: ${String(error)}\n` +
+        `Without it, git merge can combine edits inside a flag file without reporting a conflict. Add the line by hand.`,
+    )
+  }
+}
+
+/**
  * True only when `dir` is itself the root of a git repo. Uses `--show-prefix`
  * (relative path from enclosing toplevel down to `dir`, empty when `dir` IS
  * the toplevel) to avoid cross-platform path-string pitfalls — see the
