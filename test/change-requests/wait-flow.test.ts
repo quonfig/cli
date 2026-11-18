@@ -73,7 +73,7 @@ describe('cr wait flow (qfg-5bjew.37)', () => {
     expect(result).to.include({outcome: 'conflict', exitCode: 4})
     expect(result.fix).to.equal(crConflictFix(12))
     expect(result.fix).to.equal(
-      'Fix: close it and propose again from current main (qfg cr close 12, then run your change again with --propose).',
+      'Fix: close it and propose again from the current state of main (qfg cr close 12, then run your change again with --propose).',
     )
   })
 

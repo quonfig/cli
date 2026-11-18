@@ -6,7 +6,17 @@
 
 import {expect} from 'chai'
 
-import {lineDiff, renderShow, sanitizeBlock, sanitizeLine} from '../../src/change-requests/render.js'
+import type {ChangeRequestDetail} from '../../src/change-requests/types.js'
+
+import {
+  CLONE_CONFLICT_FIX,
+  crConflictFix,
+  isServerBuiltBranch,
+  lineDiff,
+  renderShow,
+  sanitizeBlock,
+  sanitizeLine,
+} from '../../src/change-requests/render.js'
 
 const ESC = '\u001B'
 
@@ -122,6 +132,90 @@ describe('change-request rendering (qfg-5bjew.17)', () => {
         callerCanClose: true,
       })
       expect(lines.join('\n')).to.match(/changes a segment/)
+    })
+  })
+
+  // qfg-5bjew.39: requests the server built on cr/<n> (MCP, REST, web, or
+  // a write command with --propose and no clone).
+  describe('renderShow for server-built cr/<n> requests', () => {
+    const base = (over: Partial<ChangeRequestDetail> = {}): ChangeRequestDetail => ({
+      number: 12,
+      url: '/workspaces/w/change-requests/12',
+      title: 't',
+      status: 'open',
+      branch: 'cr/12',
+      headSha: 'c'.repeat(40),
+      baseSha: 'd'.repeat(40),
+      proposer: {label: 'Riley', email: null, channel: 'mcp'},
+      proposedByCaller: false,
+      createdAt: '2026-11-13T10:00:00.000Z',
+      updatedAt: '2026-11-13T10:00:00.000Z',
+      merged: null,
+      closed: null,
+      description: null,
+      mainSha: null,
+      mergeBase: null,
+      files: [],
+      filesSource: 'main',
+      mergeable: true,
+      blockedBy: null,
+      conflicts: [],
+      callerCanMerge: true,
+      callerDenials: [],
+      callerCanClose: true,
+      ...over,
+    })
+    const conflicted = {
+      mergeable: false,
+      filesSource: 'fork_point' as const,
+      blockedBy: {reason: 'conflict', conflicts: [{path: 'feature-flags/a.json', mainCommit: 'abcdef1234'}]},
+      conflicts: [{path: 'feature-flags/a.json', mainCommit: 'abcdef1234'}],
+      callerCanMerge: false,
+    }
+
+    it('isServerBuiltBranch: only cr/<positive int>', () => {
+      expect(isServerBuiltBranch('cr/12')).to.equal(true)
+      expect(isServerBuiltBranch('cr-smoke')).to.equal(false)
+      expect(isServerBuiltBranch('cr/012')).to.equal(false)
+      expect(isServerBuiltBranch('team/cr/1')).to.equal(false)
+    })
+
+    it('shows the channel and the cr/<n> branch as built by Quonfig', () => {
+      const text = renderShow(base()).join('\n')
+      expect(text).to.include('Proposed by Riley via mcp')
+      expect(text).to.match(/^Branch: cr\/12 \(built by Quonfig, no clone; head c{7}, base d{7}\)$/m)
+    })
+
+    it('a conflict says close and propose again from the current state, never merge main in', () => {
+      const lines = renderShow(base(conflicted))
+      expect(lines).to.include(crConflictFix(12))
+      const text = lines.join('\n')
+      expect(text).to.include('close it and propose again from the current state of main (qfg cr close 12')
+      expect(text).to.not.match(/merge main into/i)
+      expect(text).to.not.include('by hand')
+    })
+
+    it('a clone-pushed conflict keeps the resolve-by-hand fix', () => {
+      const lines = renderShow(base({...conflicted, branch: 'jeff/x'}))
+      expect(lines).to.include(CLONE_CONFLICT_FIX)
+      expect(lines.join('\n')).to.not.include('built by Quonfig')
+    })
+
+    it('the proposer sees how to add more (--cr, MCP propose_change_request with changeRequest)', () => {
+      const text = renderShow(base({proposedByCaller: true})).join('\n')
+      expect(text).to.include(
+        'Add more: run a qfg write command with --cr 12, or call the MCP tool propose_change_request with changeRequest: 12.',
+      )
+    })
+
+    it('no add-more hint for someone else, a closed request, or a clone branch', () => {
+      for (const over of [
+        {proposedByCaller: false},
+        {proposedByCaller: true, status: 'closed' as const, closed: {by: 'x', at: null, note: null}},
+        {proposedByCaller: true, branch: 'jeff/x'},
+      ]) {
+        expect(renderShow(base(over)).join('\n')).to.not.include('Add more')
+      }
     })
   })
 })

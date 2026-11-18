@@ -204,6 +204,31 @@ export function requiresText(detail: Pick<ChangeRequestDetail, 'callerDenials'>)
   return detail.callerDenials.map((d) => `${sanitizeLine(d.requiredPermission)} on ${sanitizeLine(d.path)}`).join(', ')
 }
 
+/**
+ * A server-built request lives on `cr/<n>` (MCP, REST, the web editor, or a
+ * write command with --propose and no clone). Clones cannot push under
+ * `cr/`, so the name says who built it (qfg-5bjew.39).
+ */
+export const isServerBuiltBranch = (branch: string): boolean => /^cr\/[1-9]\d*$/.test(branch)
+
+/** The server never merges main into `cr/<n>`: close it and propose again. */
+export const crConflictFix = (n: number): string =>
+  `Fix: close it and propose again from the current state of main (qfg cr close ${n}, then run your change again with --propose).`
+
+/** A request pushed from a clone (qfg-5bjew.28 text). */
+export const CLONE_CONFLICT_FIX =
+  "Fix: merge main into the branch and resolve each file main also changed by hand (git stops on it in a qfg clone; an automatic merge of flag JSON can silently undo main's edit), then push again. Or close this change request and propose again from current main."
+
+/** The conflict fix for this request's branch kind. */
+export const conflictFix = (detail: Pick<ChangeRequestDetail, 'branch' | 'number'>): string =>
+  isServerBuiltBranch(detail.branch) ? crConflictFix(detail.number) : CLONE_CONFLICT_FIX
+
+/** How the proposer adds more to server-built request #n. */
+export const addMoreHint = (n: number): string =>
+  `Add more: run a qfg write command with --cr ${n}, or call the MCP tool propose_change_request with changeRequest: ${n}.`
+
+const FIXABLE_BLOCKS = new Set(['conflict', 'multiple_merge_bases', 'no_merge_base'])
+
 const conflictLines = (detail: ChangeRequestDetail): string[] =>
   detail.conflicts.map(
     (c) => `Conflicts with main: ${sanitizeLine(c.path)} (changed in ${short(sanitizeLine(c.mainCommit))})`,
@@ -215,7 +240,7 @@ export function renderShow(detail: ChangeRequestDetail): string[] {
   lines.push(
     `Change request #${detail.number} [${detail.status}]`,
     `Title (as written by the proposer): ${sanitizeLine(detail.title)}`,
-    `Branch: ${sanitizeLine(detail.branch)} (head ${short(detail.headSha)}, base ${short(detail.baseSha)})`,
+    `Branch: ${sanitizeLine(detail.branch)} (${isServerBuiltBranch(detail.branch) ? 'built by Quonfig, no clone; ' : ''}head ${short(detail.headSha)}, base ${short(detail.baseSha)})`,
     proposerLine(detail),
   )
 
@@ -232,6 +257,8 @@ export function renderShow(detail: ChangeRequestDetail): string[] {
       `You can merge: ${detail.callerCanMerge ? 'yes' : `no${requires ? ` (Requires: ${requires})` : ''}`}`,
       `You can close: ${detail.callerCanClose ? 'yes' : 'no'}`,
     )
+    if (detail.blockedBy && FIXABLE_BLOCKS.has(detail.blockedBy.reason)) lines.push(conflictFix(detail))
+    if (detail.proposedByCaller && isServerBuiltBranch(detail.branch)) lines.push(addMoreHint(detail.number))
   }
 
   if (detail.status === 'merged' && detail.merged) {

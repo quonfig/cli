@@ -134,6 +134,42 @@ describe('qfg cr (qfg-5bjew.17)', () => {
         )
       })
 
+    // qfg-5bjew.39: a server-built cr/<n> request, seen by its proposer.
+    test
+      .add('server-built conflicted', () =>
+        server.use(
+          http.post(route('get'), () =>
+            HttpResponse.json({
+              json: detail({
+                branch: 'cr/7',
+                proposer: {label: 'Dana Kim', email: null, channel: 'mcp'},
+                proposedByCaller: true,
+                filesSource: 'fork_point',
+                mergeable: false,
+                blockedBy: {
+                  reason: 'conflict',
+                  conflicts: [{path: 'feature-flags/checkout.json', mainCommit: 'abcdef1234567890'}],
+                },
+                conflicts: [{path: 'feature-flags/checkout.json', mainCommit: 'abcdef1234567890'}],
+                callerCanMerge: false,
+              }),
+            }),
+          ),
+        ),
+      )
+      .stdout()
+      .command(['cr show', '7'])
+      .it('cr/<n>: channel, branch, close-and-propose-again fix, add-more hint', (ctx) => {
+        expect(ctx.stdout).to.contain('Proposed by Dana Kim via mcp (you)')
+        expect(ctx.stdout).to.contain('Branch: cr/7 (built by Quonfig, no clone;')
+        expect(ctx.stdout).to.contain(
+          'Fix: close it and propose again from the current state of main (qfg cr close 7, then run your change again with --propose).',
+        )
+        expect(ctx.stdout).to.not.match(/merge main into/i)
+        expect(ctx.stdout).to.contain('Add more: run a qfg write command with --cr 7')
+        expect(ctx.stdout).to.contain('propose_change_request with changeRequest: 7')
+      })
+
     test
       .stdout()
       .command(['cr show', '7', '--json'])

@@ -17,18 +17,14 @@ import type {ChangeRequestDetail} from './types.js'
 
 import {ChangeRequestApiError} from './client.js'
 import {CrCommandError} from './merge-flow.js'
+import {conflictFix} from './render.js'
 
 export type WaitOutcome = 'closed' | 'conflict' | 'merged' | 'timeout'
 
 export const WAIT_EXIT_CODES: Record<WaitOutcome, number> = {merged: 0, closed: 2, conflict: 4, timeout: 124}
 
-/** A server-built `cr/<n>` request is never rebased: close it and propose again. */
-export const crConflictFix = (n: number): string =>
-  `Fix: close it and propose again from current main (qfg cr close ${n}, then run your change again with --propose).`
-
-/** A request pushed from a clone (qfg-5bjew.28 text). */
-export const CLONE_CONFLICT_FIX =
-  "Fix: merge main into the branch and resolve each file main also changed by hand (git stops on it in a qfg clone; an automatic merge of flag JSON can silently undo main's edit), then push again. Or close this change request and propose again from current main."
+// The fix text lives with the rest of the cr rendering (qfg-5bjew.39).
+export {CLONE_CONFLICT_FIX, crConflictFix} from './render.js'
 
 export interface WaitDeps {
   get(): Promise<ChangeRequestDetail>
@@ -60,7 +56,7 @@ function settled(detail: ChangeRequestDetail): Omit<WaitResult, 'detail'> | unde
   if (detail.blockedBy?.reason === 'conflict') {
     return {
       exitCode: WAIT_EXIT_CODES.conflict,
-      fix: detail.branch.startsWith('cr/') ? crConflictFix(detail.number) : CLONE_CONFLICT_FIX,
+      fix: conflictFix(detail),
       outcome: 'conflict',
     }
   }
