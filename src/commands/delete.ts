@@ -1,5 +1,13 @@
 import {Args, Flags} from '@oclif/core'
 
+import {
+  failWithProposeHint,
+  loadCrBase,
+  parseProposeFlags,
+  proposalTypeFor,
+  proposeFlags,
+  submitProposal,
+} from '../change-requests/propose.js'
 import {APICommand} from '../index.js'
 import {checkRecentEvalsSafetyNudge, type SparklinesResult} from '../delete/safety-nudge.js'
 import {confirmTypedSlug, confirmYesNo} from '../push/confirm.js'
@@ -53,6 +61,10 @@ Confirmation is required:
   --yes                       skip the prompt (for scripts and CI)
   interactive (default)       you'll be asked to type the key name back
 
+To PROPOSE the delete instead (a change request: NOT LIVE until someone with
+rights merges it; no --yes needed):
+  qfg delete my.flag --propose
+
 Examples
   qfg delete my.flag --yes
   qfg delete my.flag                          # interactive: type the key back to confirm
@@ -65,12 +77,17 @@ Examples
 
   static flags = {
     yes: Flags.boolean({default: false, description: 'skip confirmation prompt'}),
+    ...proposeFlags,
   }
 
   static writesHostedWorkspace = true
 
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(Delete)
+
+    const propose = parseProposeFlags(flags)
+    if (!propose.ok) return this.err(propose.error)
+    const proposeOptions = propose.options
 
     // Auth happens through APICommand's apiClient (used below). This is just
     // a "logged in?" gate — any cached token answers that.
@@ -96,6 +113,26 @@ Examples
     const route = DELETE_ROUTES[item.type]
     if (!route) {
       return this.err(`Cannot delete ${key}: unsupported type "${item.type}". Supported: flag, config, log-level.`)
+    }
+
+    // qfg-5bjew.37: a proposed delete changes nothing live, so it needs no
+    // confirmation; the merge is the confirmation.
+    if (proposeOptions) {
+      const docType = proposalTypeFor(item.type)
+      if (!docType) return this.err(`Cannot propose deleting ${key}: unsupported type "${item.type}".`)
+      let token = item.version
+      if (proposeOptions.changeRequest !== undefined) {
+        const base = await loadCrBase(this, proposeOptions.changeRequest, docType, key)
+        if (base.inRequest) token = base.headSha
+      }
+
+      if (!token) return this.err(`Cannot propose deleting ${key}: the server did not say which version it read.`)
+
+      return submitProposal(this, {
+        changes: [{op: 'delete', type: docType, key, expectedCommitSha: String(token)}],
+        key,
+        options: proposeOptions,
+      })
     }
 
     if (!flags.yes) {
@@ -164,6 +201,15 @@ Examples
 
       if (res.status === 404) {
         return this.err(`${key} not found on the server (it may have been deleted by someone else).`)
+      }
+
+      // qfg-5bjew.37 (rule 2.11): a refused delete can be proposed instead.
+      if (res.status === 403) {
+        return failWithProposeHint(
+          this,
+          `Failed to delete ${key}: 403${res.serverMessage ? `: ${res.serverMessage}` : ''}`,
+          {key, serverError: res.error},
+        )
       }
 
       if (res.status === 409 && attempt === 1) {

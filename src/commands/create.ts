@@ -1,6 +1,13 @@
 import {Args, Flags} from '@oclif/core'
 import {ProvidedSource, ConfigValueType} from '@quonfig/node'
 
+import {
+  type ProposeOptions,
+  failWithProposeHint,
+  parseProposeFlags,
+  proposeFlags,
+  submitProposal,
+} from '../change-requests/propose.js'
 import {APICommand} from '../index.js'
 import type {ConfigValue} from '@quonfig/node'
 import {JsonObj} from '../result.js'
@@ -62,6 +69,11 @@ Log levels:
   # rules on the "quonfig-sdk-logging.key" context property (e.g.
   # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.
 
+To PROPOSE the new item instead of creating it (a change request: NOT LIVE
+until someone with rights merges it), add --propose (or --cr <n> to add it to
+your open request #n). A proposed create stores a plain value, so --secret,
+--confidential and --env-var cannot be proposed this way yet.
+
 When this flag has done its job, mark readyForCleanup: true in the UI and run \`qfg cleanup list\` to retire it.`
 
   static examples = [
@@ -97,6 +109,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     }),
     ...valueSourceFlags,
     ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
+    ...proposeFlags,
   }
 
   static writesHostedWorkspace = true
@@ -114,6 +127,21 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     }
 
     const secret = parsedSecretFlags(flags)
+
+    // qfg-5bjew.37: --propose / --cr <n>. A proposed create goes through the
+    // server's create planner (create_flag / create_config / set_log_level),
+    // which stores a plain value: it cannot carry ciphertext, a confidential
+    // marker or an env-var reference, so those are refused up front rather
+    // than proposing a plaintext secret.
+    const propose = parseProposeFlags(flags)
+    if (!propose.ok) return this.err(propose.error, {key: args.name, phase: 'validation'})
+    const proposeOptions = propose.options
+    if (proposeOptions && (secret.selected || flags.confidential || flags['env-var'])) {
+      return this.err(
+        'qfg create --propose cannot carry --secret, --confidential or --env-var yet: a proposed create stores a plain value. Ask someone who can create items to create it, then propose the value with qfg set-default --propose.',
+        {key: args.name, phase: 'validation'},
+      )
+    }
 
     // qfg-38lp: secrets are string-only, so --secret implies --type string.
     const type = flags.type ?? (secret.selected ? 'string' : undefined)
@@ -155,11 +183,11 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     const providedValue = valueSource.value
 
     if (type === 'boolean-flag') {
-      return this.createBooleanFlag(args, providedValue)
+      return this.createBooleanFlag(args, providedValue, proposeOptions)
     }
 
     if (type === 'log_level') {
-      return this.createLogLevel(args, {...flags, value: providedValue})
+      return this.createLogLevel(args, {...flags, value: providedValue}, proposeOptions)
     }
 
     const key = args.name
@@ -240,6 +268,21 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       configValue.confidential = true
     }
 
+    if (proposeOptions) {
+      return submitProposal(this, {
+        changes: [
+          {
+            op: 'create_config',
+            key,
+            valueType: mapValueTypeToString(valueType),
+            value: mapConfigValueToDto(configValue, valueType).value,
+          },
+        ],
+        key,
+        options: proposeOptions,
+      })
+    }
+
     // Build oRPC input for configs/create
     const createInput = {
       workspaceId: this.workspaceId,
@@ -256,6 +299,16 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     const request = await this.apiClient.post('/api/v1/configs/create', createInput)
 
     if (!request.ok) {
+      // qfg-5bjew.37 (rule 2.11): a refused create can be proposed instead.
+      if (request.status === 403) {
+        return failWithProposeHint(
+          this,
+          `Failed to create config: 403${request.serverMessage ? `: ${request.serverMessage}` : ''}`,
+          {key, phase: 'creation', serverError: request.error},
+          {maskValue: secret.selected || flags.confidential},
+        )
+      }
+
       const errMsg =
         request.status === 409
           ? `Failed to create config: ${key} already exists`
@@ -286,10 +339,27 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     return this.ok(`${checkmark} Created ${confidentialMaybe}config: ${key}${this.targetSuffix()}`, {key, ...response})
   }
 
-  private async createBooleanFlag(args: {name: string}, rawDefault: string | undefined): Promise<JsonObj | void> {
+  private async createBooleanFlag(
+    args: {name: string},
+    rawDefault: string | undefined,
+    proposeOptions?: ProposeOptions,
+  ): Promise<JsonObj | void> {
     const key = args.name
 
     const defaultValue = coerceBool(rawDefault ?? 'false')
+
+    if (proposeOptions) {
+      // A proposed bool flag is created off (the public create's rule); "on"
+      // is a second entry in the same request.
+      return submitProposal(this, {
+        changes: [
+          {op: 'create_flag', key, type: 'bool'},
+          ...(defaultValue ? [{op: 'set_flag', key, environment: 'default', enabled: true}] : []),
+        ],
+        key,
+        options: proposeOptions,
+      })
+    }
 
     // Build oRPC input for flags/create
     const createInput = {
@@ -328,6 +398,14 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     const request = await this.apiClient.post('/api/v1/flags/create', createInput)
 
     if (!request.ok) {
+      if (request.status === 403) {
+        return failWithProposeHint(
+          this,
+          `Failed to create boolean flag: 403${request.serverMessage ? `: ${request.serverMessage}` : ''}`,
+          {key, phase: 'creation', serverError: request.error},
+        )
+      }
+
       const errMsg =
         request.status === 409
           ? `Failed to create boolean flag: ${key} already exists`
@@ -355,6 +433,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       'value-from-env'?: string
       'value-stdin'?: boolean
     },
+    proposeOptions?: ProposeOptions,
   ): Promise<JsonObj | void> {
     const key = args.name
 
@@ -402,6 +481,28 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       })
     }
 
+    if (proposeOptions) {
+      // set_log_level is an upsert, so refuse an existing key here the way
+      // the live create does.
+      const existing = await this.apiClient.post('/api/v1/metadata/getByKey', {workspaceId: this.workspaceId, key})
+      if (existing.ok) {
+        return this.err(`Failed to create log level: ${key} already exists`, {key, phase: 'creation'})
+      }
+
+      if (existing.status !== 404) {
+        return this.err(`Failed to check whether ${key} exists: ${existing.status}`, {
+          key,
+          serverError: existing.error,
+        })
+      }
+
+      return submitProposal(this, {
+        changes: [{op: 'set_log_level', key, level: rawValue}],
+        key,
+        options: proposeOptions,
+      })
+    }
+
     // Step 1: create the log-level config. The server always writes INFO as the
     // initial default, so we patch it to the requested value below if needed.
     const createInput = {
@@ -414,6 +515,14 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     const createRequest = await this.apiClient.post('/api/v1/logLevels/create', createInput)
 
     if (!createRequest.ok) {
+      if (createRequest.status === 403) {
+        return failWithProposeHint(
+          this,
+          `Failed to create log level: 403${createRequest.serverMessage ? `: ${createRequest.serverMessage}` : ''}`,
+          {key, phase: 'creation', serverError: createRequest.error},
+        )
+      }
+
       const errMsg =
         createRequest.status === 409
           ? `Failed to create log level: ${key} already exists`
