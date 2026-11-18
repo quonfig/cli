@@ -168,6 +168,19 @@ describe('runPush --propose on the bare path (qfg-5bjew.37)', () => {
     expect(captured.logs).to.include('Check on it: qfg cr show 12 / Wait: qfg cr wait 12')
   })
 
+  it('renders the summary as a proposal, never as a push to main', async () => {
+    const {deps, captured} = makeDeps([
+      {kind: 'modified', path: 'feature-flags/checkout.json', beforeJson: '{}', afterJson: JSON.stringify(FLAG_AFTER)},
+    ])
+    await runPush(input(dir, {propose: {}}), deps)
+
+    const text = captured.logs.join('\n')
+    expect(text).to.include('Proposing to workspace:  acme-prod')
+    expect(text).to.include('a new change request (nothing goes live until it is merged)')
+    expect(text).to.not.include('Pushing to workspace:')
+    expect(text).to.not.match(/Branch:\s+main/)
+  })
+
   it('refuses an ADDED file (no op creates a document from a file) before sending anything', async () => {
     const {deps, captured} = makeDeps([
       {kind: 'added', path: 'feature-flags/new.flag.json', afterJson: '{"key":"new.flag"}'},

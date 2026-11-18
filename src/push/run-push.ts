@@ -672,6 +672,8 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       repoUrl: stripAuth(backend.repoUrl),
       branch: currentBranch?.kind === 'branch' ? currentBranch.name : 'main',
       localDir: input.dir,
+      // The bare path has no branch: --propose opens a new change request.
+      proposing: Boolean(input.propose) && !isClonePath,
     }),
   )
   log('')

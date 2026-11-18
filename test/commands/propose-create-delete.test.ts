@@ -168,6 +168,22 @@ describe('create --propose (qfg-5bjew.37)', () => {
       expect(out.error.proposable).to.equal(true)
       expect(out.error.proposeCommand).to.equal('qfg create my.new.flag --type=boolean-flag --json --propose')
     })
+
+  // A create that carries --confidential (or --secret / --env-var) cannot be
+  // proposed (create --propose refuses those), so its 403 must not offer a
+  // --propose command that would only be refused in turn.
+  test
+    .add('forbidden', forbidden(server, 'configs/create'))
+    .stdout()
+    .command(['create', 'my.new.string', '--type=string', '--value=hello', '--confidential', '--json'])
+    .catch(() => {})
+    .it('a refused --confidential create offers no propose command', (ctx) => {
+      const out = JSON.parse(ctx.stdout)
+      expect(out.error.message).to.contain(`Failed to create config: 403: ${MESSAGE}`)
+      expect(out.error.message).to.not.contain('--propose')
+      expect(out.error.proposable).to.equal(undefined)
+      expect(out.error.proposeCommand).to.equal(undefined)
+    })
 })
 
 describe('delete --propose (qfg-5bjew.37)', () => {

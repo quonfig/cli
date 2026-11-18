@@ -301,12 +301,14 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     if (!request.ok) {
       // qfg-5bjew.37 (rule 2.11): a refused create can be proposed instead.
       if (request.status === 403) {
-        return failWithProposeHint(
-          this,
-          `Failed to create config: 403${request.serverMessage ? `: ${request.serverMessage}` : ''}`,
-          {key, phase: 'creation', serverError: request.error},
-          {maskValue: secret.selected || flags.confidential},
-        )
+        const message = `Failed to create config: 403${request.serverMessage ? `: ${request.serverMessage}` : ''}`
+        // create --propose refuses --secret, --confidential and --env-var, so
+        // such a create gets no --propose suggestion that would only fail.
+        if (secret.selected || flags.confidential || flags['env-var']) {
+          return this.err(message, {key, phase: 'creation', serverError: request.error})
+        }
+
+        return failWithProposeHint(this, message, {key, phase: 'creation', serverError: request.error})
       }
 
       const errMsg =
