@@ -11,3 +11,9 @@ af8af0b16fa5e2762a968319c0a657c096abe2e6:test/commands/set-default.test.ts:gener
 # 64-hex key that test/commands/get.test.ts already uses on main; the get
 # fixture's ciphertext was encrypted with it. It encrypts only test fixtures.
 cb5ad27c0534df4565097aa47de6796e43f0583a:test/commands/secret-leak-matrix.test.ts:generic-api-key:25
+
+# qfg-5bjew.37 (PR #103): the propose tests reuse the same FAKE 64-hex test
+# encryption key as test/commands/set-default.test.ts; the robocop-secret
+# fixture's ciphertext was encrypted with it. It encrypts only test fixtures.
+9d0e074c58d5ea42795257078f5c83757a62dd75:test/commands/propose-update.test.ts:generic-api-key:343
+321fce21f5af9bb60224cd88a8945e2b31a97b63:test/commands/propose-update.test.ts:generic-api-key:30
