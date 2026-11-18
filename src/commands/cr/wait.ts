@@ -12,6 +12,7 @@ import {
   workspaceFlag,
 } from '../../change-requests/command-support.js'
 import {getChangeRequest} from '../../change-requests/client.js'
+import {maskFiles} from '../../change-requests/mask.js'
 import {absoluteUrl, renderShow, sanitizeLine} from '../../change-requests/render.js'
 import {parseDuration, runCrWait} from '../../change-requests/wait-flow.js'
 import {BaseCommand} from '../../index.js'
@@ -99,6 +100,8 @@ Agents: never merge a change request you did not author without a human telling 
 
     const json: JsonObj = {
       ...detail,
+      // --json carries the file text, so it is masked too (qfg-5bjew.48).
+      files: maskFiles(detail.files),
       url: absoluteUrl(detail.url),
       wait: {exitCode: outcome.exitCode, outcome: outcome.outcome, ...(outcome.fix ? {fix: outcome.fix} : {})},
     }

@@ -12,6 +12,7 @@
 import type {ChangeRequestDetail, ChangeRequestFile, ChangeRequestSummary} from './types.js'
 
 import {getAppUrl} from '../util/domain-urls.js'
+import {maskFiles} from './mask.js'
 
 /* eslint-disable no-control-regex */
 const OSC = /\u001B][^\u0007\u001B]*(?:\u0007|\u001B\\)?/g
@@ -162,7 +163,7 @@ function filesHeader(detail: ChangeRequestDetail): string {
   }
 }
 
-/** The diff section: header, one `K path` line per file with its line diff, segment note. */
+/** The diff section: header, one `K path` line per file with its (secret-masked) line diff, segment note. */
 export function renderFiles(detail: ChangeRequestDetail): string[] {
   const lines = [filesHeader(detail)]
   if (detail.files === null) {
@@ -175,7 +176,9 @@ export function renderFiles(detail: ChangeRequestDetail): string[] {
     return lines
   }
 
-  for (const file of detail.files) {
+  // Secrets are masked like the web review page: ciphertext and confidential
+  // plaintext never reach the terminal (qfg-5bjew.48).
+  for (const file of maskFiles(detail.files)!) {
     lines.push(`  ${KIND_LETTER[file.kind] ?? '?'} ${sanitizeLine(file.path)}`)
     for (const l of lineDiff(file.before, file.after)) lines.push(`    ${l}`)
   }
