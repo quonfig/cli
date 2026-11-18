@@ -20,10 +20,11 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
 
 export interface ResolvedWorkspace {
   /**
-   * Org slug that owns workspaceId. Empty string in the QUONFIG_API_KEY
-   * path because API keys are workspace-scoped and the slug is never
-   * needed downstream — `getValidAccessTokenForOrgSlug` short-circuits
-   * on the env key before consulting it.
+   * Org slug that owns workspaceId. Empty string only when QUONFIG_API_KEY
+   * is set and the workspace is given as a UUID: no org slug is known then.
+   * Token minting never needs it in API-key mode
+   * (`getValidAccessTokenForOrgSlug` short-circuits on the env key), but pin
+   * comparison does, so callers must skip pin work when it is empty.
    */
   orgSlug: string
   workspaceId: string
@@ -121,8 +122,11 @@ export async function resolveWorkspaceUuid(
       })
     }
 
-    command.verboseLog('ApiKey auth', {source: 'org/ws', pin, workspaceId: match.workspaceId})
-    return {workspaceId: match.workspaceId, orgSlug: ''}
+    // Return the owning org so callers that compare or write the quonfig.json
+    // pin (pull's backfill) see "<org>/<ws>", not "/<ws>" (qfg-5bjew.46).
+    const orgSlug = match.organizationSlug ?? pin.orgSlug
+    command.verboseLog('ApiKey auth', {source: 'org/ws', pin, workspaceId: match.workspaceId, orgSlug})
+    return {workspaceId: match.workspaceId, orgSlug}
   }
 
   // OAuth path with an explicit override → must be in org/ws form.

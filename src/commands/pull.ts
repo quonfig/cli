@@ -318,6 +318,14 @@ CLI shortcuts (no JSON editing needed for simple cases):
     // form, tryParseWorkspacePin handles it; the explicit org overrides
     // any mismatch in favor of the workspace we actually authenticated as.
     const parsedBackend = tryParseWorkspacePin(backendSlug)
+    if (!parsedBackend && !orgSlug) {
+      // QUONFIG_API_KEY with a UUID workspace: the org is unknown, so there is
+      // no full pin to compare or write. Skip rather than warn about, or write,
+      // a "/<ws>" pin (qfg-5bjew.46).
+      this.verboseLog('Pull', 'Org slug unknown (UUID workspace); skipping workspace pin check and backfill.')
+      return
+    }
+
     const backendPin = parsedBackend ?? {orgSlug, workspaceSlug: backendSlug}
 
     try {
