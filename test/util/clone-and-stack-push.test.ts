@@ -82,6 +82,8 @@ describe('cloneAndStackPush', () => {
 
     expect(result.committed).to.equal(true)
     expect(result.action).to.equal('cloned')
+    // qfg-5bjew.28: the clone left on disk stops on both-sides JSON merges.
+    expect(fs.readFileSync(path.join(localDir, '.git', 'info', 'attributes'), 'utf8')).to.contain('*.json -merge\n')
 
     const reader = cloneForRead(remote, root)
     expect(fs.existsSync(path.join(reader, 'flag-a.json'))).to.equal(true)
@@ -126,6 +128,12 @@ describe('cloneAndStackPush', () => {
 
     expect(result.committed).to.equal(true)
     expect(result.action).to.equal('reused')
+    expect(
+      fs
+        .readFileSync(path.join(localDir, '.git', 'info', 'attributes'), 'utf8')
+        .split('\n')
+        .filter((l) => l === '*.json -merge'),
+    ).to.have.length(1)
 
     const reader = cloneForRead(remote, root)
     expect(logSubjects(reader)).to.deep.equal(['migrator: run 2', 'ui edit', 'migrator: run 1', 'initial'])

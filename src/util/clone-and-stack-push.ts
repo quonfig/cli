@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import {MIGRATOR_IDENTITY, redactToken, runGit as runGitSafe, spawnGit} from './git-ops.js'
+import {MIGRATOR_IDENTITY, ensureJsonNoMergeAttribute, redactToken, runGit as runGitSafe, spawnGit} from './git-ops.js'
 
 export {MIGRATOR_IDENTITY} from './git-ops.js'
 
@@ -144,6 +144,7 @@ const ensureCloneOrReuse = async (
       await runGit(localDir, ['fetch', 'origin', branch])
       await runGit(localDir, ['checkout', branch])
       await runGit(localDir, ['merge', '--ff-only', `origin/${branch}`])
+      await ensureJsonNoMergeAttribute(localDir)
       return 'reused'
     }
 
@@ -169,6 +170,9 @@ const ensureCloneOrReuse = async (
 
   fs.mkdirSync(path.dirname(localDir), {recursive: true})
   await runGit(path.dirname(localDir) || '.', ['clone', '--branch', branch, remoteUrl, localDir])
+  // The clone is left on disk for the user, so give it the same attribute
+  // `qfg pull` does (qfg-5bjew.28).
+  await ensureJsonNoMergeAttribute(localDir)
   return 'cloned'
 }
 

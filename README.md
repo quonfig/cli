@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.11.0 darwin-arm64 node-v24.4.1
+@quonfig/cli/0.11.0 darwin-arm64 node-v25.6.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -1971,8 +1971,9 @@ FLAGS
   -w, --workspace=<value>  Workspace ID (defaults to active profile)
       --dir=<value>        Local directory to clone/update (defaults to cwd / nearest ancestor with quonfig.json /
                            QUONFIG_DIR env var)
-      --rebase             Replay local commits on top of origin/main when the two have diverged. Conflicts are surfaced
-                           via standard git markers; resolve with `git rebase --continue`.
+      --rebase             Replay local commits on top of origin/main when the two have diverged. A JSON file changed on
+                           both sides stops the rebase and holds only origin/main's version (no conflict markers); see
+                           your side with `git show REBASE_HEAD:<file>`, fix the file, then `git rebase --continue`.
 
 GLOBAL FLAGS
   --[no-]interactive  Force interactive mode
@@ -1999,6 +2000,14 @@ DESCRIPTION
   and push again:
   git -C <dir> fetch origin && git -C <dir> merge origin/main
   qfg push --dir <dir>
+  Do not rely on git to combine edits inside a flag file: git merges line by
+  line and can mix main's rules with yours without reporting a conflict. qfg
+  pull sets "*.json -merge" in the clone's git info/attributes, so in a qfg clone
+  the merge stops on every JSON file changed on both sides. git writes no
+  conflict markers in those files: each one holds only your branch's version.
+  See main's version with git -C <dir> show origin/main:<file>, edit the file to
+  the rules you want, then git add and git commit. Or close the change request
+  and propose again from current main.
   Rewriting a branch (rebase, force push) is not supported yet.
 
   CLI shortcuts (no JSON editing needed for simple cases):

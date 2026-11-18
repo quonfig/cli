@@ -20,6 +20,7 @@ import {
   getAllRemoteUrls,
   getRemoteUrl,
   displayUrl,
+  ensureJsonNoMergeAttributeOrWarn,
 } from '../util/git-ops.js'
 
 const sleep = (ms: number): Promise<void> =>
@@ -213,5 +214,7 @@ export default class Sync extends BaseCommand {
     }
 
     await gitSetRemote(this.resolvedDir, repoUrl)
+    // Make git stop on a flag JSON file changed on both sides (qfg-5bjew.28).
+    await ensureJsonNoMergeAttributeOrWarn(this.resolvedDir, (m) => this.warn(m))
   }
 }

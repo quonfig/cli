@@ -21,6 +21,7 @@ import {
   getRemoteUrl,
   getOriginMainSha,
   displayUrl,
+  ensureJsonNoMergeAttributeOrWarn,
 } from '../../util/git-ops.js'
 
 /**
@@ -216,6 +217,12 @@ export default class WorkspaceBootstrap extends BaseCommand {
     } catch (error: unknown) {
       return this.err(`Push failed: ${String(error)}`)
     }
+
+    // Make git stop on a flag JSON file changed on both sides (qfg-5bjew.28).
+    // Written only after the push: rebaseOntoOriginAndPush replays with
+    // `-X theirs` on a linked worktree that shares info/attributes, and
+    // `-merge` would turn its hunk-level resolution into whole-file picks.
+    await ensureJsonNoMergeAttributeOrWarn(resolvedDir, (m) => this.warn(m))
 
     this.log(`Landed ${pushResult.commitsRebased} commit(s) on the workspace's history.`)
     if (pushResult.reconcileSubject !== null) {
