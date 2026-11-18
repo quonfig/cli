@@ -10,6 +10,7 @@ import {
   workspaceFlag,
 } from '../../change-requests/command-support.js'
 import {getChangeRequest} from '../../change-requests/client.js'
+import {maskFiles} from '../../change-requests/mask.js'
 import {absoluteUrl, renderShow, sanitizeLine} from '../../change-requests/render.js'
 import {BaseCommand} from '../../index.js'
 
@@ -60,7 +61,8 @@ by Quonfig; the diff is what lands.`
       }
 
       for (const line of renderShow(detail)) this.log(line)
-      return {...detail, url: absoluteUrl(detail.url)}
+      // --json carries the file text, so it is masked too (qfg-5bjew.48).
+      return {...detail, files: maskFiles(detail.files), url: absoluteUrl(detail.url)}
     })
   }
 }

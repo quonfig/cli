@@ -170,6 +170,52 @@ describe('qfg cr (qfg-5bjew.17)', () => {
         expect(ctx.stdout).to.not.contain('Add more')
       })
 
+    // qfg-5bjew.48: ciphertext is masked in human output and in --json.
+    const CR_CIPHER = 'fake-ciphertext--not-a-real-iv--not-a-real-tag'
+    const secretFile = (cipher: string) =>
+      JSON.stringify(
+        {key: 'cr41.secret', default: {rules: [{value: {type: 'string', value: cipher, decryptWith: 'cr41.key'}}]}},
+        null,
+        2,
+      ) + '\n'
+    for (const args of [
+      ['cr show', '7'],
+      ['cr show', '7', '--json'],
+    ]) {
+      test
+        .add('secret', () =>
+          server.use(
+            http.post(route('get'), () =>
+              HttpResponse.json({
+                json: detail({
+                  files: [
+                    {
+                      path: 'configs/cr41.secret.json',
+                      kind: 'add',
+                      beforeOid: null,
+                      afterOid: '2'.repeat(40),
+                      before: null,
+                      after: secretFile(CR_CIPHER),
+                    },
+                  ],
+                }),
+              }),
+            ),
+          ),
+        )
+        .stdout()
+        .command(args)
+        .it(`${args.join(' ')} masks an encrypted value as [encrypted]`, (ctx) => {
+          expect(ctx.stdout).to.not.contain(CR_CIPHER)
+          if (args.includes('--json')) {
+            const out = JSON.parse(ctx.stdout)
+            expect(JSON.parse(out.files[0].after).default.rules[0].value.value).to.equal('[encrypted]')
+          } else {
+            expect(ctx.stdout).to.contain('"value": "[encrypted]"')
+          }
+        })
+    }
+
     test
       .stdout()
       .command(['cr show', '7', '--json'])
