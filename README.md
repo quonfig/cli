@@ -17,7 +17,7 @@ $ npm install -g @quonfig/cli
 $ qfg COMMAND
 running command...
 $ qfg (--version)
-@quonfig/cli/0.11.0 darwin-arm64 node-v25.6.1
+@quonfig/cli/0.11.0 darwin-arm64 node-v24.4.1
 $ qfg --help [COMMAND]
 USAGE
   $ qfg COMMAND
@@ -139,6 +139,7 @@ script doesn't need to know which env it's running in.
 * [`qfg cr list`](#qfg-cr-list)
 * [`qfg cr merge NUMBER`](#qfg-cr-merge-number)
 * [`qfg cr show REF`](#qfg-cr-show-ref)
+* [`qfg cr wait REF`](#qfg-cr-wait-ref)
 * [`qfg create NAME`](#qfg-create-name)
 * [`qfg delete NAME`](#qfg-delete-name)
 * [`qfg environments`](#qfg-environments)
@@ -919,6 +920,52 @@ EXAMPLES
 
 _See code: [src/commands/cr/show.ts](https://github.com/quonfig/cli/blob/v0.11.0/src/commands/cr/show.ts)_
 
+## `qfg cr wait REF`
+
+Wait for a change request to be merged or closed, then show it.
+
+```
+USAGE
+  $ qfg cr wait REF [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--interval <value>]
+    [--timeout <value>]
+
+ARGUMENTS
+  REF  Change request number (7 or #7) or its branch name (refs/heads/<name> for a branch named like a number)
+
+FLAGS
+  -w, --workspace=<value>  Workspace as <org>/<workspace> or a UUID (defaults to the workspace dir pin, then the active
+                           profile)
+      --interval=<value>   [default: 10s] How often to check (e.g. 10s, 1m)
+      --timeout=<value>    [default: 30m] Give up after this long (e.g. 30m, 2h); exits 124
+
+GLOBAL FLAGS
+  --[no-]interactive  Force interactive mode
+  --json              Format output as json.
+  --no-color          Do not colorize output
+  --verbose           Verbose output
+
+DESCRIPTION
+  Wait for a change request to be merged or closed, then show it.
+
+  Polls until the request settles and exits with:
+  0    merged (it is live)
+  2    closed without merging
+  4    blocked by a conflict with main (prints how to fix it)
+  124  timed out (still open)
+  While someone with rights has not merged it yet, it keeps waiting.
+
+  Agents: never merge a change request you did not author without a human telling you to.
+
+EXAMPLES
+  $ qfg cr wait 7
+
+  $ qfg cr wait 7 --timeout 2h --interval 30s
+
+  $ qfg cr wait my-branch --json
+```
+
+_See code: [src/commands/cr/wait.ts](https://github.com/quonfig/cli/blob/v0.11.0/src/commands/cr/wait.ts)_
+
 ## `qfg create NAME`
 
 Create a new feature flag, config value, or other item.
@@ -927,18 +974,25 @@ Create a new feature flag, config value, or other item.
 USAGE
   $ qfg create NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
     [--env-var <value>] [--type boolean-flag|boolean|string|double|int|string-list|json|duration|log_level] [--value
-    <value>] [--value-from-env VAR] [--value-stdin] [--secret] [--secret-key-name <value>]
+    <value>] [--value-from-env VAR] [--value-stdin] [--secret] [--secret-key-name <value>] [--cr <value>] [--description
+    <value>] [--propose] [--title <value>]
 
 ARGUMENTS
   NAME  name for your new item (e.g. my.new.flag)
 
 FLAGS
   --confidential             mark the value as confidential
+  --cr=<value>               add this change to your open change request #<n> instead of opening a new one (implies
+                             --propose; only the proposer can add)
+  --description=<value>      change request description (with --propose or --cr)
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env
+  --propose                  propose the change as a change request instead of applying it: NOT LIVE until someone with
+                             rights merges it (no --confirm needed)
   --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
+  --title=<value>            change request title (with --propose; defaults to a summary of the change)
   --type=<option>            kind of item to create (required, except with --secret, which implies string)
                              <options: boolean-flag|boolean|string|double|int|string-list|json|duration|log_level>
   --value=<value>            default value for your new item (for secrets prefer --value-stdin / --value-from-env)
@@ -995,6 +1049,11 @@ DESCRIPTION
   # rules on the "quonfig-sdk-logging.key" context property (e.g.
   # PROP_STARTS_WITH_ONE_OF MyPackage.) rather than one config per logger.
 
+  To PROPOSE the new item instead of creating it (a change request: NOT LIVE
+  until someone with rights merges it), add --propose (or --cr <n> to add it to
+  your open request #n). A proposed create stores a plain value, so --secret,
+  --confidential and --env-var cannot be proposed this way yet.
+
   When this flag has done its job, mark readyForCleanup: true in the UI and run `qfg cleanup list` to retire it.
 
 EXAMPLES
@@ -1035,13 +1094,20 @@ Delete a flag, config, or log-level from the workspace.
 
 ```
 USAGE
-  $ qfg delete NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--yes]
+  $ qfg delete NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--yes] [--cr <value>]
+    [--description <value>] [--propose] [--title <value>]
 
 ARGUMENTS
   NAME  flag/config/log-level key to delete
 
 FLAGS
-  --yes  skip confirmation prompt
+  --cr=<value>           add this change to your open change request #<n> instead of opening a new one (implies
+                         --propose; only the proposer can add)
+  --description=<value>  change request description (with --propose or --cr)
+  --propose              propose the change as a change request instead of applying it: NOT LIVE until someone with
+                         rights merges it (no --confirm needed)
+  --title=<value>        change request title (with --propose; defaults to a summary of the change)
+  --yes                  skip confirmation prompt
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -1061,6 +1127,10 @@ DESCRIPTION
   Confirmation is required:
   --yes                       skip the prompt (for scripts and CI)
   interactive (default)       you'll be asked to type the key name back
+
+  To PROPOSE the delete instead (a change request: NOT LIVE until someone with
+  rights merges it; no --yes needed):
+  qfg delete my.flag --propose
 
   Examples
   qfg delete my.flag --yes
@@ -1629,15 +1699,22 @@ Create or add targeting rules to a log-level config.
 ```
 USAGE
   $ qfg log-level NAME [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--environment <value>]
-    [--target <value>...] [--value TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
+    [--target <value>...] [--value TRACE|DEBUG|INFO|WARN|ERROR|FATAL] [--cr <value>] [--description <value>] [--propose]
+    [--title <value>]
 
 ARGUMENTS
   NAME  log-level key (must start with "log-level.", e.g. log-level.my-app)
 
 FLAGS
+  --cr=<value>           add this change to your open change request #<n> instead of opening a new one (implies
+                         --propose; only the proposer can add)
+  --description=<value>  change request description (with --propose or --cr)
   --environment=<value>  when used with --target, scope the rule to this environment instead of the default
+  --propose              propose the change as a change request instead of applying it: NOT LIVE until someone with
+                         rights merges it (no --confirm needed)
   --target=<value>...    logger path prefix (matched via PROP_STARTS_WITH_ONE_OF on "quonfig-sdk-logging.key");
                          repeatable
+  --title=<value>        change request title (with --propose; defaults to a summary of the change)
   --value=<option>       log level — either the new default (create mode) or the level for the targeted loggers
                          <options: TRACE|DEBUG|INFO|WARN|ERROR|FATAL>
 
@@ -1670,6 +1747,10 @@ DESCRIPTION
 
   To update the catch-all default for an existing log level, use set-default:
   qfg set-default log-level.my-app --value=DEBUG --environment=production
+
+  To PROPOSE either change instead of applying it (a change request: NOT LIVE
+  until someone with rights merges it), add --propose (or --cr <n> to add to
+  your open request #n).
 
   For more complex rules (regex, multi-criterion, exact match) edit the JSON:
   qfg pull && $EDITOR log-levels/log-level.my-app.json
@@ -2070,6 +2151,9 @@ DESCRIPTION
   git switch -c my-change && git commit -am "..."
   qfg push --propose --title "Turn on checkout for beta"
   qfg cr show <n>
+  Without a clone (a plain dir), --propose sends the changed and deleted
+  flag/config/log-level files as one change request; new files need
+  qfg create --propose. Wait for the merge with: qfg cr wait <n>
 
 EXAMPLES
   $ qfg push --dir ./our-config
@@ -2357,7 +2441,8 @@ Set the fallback value for a flag or config in one environment.
 USAGE
   $ qfg set-default [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
     [--env-var <value>] [--environment <value>] [--replace-targeting] [--value <value>] [--value-from-env VAR]
-    [--value-stdin] [--confirm] [--secret] [--secret-key-name <value>]
+    [--value-stdin] [--confirm] [--secret] [--secret-key-name <value>] [--cr <value>] [--description <value>]
+    [--propose] [--title <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -2366,15 +2451,21 @@ FLAGS
   --[no-]confidential        mark the value as confidential. Auto-detected when the key already holds a confidential
                              value; pass --no-confidential to store it in the clear
   --confirm                  confirm without prompt
+  --cr=<value>               add this change to your open change request #<n> instead of opening a new one (implies
+                             --propose; only the proposer can add)
+  --description=<value>      change request description (with --propose or --cr)
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env
   --environment=<value>      environment to change, e.g. production. Use "[Default]" for the default rules that every
                              environment without its own rules inherits
+  --propose                  propose the change as a change request instead of applying it: NOT LIVE until someone with
+                             rights merges it (no --confirm needed)
   --replace-targeting        set the value for EVERYONE: delete this environment's targeting rules instead of keeping
                              them (they stay in git history)
   --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
+  --title=<value>            change request title (with --propose; defaults to a summary of the change)
   --value=<value>            new default value (for secrets prefer --value-stdin / --value-from-env)
   --value-from-env=VAR       read the value to store from this LOCAL env var now (keeps it out of argv/shell history).
                              Not the same as --env-var
@@ -2415,6 +2506,12 @@ DESCRIPTION
 
   To see all current values and rules for a flag:
   qfg info my.flag
+
+  To PROPOSE the change instead of applying it (a change request: NOT LIVE
+  until someone with rights merges it; works with a read-only key):
+  qfg set-default my.flag --environment production --value true --propose
+  qfg set-default other.flag --environment production --value true --cr 12   # add to your #12
+  Agents: never merge a change request you did not author without a human telling you to.
 
   To target specific organizations or users, write rules on their KEY
   (organization.key, user.key), not a slug or email; find a key from a name with:
@@ -2460,18 +2557,25 @@ Configure a percentage rollout (gradual rollout / A/B test / canary deploy) for 
 ```
 USAGE
   $ qfg set-rollout [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--environment <value>]
-    [--hash-by <value>] [--true-percent <value>] [--replace-targeting] [--weights <value>] [--confirm]
+    [--hash-by <value>] [--true-percent <value>] [--replace-targeting] [--weights <value>] [--confirm] [--cr <value>]
+    [--description <value>] [--propose] [--title <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
 
 FLAGS
   --confirm               skip the interactive confirmation prompt (useful for scripts and agents)
+  --cr=<value>            add this change to your open change request #<n> instead of opening a new one (implies
+                          --propose; only the proposer can add)
+  --description=<value>   change request description (with --propose or --cr)
   --environment=<value>   environment to update (e.g. production, staging)
   --hash-by=<value>       context property used to assign buckets. Defaults to the existing rollout's property, or
                           user.key for a new rollout. Pass "" for a non-sticky split.
+  --propose               propose the change as a change request instead of applying it: NOT LIVE until someone with
+                          rights merges it (no --confirm needed)
   --replace-targeting     roll out to EVERYONE: delete this environment's targeting rules instead of keeping them (they
                           stay in git history)
+  --title=<value>         change request title (with --propose; defaults to a summary of the change)
   --true-percent=<value>  percentage of users that receive true (0–100). Remaining users receive false. Boolean flags
                           only.
   --weights=<value>       comma-separated "value:percent" pairs that must sum to 100 (e.g. "true:20,false:80" or
@@ -2528,6 +2632,10 @@ DESCRIPTION
 
   To inspect the current rollout:
   qfg info my.flag
+
+  To PROPOSE the rollout instead of applying it (a change request: NOT LIVE
+  until someone with rights merges it):
+  qfg set-rollout my.flag --environment production --true-percent 20 --propose
 
 EXAMPLES
   $ qfg set-rollout my.feature.flag --environment production --true-percent 20
@@ -2587,7 +2695,8 @@ Set the fallback value for a flag or config in one environment.
 USAGE
   $ qfg toggle [NAME] [--json] [--interactive] [--no-color] [--verbose] [-w <value>] [--confidential]
     [--env-var <value>] [--environment <value>] [--replace-targeting] [--value <value>] [--value-from-env VAR]
-    [--value-stdin] [--confirm] [--secret] [--secret-key-name <value>]
+    [--value-stdin] [--confirm] [--secret] [--secret-key-name <value>] [--cr <value>] [--description <value>]
+    [--propose] [--title <value>]
 
 ARGUMENTS
   NAME  config/feature-flag/etc. name
@@ -2596,15 +2705,21 @@ FLAGS
   --[no-]confidential        mark the value as confidential. Auto-detected when the key already holds a confidential
                              value; pass --no-confidential to store it in the clear
   --confirm                  confirm without prompt
+  --cr=<value>               add this change to your open change request #<n> instead of opening a new one (implies
+                             --propose; only the proposer can add)
+  --description=<value>      change request description (with --propose or --cr)
   --env-var=<value>          store no value: the SDK reads it from this env var at RUNTIME. To read a value from a local
                              env var NOW, use --value-from-env
   --environment=<value>      environment to change, e.g. production. Use "[Default]" for the default rules that every
                              environment without its own rules inherits
+  --propose                  propose the change as a change request instead of applying it: NOT LIVE until someone with
+                             rights merges it (no --confirm needed)
   --replace-targeting        set the value for EVERYONE: delete this environment's targeting rules instead of keeping
                              them (they stay in git history)
   --secret                   encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>  [default: quonfig.secrets.encryption.key] name of the secret key to use for
                              encryption/decryption
+  --title=<value>            change request title (with --propose; defaults to a summary of the change)
   --value=<value>            new default value (for secrets prefer --value-stdin / --value-from-env)
   --value-from-env=VAR       read the value to store from this LOCAL env var now (keeps it out of argv/shell history).
                              Not the same as --env-var
@@ -2645,6 +2760,12 @@ DESCRIPTION
 
   To see all current values and rules for a flag:
   qfg info my.flag
+
+  To PROPOSE the change instead of applying it (a change request: NOT LIVE
+  until someone with rights merges it; works with a read-only key):
+  qfg set-default my.flag --environment production --value true --propose
+  qfg set-default other.flag --environment production --value true --cr 12   # add to your #12
+  Agents: never merge a change request you did not author without a human telling you to.
 
   To target specific organizations or users, write rules on their KEY
   (organization.key, user.key), not a slug or email; find a key from a name with:

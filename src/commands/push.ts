@@ -23,6 +23,7 @@ import {
   type RunPushResult,
   type ConfigPushInput,
   type GitPushInput,
+  type ProposeToServerInput,
   type GiteaTokenMintResult,
   type GitOps,
 } from '../push/run-push.js'
@@ -33,6 +34,7 @@ import {callConfigsGitPush, callConfigsPush} from '../push/config-push-client.js
 import {resolveWorkspaceDir} from '../util/resolve-workspace-dir.js'
 import {resolveWorkspaceUuid} from '../util/resolve-workspace.js'
 import {absoluteUrl} from '../change-requests/render.js'
+import {proposeChangeRequest} from '../change-requests/client.js'
 
 /**
  * `qfg push --json` for a successful push. A plain push keeps its shape
@@ -78,7 +80,10 @@ Enforces three guards before touching the remote:
 Propose instead of going live (a change request; someone with rights merges it):
   git switch -c my-change && git commit -am "..."
   qfg push --propose --title "Turn on checkout for beta"
-  qfg cr show <n>`
+  qfg cr show <n>
+Without a clone (a plain dir), --propose sends the changed and deleted
+flag/config/log-level files as one change request; new files need
+qfg create --propose. Wait for the merge with: qfg cr wait <n>`
 
   static examples = [
     '<%= config.bin %> push --dir ./our-config',
@@ -438,6 +443,8 @@ export function buildRealDeps(
     gitOps,
     pushToServer: (input: ConfigPushInput) => callConfigsPush(input, orgSlug),
     pushPackToServer: (input: GitPushInput) => callConfigsGitPush(input, orgSlug),
+    // qfg-5bjew.37: --propose on the bare path (no clone).
+    proposeToServer: (input: ProposeToServerInput) => proposeChangeRequest({...input}, orgSlug),
     log,
     errLog,
   }

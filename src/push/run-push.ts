@@ -28,6 +28,17 @@ import {confirmTypedSlug, confirmYesNo} from './confirm.js'
 import {FileDelta, summarizeDiff} from './diff-summary.js'
 import {type BuildPackOptions, type CurrentBranchResult, ZERO_OID} from './git-pack.js'
 import {absoluteUrl} from '../change-requests/render.js'
+import {
+  type ProposalChange,
+  type ProposedChangeRequest,
+  SERVER_TOO_OLD,
+  proposeFailureMessage,
+  proposalTypeForPath,
+  proposedLines,
+  readProposeResponse,
+} from '../change-requests/propose.js'
+
+export type {FileDelta} from './diff-summary.js'
 
 /** All-zeros object id, the git-protocol convention for "no such ref". */
 
@@ -203,6 +214,21 @@ export interface GitPushInput {
   workspaceId: string
 }
 
+/**
+ * qfg-5bjew.37: `changeRequests.propose` for the bare path (no clone). The
+ * file deltas go as set_document / delete ops.
+ */
+export interface ProposeToServerInput {
+  changes: ProposalChange[]
+  description?: string
+  title?: string
+  workspaceId: string
+}
+
+export type ProposeToServerResult =
+  | {changeRequest?: ProposedChangeRequest; kind: 'success'; message?: string}
+  | {data?: Record<string, unknown>; kind: 'error'; message?: string; status: number}
+
 /** `--propose [--title] [--description]` (qfg-5bjew.17). */
 export interface ProposeInput {
   description?: string
@@ -314,6 +340,11 @@ export interface RunPushDeps {
    * stable across the qfg-azk.13 transition.
    */
   mintWriteToken(requestedTarget: string): Promise<GiteaTokenMintResult>
+  /**
+   * qfg-5bjew.37: `changeRequests.propose`, used by `--propose` on the bare
+   * path. Optional so the clone-path harnesses need not stub it.
+   */
+  proposeToServer?(input: ProposeToServerInput): Promise<ProposeToServerResult>
   /**
    * Pack-push — call the server-side `configs.gitPush` oRPC procedure
    * (qfg-7429.4). Used by the clone-path dispatch; bare-path still
@@ -528,14 +559,8 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   const isClonePath = hasGit && remoteOriginUrl !== undefined && sameRepo(remoteOriginUrl, backend.repoUrl)
   const dispatchedAs: 'bare-path' | 'clone-path' = isClonePath ? 'clone-path' : 'bare-path'
 
-  // qfg-5bjew.17: proposing needs a branch, and in this step only the clone
-  // path can push one. Refuse before any write.
-  if (input.propose && !isClonePath) {
-    throw new PushFatalError(
-      '--propose needs a git clone of the workspace in this step. Run qfg pull, create a branch, commit, then qfg push --propose.',
-      'PROPOSE_NEEDS_CLONE',
-    )
-  }
+  // qfg-5bjew.37 (Q5): the bare path proposes too, through
+  // changeRequests.propose (PROPOSE_NEEDS_CLONE is lifted).
 
   // Clone path: align origin with the backend so the gitOps.fetch + diff
   // walk authenticates against the read URL we minted. The bare path's
@@ -647,6 +672,8 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
       repoUrl: stripAuth(backend.repoUrl),
       branch: currentBranch?.kind === 'branch' ? currentBranch.name : 'main',
       localDir: input.dir,
+      // The bare path has no branch: --propose opens a new change request.
+      proposing: Boolean(input.propose) && !isClonePath,
     }),
   )
   log('')
@@ -842,6 +869,17 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
         log(line)
       }
     }
+  } else if (input.propose) {
+    const proposed = await proposeBareDeltas(deltas, {
+      deps,
+      expectedSha: await deps.gitOps.getOriginMainSha(input.dir),
+      propose: input.propose,
+      workspaceId: backend.workspaceId,
+    })
+    for (const line of proposedLines(proposed, {added: false})) log(line)
+    changeRequest = {number: proposed.number, url: proposed.url, status: proposed.status ?? 'open'}
+    pushedBranch = proposed.branch
+    pushedCommitSha = proposed.headSha ?? null
   } else {
     const baseMessage = input.message ?? `qfg push: ${summary.totals.filesTouched} file change(s)`
     const commitMessage = withPushedViaTrailer(baseMessage)
@@ -914,6 +952,82 @@ export async function runPush(input: RunPushInput, deps: RunPushDeps): Promise<R
   return changeRequest
     ? {kind: 'pushed', dispatchedAs, commitSha: pushedCommitSha, branch: pushedBranch, changeRequest}
     : {kind: 'pushed', dispatchedAs, commitSha: pushedCommitSha}
+}
+
+/**
+ * qfg-5bjew.37: turn the bare path's file deltas into proposal ops: a
+ * modified flag/config/log-level file is a set_document, a deleted one a
+ * delete, both with `expectedSha` (the probe clone's HEAD, i.e. main as this
+ * push read it) as the "version I read" token. A new file has no op that
+ * takes a whole document, and segments/schemas are not proposable, so those
+ * are refused before anything is sent.
+ */
+async function proposeBareDeltas(
+  deltas: FileDelta[],
+  ctx: {deps: RunPushDeps; expectedSha: string | undefined; propose: ProposeInput; workspaceId: string},
+): Promise<ProposedChangeRequest> {
+  const refused: string[] = []
+  const changes: ProposalChange[] = []
+  for (const d of deltas) {
+    const target = proposalTypeForPath(d.path)
+    if (!target) {
+      refused.push(d.path)
+      continue
+    }
+
+    if (d.kind === 'added') {
+      refused.push(`${d.path} (new file)`)
+      continue
+    }
+
+    if (d.kind === 'deleted') {
+      changes.push({op: 'delete', type: target.type, key: target.key, expectedCommitSha: ctx.expectedSha})
+      continue
+    }
+
+    let document: unknown
+    try {
+      document = JSON.parse(d.afterJson ?? '')
+    } catch {
+      throw new PushFatalError(`${d.path} is not valid JSON; nothing was proposed.`, 'PROPOSE_INVALID_JSON')
+    }
+
+    changes.push({op: 'set_document', type: target.type, key: target.key, document, expectedCommitSha: ctx.expectedSha})
+  }
+
+  if (refused.length > 0) {
+    throw new PushFatalError(
+      `qfg push --propose without a clone can propose changes to and deletes of existing flags, configs and log levels. These cannot be proposed this way: ${refused.join(', ')}. Use qfg create --propose for a new item, or propose from a clone (qfg pull, branch, commit, qfg push --propose).`,
+      'PROPOSE_UNSUPPORTED_CHANGE',
+    )
+  }
+
+  if (!ctx.expectedSha) {
+    throw new PushFatalError(
+      'Could not read the workspace HEAD to propose against; nothing was proposed.',
+      'PROPOSE_NO_BASE',
+    )
+  }
+
+  if (!ctx.deps.proposeToServer) {
+    throw new PushFatalError('This build cannot propose without a clone.', 'PROPOSE_UNSUPPORTED')
+  }
+
+  const result = await ctx.deps.proposeToServer({
+    workspaceId: ctx.workspaceId,
+    ...(ctx.propose.title === undefined ? {} : {title: ctx.propose.title}),
+    ...(ctx.propose.description === undefined ? {} : {description: ctx.propose.description}),
+    changes,
+  })
+
+  if (result.kind === 'error') {
+    const message = proposeFailureMessage(result.status, result.message, result.data)
+    throw new PushFatalError(message, message === SERVER_TOO_OLD ? 'PROPOSE_UNSUPPORTED' : 'PROPOSE_REFUSED')
+  }
+
+  const read = readProposeResponse(result)
+  if (!read.ok) throw new PushFatalError(read.error, 'PROPOSE_UNSUPPORTED')
+  return read.changeRequest
 }
 
 const toServerKind = (kind: FileDelta['kind']): ServerFileKind => {

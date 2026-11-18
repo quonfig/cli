@@ -223,13 +223,13 @@ describe('runPush --propose (qfg-5bjew.17)', () => {
     ])
   })
 
-  it('T4: on the bare path (no clone), refuses before any write', async () => {
+  // T4 bare path: PROPOSE_NEEDS_CLONE was lifted by qfg-5bjew.37 (Q5); the
+  // bare path now proposes through changeRequests.propose
+  // (run-push-propose-bare.test.ts).
+  it('T4: on the bare path (no clone), no longer refuses with PROPOSE_NEEDS_CLONE and never pushes live', async () => {
     const {deps, captured} = makeDeps({isGitRepo: false})
     const err = await catchFatal(runPush(input(dir, {propose: {}}), deps))
-    expect(err.code).to.equal('PROPOSE_NEEDS_CLONE')
-    expect(err.message).to.equal(
-      '--propose needs a git clone of the workspace in this step. Run qfg pull, create a branch, commit, then qfg push --propose.',
-    )
+    expect(err.code).to.not.equal('PROPOSE_NEEDS_CLONE')
     expect(captured.pushToServer).to.equal(0)
     expect(captured.pushPack).to.have.length(0)
   })

@@ -53,7 +53,17 @@ export interface DiffSummary {
    * Render the plain-text summary shown before the user confirms.
    * All opts are optional; missing string opts render as `<unknown>`.
    */
-  renderText(opts?: {branch?: string; localDir?: string; repoUrl?: string; workspaceSlug?: string}): string
+  /**
+   * `proposing` (qfg-5bjew.37): the bare-path `--propose` header. Nothing is
+   * pushed to a branch; the server opens a new change request instead.
+   */
+  renderText(opts?: {
+    branch?: string
+    localDir?: string
+    proposing?: boolean
+    repoUrl?: string
+    workspaceSlug?: string
+  }): string
   /** Sum across all groups, plus `filesTouched = added + modified + deleted`. */
   totals: {filesTouched: number} & GroupCounts
 }
@@ -129,10 +139,13 @@ export function summarizeDiff(
     const localDir = renderOpts?.localDir ?? '.'
 
     const lines: string[] = []
+    const proposing = renderOpts?.proposing === true
     lines.push(
-      `Pushing to workspace:  ${slug}`,
+      proposing ? `Proposing to workspace:  ${slug}` : `Pushing to workspace:  ${slug}`,
       `  Git repo:            ${repo}`,
-      `  Branch:              ${branch}`,
+      proposing
+        ? '  Into:                a new change request (nothing goes live until it is merged)'
+        : `  Branch:              ${branch}`,
       `  Local dir:           ${localDir}`,
       '',
       'Changes vs. remote HEAD:',

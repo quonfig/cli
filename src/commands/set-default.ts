@@ -1,6 +1,18 @@
 import {Flags} from '@oclif/core'
 import {ProvidedSource, ConfigValueType} from '@quonfig/node'
 
+import {
+  type ProposalChange,
+  type ProposalDocumentType,
+  type ProposeOptions,
+  applyUpdateFields,
+  failWithProposeHint,
+  loadCrBase,
+  parseProposeFlags,
+  proposalTypeFor,
+  proposeFlags,
+  submitProposal,
+} from '../change-requests/propose.js'
 import {APICommand} from '../index.js'
 import {JsonObj} from '../result.js'
 import getConfirmation, {confirmFlag} from '../ui/get-confirmation.js'
@@ -31,6 +43,16 @@ import {resolveValueSource, valueSourceFlags} from '../util/value-source.js'
 
 type ValueOrEnvVar = {envVar: string; value?: never} | {envVar?: never; value: string}
 type StoredDocument = {commitSha: string} & ScopedDocument
+
+/** How a --propose / --cr run sends its change (qfg-5bjew.37). */
+interface ProposeContext {
+  docType: ProposalDocumentType
+  /** True when --cr <n> already changes this key: build on #n's version. */
+  inRequest: boolean
+  options: ProposeOptions
+  /** "The version I read": main's commitSha, or #n's head when inRequest. */
+  token: string
+}
 
 export default class SetDefault extends APICommand {
   static aliases = ['toggle']
@@ -64,6 +86,12 @@ that env var at runtime.)
 
 To see all current values and rules for a flag:
   qfg info my.flag
+
+To PROPOSE the change instead of applying it (a change request: NOT LIVE
+until someone with rights merges it; works with a read-only key):
+  qfg set-default my.flag --environment production --value true --propose
+  qfg set-default other.flag --environment production --value true --cr 12   # add to your #12
+Agents: never merge a change request you did not author without a human telling you to.
 
 To target specific organizations or users, write rules on their KEY
 (organization.key, user.key), not a slug or email; find a key from a name with:
@@ -108,6 +136,7 @@ To target specific organizations or users, write rules on their KEY
     ...valueSourceFlags,
     ...confirmFlag,
     ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
+    ...proposeFlags,
   }
 
   static writesHostedWorkspace = true
@@ -116,6 +145,12 @@ To target specific organizations or users, write rules on their KEY
     const {args, flags} = await this.parse(SetDefault)
 
     let secret = parsedSecretFlags(flags)
+
+    // qfg-5bjew.37: --propose / --cr <n> send the same document to
+    // changeRequests.propose instead of the update route.
+    const propose = parseProposeFlags(flags)
+    if (!propose.ok) return this.err(propose.error)
+    const proposeOptions = propose.options
 
     if (flags['env-var'] && flags.value) {
       return this.err('cannot specify both --env-var and --value')
@@ -218,8 +253,27 @@ To target specific organizations or users, write rules on their KEY
       return this.err(`Failed to fetch config details: ${detailRequest.status}`)
     }
 
-    const currentConfig = detailRequest.json as unknown as StoredDocument
+    let currentConfig = detailRequest.json as unknown as StoredDocument
     this.verboseLog('Config details:', currentConfig)
+
+    let proposeContext: ProposeContext | undefined
+    if (proposeOptions) {
+      const docType = proposalTypeFor(config.type)
+      if (!docType) return this.err(`Cannot propose a change to ${key}: proposals cover flags, configs and log levels.`)
+      let token = currentConfig.commitSha
+      let inRequest = false
+      if (proposeOptions.changeRequest !== undefined) {
+        const base = await loadCrBase(this, proposeOptions.changeRequest, docType, key)
+        if (base.inRequest) {
+          // #n already changes this key: build on #n's version of it.
+          currentConfig = {...(base.document as ScopedDocument), commitSha: base.headSha}
+          token = base.headSha
+          inRequest = true
+        }
+      }
+
+      proposeContext = {docType, inRequest, options: proposeOptions, token}
+    }
 
     // Auto-detect from EVERY stored rule value, default and per-environment
     // (qfg-r3a47): an update to an encrypted or confidential key must not
@@ -287,7 +341,10 @@ To target specific organizations or users, write rules on their KEY
 
     // Get the value
     if (flags['env-var']) {
-      if (!(await getConfirmation({flags, message: confirmMessage(`be provided by \`${flags['env-var']}\``)}))) {
+      if (
+        !proposeContext &&
+        !(await getConfirmation({flags, message: confirmMessage(`be provided by \`${flags['env-var']}\``)}))
+      ) {
         return
       }
 
@@ -299,6 +356,7 @@ To target specific organizations or users, write rules on their KEY
         envVar: flags['env-var'],
         environment,
         key,
+        proposeContext,
         replaceTargeting,
         scope,
         secret,
@@ -327,7 +385,8 @@ To target specific organizations or users, write rules on their KEY
       ? redactedDisplay(redactedSummary({encrypted: secret.selected, plaintext: value}))
       : `\`${value}\``
 
-    if (!(await getConfirmation({flags, message: confirmMessage(promptPhrase)}))) {
+    // Nothing goes live with --propose, so there is nothing to confirm.
+    if (!proposeContext && !(await getConfirmation({flags, message: confirmMessage(promptPhrase)}))) {
       return
     }
 
@@ -338,12 +397,68 @@ To target specific organizations or users, write rules on their KEY
       envName,
       environment,
       key,
+      proposeContext,
       replaceTargeting,
       scope,
       secret,
       targetingRuleCount,
       value,
     })
+  }
+
+  /**
+   * The proposal entry for this write. Normally the whole document the live
+   * write would have produced, with the commitSha it was read at. When --cr
+   * <n> already changes this key, the server will not replace the whole
+   * document there (Q15), so a plain fallback value goes as the semantic
+   * set_flag / set_config instead, applied to #n's version.
+   */
+  private proposalChange({
+    config,
+    configValue,
+    currentConfig,
+    envName,
+    envVar,
+    key,
+    proposeContext,
+    replaceTargeting,
+    secretOrConfidential,
+    updateFields,
+  }: {
+    config: {type: string}
+    configValue: Record<string, unknown>
+    currentConfig: StoredDocument
+    envName: string | undefined
+    envVar: string | undefined
+    key: string
+    proposeContext: ProposeContext
+    replaceTargeting: boolean
+    secretOrConfidential: boolean
+    updateFields: Record<string, unknown>
+  }): ProposalChange {
+    const semantic =
+      proposeContext.inRequest &&
+      envVar === undefined &&
+      !secretOrConfidential &&
+      (config.type === 'feature_flag' || config.type === 'config')
+    if (semantic) {
+      return {
+        op: config.type === 'feature_flag' ? 'set_flag' : 'set_config',
+        key,
+        environment: envName ?? 'default',
+        value: configValue.value,
+        ...(replaceTargeting ? {replaceTargeting: true} : {}),
+        expectedCommitSha: proposeContext.token,
+      }
+    }
+
+    return {
+      op: 'set_document',
+      type: proposeContext.docType,
+      key,
+      document: applyUpdateFields(currentConfig, updateFields),
+      expectedCommitSha: proposeContext.token,
+    }
   }
 
   private async submitChange({
@@ -354,6 +469,7 @@ To target specific organizations or users, write rules on their KEY
     envVar,
     environment,
     key,
+    proposeContext,
     replaceTargeting,
     scope,
     secret,
@@ -366,6 +482,7 @@ To target specific organizations or users, write rules on their KEY
     envName: string | undefined
     environment: {id: string; name: string}
     key: string
+    proposeContext?: ProposeContext
     replaceTargeting: boolean
     scope: {rules: Rule[]; seeded: boolean}
     secret: Secret
@@ -513,6 +630,27 @@ To target specific organizations or users, write rules on their KEY
 
     this.verboseLog('Update fields:', JSON.stringify(updateFields, null, 2))
 
+    if (proposeContext) {
+      return submitProposal(this, {
+        changes: [
+          this.proposalChange({
+            config,
+            configValue,
+            currentConfig,
+            envName,
+            envVar,
+            key,
+            proposeContext,
+            replaceTargeting,
+            secretOrConfidential: secret.selected || confidential,
+            updateFields,
+          }),
+        ],
+        key,
+        options: proposeContext.options,
+      })
+    }
+
     // Route to the correct update endpoint based on config type.
     let request: Awaited<ReturnType<typeof this.apiClient.post>>
 
@@ -586,6 +724,18 @@ To target specific organizations or users, write rules on their KEY
         : request.status === 403 && request.serverMessage
           ? `Failed to change default: ${request.status}: ${request.serverMessage}`
           : `Failed to change default: ${request.status}`
+
+    // qfg-5bjew.37 (rule 2.11): a refused write can be proposed instead.
+    if (request.status === 403) {
+      return failWithProposeHint(
+        this,
+        errMsg,
+        {key, serverError: request.error},
+        {
+          maskValue: secret.selected || confidential,
+        },
+      )
+    }
 
     return this.err(errMsg, {key, serverError: request.error})
   }
