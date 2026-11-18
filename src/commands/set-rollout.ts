@@ -1,5 +1,14 @@
 import {Flags} from '@oclif/core'
 
+import {
+  failWithProposeHint,
+  loadCrBase,
+  parseProposeFlags,
+  proposalTypeFor,
+  proposeFlags,
+  applyUpdateFields,
+  submitProposal,
+} from '../change-requests/propose.js'
 import {APICommand} from '../index.js'
 import {JsonObj} from '../result.js'
 import getConfirmation from '../ui/get-confirmation.js'
@@ -67,7 +76,11 @@ To revert to a single value for everyone, use:
   qfg set-default my.flag --environment production --value false --replace-targeting
 
 To inspect the current rollout:
-  qfg info my.flag`
+  qfg info my.flag
+
+To PROPOSE the rollout instead of applying it (a change request: NOT LIVE
+until someone with rights merges it):
+  qfg set-rollout my.flag --environment production --true-percent 20 --propose`
 
   static examples = [
     '<%= config.bin %> <%= command.id %> my.feature.flag --environment production --true-percent 20',
@@ -100,12 +113,18 @@ To inspect the current rollout:
         'comma-separated "value:percent" pairs that must sum to 100 (e.g. "true:20,false:80" or "red:33,green:33,blue:34")',
     }),
     confirm: Flags.boolean({description: 'skip the interactive confirmation prompt (useful for scripts and agents)'}),
+    ...proposeFlags,
   }
 
   static writesHostedWorkspace = true
 
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(SetRollout)
+
+    // qfg-5bjew.37: --propose / --cr <n>.
+    const propose = parseProposeFlags(flags)
+    if (!propose.ok) return this.err(propose.error)
+    const proposeOptions = propose.options
 
     // Validate flag exclusivity
     if (flags['true-percent'] !== undefined && flags.weights) {
@@ -219,10 +238,27 @@ To inspect the current rollout:
       return this.err(`Failed to fetch config details: ${detailRequest.status}`)
     }
 
-    const currentConfig = detailRequest.json as unknown as {
+    type RolloutDocument = {
       commitSha: string
       variants?: Array<{name?: string; value: {type: string; value: unknown}; description?: string}>
     } & ScopedDocument
+    let currentConfig = detailRequest.json as unknown as RolloutDocument
+
+    // --cr <n> that already changes this key: build on #n's version of it,
+    // with #n's head as the "version I read" token.
+    const docType = proposeOptions ? proposalTypeFor(config.type) : undefined
+    if (proposeOptions && !docType) {
+      return this.err(`Cannot propose a change to ${key}: proposals cover flags, configs and log levels.`)
+    }
+
+    let proposeToken = currentConfig.commitSha
+    if (proposeOptions?.changeRequest !== undefined && docType) {
+      const base = await loadCrBase(this, proposeOptions.changeRequest, docType, key)
+      if (base.inRequest) {
+        currentConfig = {...(base.document as RolloutDocument), commitSha: base.headSha}
+        proposeToken = base.headSha
+      }
+    }
 
     // The scope this write targets: one environment's rule list, or the
     // document's `default` block when the user picked [Default].
@@ -252,7 +288,8 @@ To inspect the current rollout:
       ? `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}] for EVERYONE${deletePhrase}?`
       : `Confirm: set rollout for ${key} in ${environment.name} to [${rolloutDescription}]?${keptPhrase}`
 
-    if (!(await getConfirmation({flags, message}))) {
+    // Nothing goes live with --propose, so there is nothing to confirm.
+    if (!proposeOptions && !(await getConfirmation({flags, message}))) {
       return
     }
 
@@ -281,7 +318,23 @@ To inspect the current rollout:
 
     this.verboseLog('Update fields:', JSON.stringify(updateFields, null, 2))
 
-    let request: Awaited<ReturnType<typeof this.apiClient.post>>
+    if (proposeOptions && docType) {
+      return submitProposal(this, {
+        changes: [
+          {
+            op: 'set_document',
+            type: docType,
+            key,
+            document: applyUpdateFields(currentConfig, updateFields),
+            expectedCommitSha: proposeToken,
+          },
+        ],
+        key,
+        options: proposeOptions,
+      })
+    }
+
+    let request: Awaited<ReturnType<APICommand['apiClient']['post']>>
 
     if (config.type === 'feature_flag') {
       request = await this.apiClient.post('/api/v1/flags/update', {
@@ -336,10 +389,14 @@ To inspect the current rollout:
 
     this.verboseLog(request.error)
 
-    return this.err(`Failed to set rollout: ${request.status} | ${JSON.stringify(request.error)}`, {
-      key,
-      serverError: request.error,
-    })
+    const errMsg = `Failed to set rollout: ${request.status} | ${JSON.stringify(request.error)}`
+    // qfg-5bjew.37 (rule 2.11): a refused write can be proposed instead.
+    if (request.status === 403) {
+      const detail = request.serverMessage ? `: ${request.serverMessage}` : ''
+      return failWithProposeHint(this, `Failed to set rollout: 403${detail}`, {key, serverError: request.error})
+    }
+
+    return this.err(errMsg, {key, serverError: request.error})
   }
 
   private coerceValue(

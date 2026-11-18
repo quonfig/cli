@@ -37,7 +37,8 @@ describe('set-default 403 (qfg-5bjew.17)', () => {
     .stderr()
     .command(['set-default', 'feature-flag.simple', '--environment=Development', '--value=true', '--confirm'])
     .catch((error) => {
-      expect(error.message).to.equal(`Failed to change default: 403: ${SERVER_MESSAGE}`)
+      // qfg-5bjew.37: the propose hint follows the server message.
+      expect(error.message.split('\n')[0]).to.equal(`Failed to change default: 403: ${SERVER_MESSAGE}`)
     })
     .it('prints the server message after the status')
 
@@ -47,7 +48,7 @@ describe('set-default 403 (qfg-5bjew.17)', () => {
     .stderr()
     .command(['set-default', 'feature-flag.simple', '--environment=Development', '--value=true', '--confirm'])
     .catch((error) => {
-      expect(error.message).to.equal('Failed to change default: 403')
+      expect(error.message.split('\n')[0]).to.equal('Failed to change default: 403')
     })
     .it('keeps the old text when the body has no message')
 })

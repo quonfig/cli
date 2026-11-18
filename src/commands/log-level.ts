@@ -1,5 +1,14 @@
 import {Args, Flags} from '@oclif/core'
 
+import {
+  applyUpdateFields,
+  failWithProposeHint,
+  loadCrBase,
+  parseProposeFlags,
+  proposeFlags,
+  type ProposeOptions,
+  submitProposal,
+} from '../change-requests/propose.js'
 import {APICommand} from '../index.js'
 import {JsonObj} from '../result.js'
 import {checkmark} from '../util/color.js'
@@ -60,6 +69,10 @@ Two modes:
 To update the catch-all default for an existing log level, use set-default:
   qfg set-default ${LOG_LEVEL_KEY_PREFIX}my-app --value=DEBUG --environment=production
 
+To PROPOSE either change instead of applying it (a change request: NOT LIVE
+until someone with rights merges it), add --propose (or --cr <n> to add to
+your open request #n).
+
 For more complex rules (regex, multi-criterion, exact match) edit the JSON:
   qfg pull && $EDITOR log-levels/${LOG_LEVEL_KEY_PREFIX}my-app.json
   qfg config-schema            # full operator reference`
@@ -84,12 +97,16 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
       options: [...LOG_LEVELS],
       required: false,
     }),
+    ...proposeFlags,
   }
 
   static writesHostedWorkspace = true
 
   public async run(): Promise<JsonObj | void> {
     const {args, flags} = await this.parse(LogLevel)
+
+    const propose = parseProposeFlags(flags)
+    if (!propose.ok) return this.err(propose.error)
 
     if (!args.name.startsWith(LOG_LEVEL_KEY_PREFIX)) {
       return this.err(
@@ -107,6 +124,11 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
 
       const argv = [args.name, '--type=log_level']
       if (flags.value) argv.push(`--value=${flags.value}`)
+      // qfg-5bjew.37: create proposes too.
+      if (flags.propose) argv.push('--propose')
+      if (flags.cr !== undefined) argv.push(`--cr=${flags.cr}`)
+      if (flags.title !== undefined) argv.push(`--title=${flags.title}`)
+      if (flags.description !== undefined) argv.push(`--description=${flags.description}`)
       if (this.jsonEnabled()) argv.push('--json')
 
       return this.config.runCommand('create', argv) as Promise<JsonObj | void>
@@ -117,7 +139,7 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
       return this.err('--value is required with --target (the level the targeted loggers should use)')
     }
 
-    return this.addTargetingRule(args.name, flags.target, flags.value, flags.environment)
+    return this.addTargetingRule(args.name, flags.target, flags.value, flags.environment, propose.options)
   }
 
   private async addTargetingRule(
@@ -125,6 +147,7 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
     targets: string[],
     levelRaw: string,
     environment: string | undefined,
+    proposeOptions: ProposeOptions | undefined,
   ): Promise<JsonObj | void> {
     const level = levelRaw.toUpperCase()
     if (!isLogLevel(level)) {
@@ -146,7 +169,16 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
       return this.err(`Failed to fetch log level: ${detailRequest.status}`, {serverError: detailRequest.error})
     }
 
-    const current = detailRequest.json as unknown as LogLevelConfig
+    let current = detailRequest.json as unknown as LogLevelConfig
+    let proposeToken = current.commitSha
+    if (proposeOptions?.changeRequest !== undefined) {
+      // --cr <n> that already changes this key: build on #n's version.
+      const base = await loadCrBase(this, proposeOptions.changeRequest, 'log-level', key)
+      if (base.inRequest) {
+        current = {...(base.document as LogLevelConfig), commitSha: base.headSha}
+        proposeToken = base.headSha
+      }
+    }
 
     const newRule: Rule = {
       criteria: [
@@ -176,6 +208,22 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
       ? {environments: upsertEnvRules(current.environments ?? [], environment, mergedRules) as EnvRules[]}
       : {default: {rules: mergedRules}}
 
+    if (proposeOptions) {
+      return submitProposal(this, {
+        changes: [
+          {
+            op: 'set_document',
+            type: 'log-level',
+            key,
+            document: applyUpdateFields(current, logLevelPatch),
+            expectedCommitSha: proposeToken,
+          },
+        ],
+        key,
+        options: proposeOptions,
+      })
+    }
+
     const updateRequest = await this.apiClient.post('/api/v1/logLevels/update', {
       workspaceId: this.workspaceId,
       logLevelKey: key,
@@ -184,6 +232,15 @@ For more complex rules (regex, multi-criterion, exact match) edit the JSON:
     })
 
     if (!updateRequest.ok) {
+      // qfg-5bjew.37 (rule 2.11): a refused write can be proposed instead.
+      if (updateRequest.status === 403) {
+        const detail = updateRequest.serverMessage ? `: ${updateRequest.serverMessage}` : ''
+        return failWithProposeHint(this, `Failed to update log level: 403${detail}`, {
+          key,
+          serverError: updateRequest.error,
+        })
+      }
+
       return this.err(`Failed to update log level: ${updateRequest.status}`, {serverError: updateRequest.error})
     }
 
