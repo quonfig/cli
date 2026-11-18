@@ -101,7 +101,7 @@ describe('change-request rendering (qfg-5bjew.17)', () => {
       expect(text).to.not.include(ESC)
       expect(text).to.not.include('\u0007')
       expect(lines).to.include('Title (as written by the proposer): t You can merge: yes')
-      expect(text).to.include('Proposed by L <e@x> via cli')
+      expect(text).to.include('Proposed by L <e@x> via the CLI')
     })
 
     it('notes when a segment is touched', () => {
@@ -182,7 +182,7 @@ describe('change-request rendering (qfg-5bjew.17)', () => {
 
     it('shows the channel and the cr/<n> branch as built by Quonfig', () => {
       const text = renderShow(base()).join('\n')
-      expect(text).to.include('Proposed by Riley via mcp')
+      expect(text).to.include('Proposed by Riley via MCP')
       expect(text).to.match(/^Branch: cr\/12 \(built by Quonfig, no clone; head c{7}, base d{7}\)$/m)
     })
 
@@ -206,6 +206,31 @@ describe('change-request rendering (qfg-5bjew.17)', () => {
       expect(text).to.include(
         'Add more: run a qfg write command with --cr 12, or call the MCP tool propose_change_request with changeRequest: 12.',
       )
+    })
+
+    it('no add-more hint when blocked by a conflict: adding to cr/<n> cannot clear it', () => {
+      for (const blockedBy of [
+        conflicted.blockedBy,
+        {reason: 'no_merge_base'},
+        {reason: 'multiple_merge_bases', bases: ['a', 'b']},
+      ]) {
+        const text = renderShow(base({...conflicted, blockedBy, proposedByCaller: true})).join('\n')
+        expect(text).to.include(crConflictFix(12))
+        expect(text).to.not.include('Add more')
+      }
+    })
+
+    it('names the channel the same way as the web page', () => {
+      for (const [channel, label] of [
+        ['mcp', 'via MCP'],
+        ['api', 'via the API'],
+        ['ui', 'via the web app'],
+        ['cli', 'via the CLI'],
+        ['other', 'via other'],
+      ]) {
+        const text = renderShow(base({proposer: {label: 'Riley', email: null, channel}})).join('\n')
+        expect(text).to.include(`Proposed by Riley ${label}`)
+      }
     })
 
     it('no add-more hint for someone else, a closed request, or a clone branch', () => {

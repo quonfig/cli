@@ -88,7 +88,7 @@ describe('qfg cr (qfg-5bjew.17)', () => {
         expect(ctx.stdout).to.contain('    +   "value": true')
         expect(ctx.stdout.indexOf('"value": true')).to.be.lessThan(ctx.stdout.indexOf('Change request #7 [open]'))
         expect(ctx.stdout).to.contain('Title (as written by the proposer): cr smoke')
-        expect(ctx.stdout).to.contain('Proposed by Dana Kim <dana@quonfig.test> via cli')
+        expect(ctx.stdout).to.contain('Proposed by Dana Kim <dana@quonfig.test> via the CLI')
         expect(ctx.stdout).to.contain('Mergeable: yes')
         expect(ctx.stdout).to.contain('You can merge: yes')
         expect(ctx.stdout).to.contain('You can close: yes')
@@ -159,15 +159,15 @@ describe('qfg cr (qfg-5bjew.17)', () => {
       )
       .stdout()
       .command(['cr show', '7'])
-      .it('cr/<n>: channel, branch, close-and-propose-again fix, add-more hint', (ctx) => {
-        expect(ctx.stdout).to.contain('Proposed by Dana Kim via mcp (you)')
+      .it('cr/<n> conflicted: channel, branch, close-and-propose-again fix, no add-more hint', (ctx) => {
+        expect(ctx.stdout).to.contain('Proposed by Dana Kim via MCP (you)')
         expect(ctx.stdout).to.contain('Branch: cr/7 (built by Quonfig, no clone;')
         expect(ctx.stdout).to.contain(
           'Fix: close it and propose again from the current state of main (qfg cr close 7, then run your change again with --propose).',
         )
         expect(ctx.stdout).to.not.match(/merge main into/i)
-        expect(ctx.stdout).to.contain('Add more: run a qfg write command with --cr 7')
-        expect(ctx.stdout).to.contain('propose_change_request with changeRequest: 7')
+        // Adding more cannot clear a conflict on cr/<n>; only close-and-propose-again can.
+        expect(ctx.stdout).to.not.contain('Add more')
       })
 
     test

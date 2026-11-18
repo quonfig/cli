@@ -193,9 +193,20 @@ export function renderFiles(detail: ChangeRequestDetail): string[] {
   return lines
 }
 
+/** The same channel names the web review page uses; unknown channels print as sent. */
+const CHANNEL_LABELS: Record<string, string> = {
+  api: 'the API',
+  cli: 'the CLI',
+  mcp: 'MCP',
+  ui: 'the web app',
+}
+
+const channelLabel = (channel: string): string =>
+  Object.hasOwn(CHANNEL_LABELS, channel) ? CHANNEL_LABELS[channel] : sanitizeLine(channel)
+
 const proposerLine = (s: ChangeRequestSummary): string => {
   const email = s.proposer.email ? ` <${sanitizeLine(s.proposer.email)}>` : ''
-  return `Proposed by ${sanitizeLine(s.proposer.label)}${email} via ${sanitizeLine(s.proposer.channel)}${
+  return `Proposed by ${sanitizeLine(s.proposer.label)}${email} via ${channelLabel(s.proposer.channel)}${
     s.proposedByCaller ? ' (you)' : ''
   }`
 }
@@ -257,8 +268,11 @@ export function renderShow(detail: ChangeRequestDetail): string[] {
       `You can merge: ${detail.callerCanMerge ? 'yes' : `no${requires ? ` (Requires: ${requires})` : ''}`}`,
       `You can close: ${detail.callerCanClose ? 'yes' : 'no'}`,
     )
-    if (detail.blockedBy && FIXABLE_BLOCKS.has(detail.blockedBy.reason)) lines.push(conflictFix(detail))
-    if (detail.proposedByCaller && isServerBuiltBranch(detail.branch)) lines.push(addMoreHint(detail.number))
+    const fixable = Boolean(detail.blockedBy && FIXABLE_BLOCKS.has(detail.blockedBy.reason))
+    if (fixable) lines.push(conflictFix(detail))
+    // Adding more never brings main into cr/<n>, so a conflicted request gets only the close-and-propose-again fix.
+    if (!fixable && detail.proposedByCaller && isServerBuiltBranch(detail.branch))
+      lines.push(addMoreHint(detail.number))
   }
 
   if (detail.status === 'merged' && detail.merged) {
