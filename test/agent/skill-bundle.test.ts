@@ -30,6 +30,29 @@ describe('vendored Quonfig agent skill bundle', () => {
     for (const rel of linked) expect(paths.has(rel), rel).to.equal(true)
   })
 
+  // qfg-5bjew.40: the vendored skill teaches proposing without a clone
+  // (step 3 of change requests), not only the clone path, and keeps the
+  // 2.14 rule that an agent never merges a request it did not author.
+  it('teaches the no-clone change-request path', () => {
+    const skill = SKILL_FILES.find((f) => f.path === 'SKILL.md')!.content
+    const mcp = SKILL_FILES.find((f) => f.path === 'references/mcp.md')!.content
+    expect(skill).to.include('--propose')
+    expect(skill).to.include('--cr <n>')
+    expect(skill).to.include('qfg cr wait')
+    expect(skill).to.include('propose_change_request')
+    expect(skill).to.match(/Never merge a change request you did not author/)
+    for (const tool of [
+      'propose_change_request',
+      'get_change_request',
+      'list_change_requests',
+      'close_change_request',
+    ]) {
+      expect(mcp, tool).to.include(tool)
+    }
+
+    expect(mcp).to.not.match(/\bpropose_change\b(?!_request)/)
+  })
+
   it('matches the skills repo checkout (drift guard)', function () {
     const skillsDir = path.resolve(process.env.QUONFIG_SKILLS_DIR ?? path.join(repoRoot, '..', 'skills'))
     if (!fs.existsSync(path.join(skillsDir, 'plugins', 'quonfig'))) {
