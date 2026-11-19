@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.0 - 2026-11-19
+
+- **feat(cr): propose without a clone.** `set-default`, `set-rollout`, `log-level`, `create` and `delete` take `--propose` (plus `--title` / `--description`). The change becomes a change request instead of going live. `--cr <n>` adds the change to open request #n. The output names the request, its link, the masked summary and `NOT LIVE`. `--json` returns `{proposed: true, applied: false, changeRequest}`. A proposed create can't carry `--secret`, `--confidential` or `--env-var`, so the command refuses before sending anything. (qfg-5bjew.37)
+
+- **feat(cr): `qfg push --propose` works on a bare path.** Changed and deleted flag, config and log-level files are proposed without a clone. New files, segments and schemas are refused before anything is sent. (qfg-5bjew.37)
+
+- **feat(cr): `qfg cr wait <n|branch>`.** Waits until the request is merged (exit 0) or closed (exit 2). A request blocked by a conflict with main exits 4 and prints the fix. A timeout exits 124. Options: `--timeout` and `--interval`. (qfg-5bjew.37)
+
+- **feat(push, set-default, set-rollout, log-level, create, delete): a refused live write says how to propose it.** After the server's message, the CLI prints the same command with `--propose`. `--json` adds `proposable: true` and `proposeCommand`. (qfg-5bjew.37)
+
+- **feat(cr): `qfg cr show` for requests Quonfig built on a `cr/<n>` branch.** It shows how the request was built, how to add more changes (`--cr <n>` or the MCP tool), and the fix when a conflict blocks it. (qfg-5bjew.39)
+
+- **fix(cr): `cr show`, `cr merge` and `cr wait` mask secrets.** Encrypted values show as `[encrypted]` (`[encrypted, changed]` when changed), and confidential values are redacted as on the web review page. This covers text output and `--json`. Before, `cr show` printed raw ciphertext. (qfg-5bjew.48)
+
+- **fix(pull): git stops on flag files edited on both sides.** `qfg pull`, `qfg sync` and `qfg workspace bootstrap` add `*.json -merge` to the clone's `.git/info/attributes`. Before, a line merge could silently mix main's edit with a branch's edit inside one flag file. Nothing is committed, so the storage format is unchanged. `qfg pull --help` explains how to resolve these. (qfg-5bjew.28)
+
+- **fix(pull): no false pin warning with an API key.** With `QUONFIG_API_KEY` and `QUONFIG_WORKSPACE=org/slug`, `qfg pull` no longer warns that the pin does not match `/<slug>`. (qfg-5bjew.46)
+
+- **fix(cr): `qfg cr --help` has its own topic description**, instead of borrowing `cr close`'s. (qfg-5bjew.27)
+
+- **chore(agent): `qfg agent install-skill` writes skill 1.3.0**, which covers change requests, including proposing without a clone. (qfg-5bjew.19, qfg-5bjew.40)
+
 ## 0.11.0 - 2026-11-16
 
 - **feat(cr): change requests from a clone.** On a branch other than `main`, `qfg push --propose [--title] [--description]` pushes the branch and opens a change request, or updates the one already open for it. It prints the request number and link, and says the change is not live until someone with rights merges it. `--propose` on `main` refuses and prints the git commands to move your unpushed commits to a branch. A plain push to a branch with an open request says it updated that request. (qfg-5bjew.17)
