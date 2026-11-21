@@ -32,7 +32,9 @@ describe('activity history', () => {
       // Render: each entry shows sha, author, date, action, message.
       expect(ctx.stdout).to.contain('Alice')
       expect(ctx.stdout).to.contain('Carol')
-      expect(ctx.stdout).to.contain('Updated default rule from false to true')
+      // Each change line names its environment (the message's scope).
+      expect(ctx.stdout).to.contain('    production: + everyone gets true')
+      expect(ctx.stdout).to.not.contain('- + everyone')
       expect(ctx.stdout).to.contain('Restored flag "my.flag"')
       // Restore action is rendered distinctly.
       expect(ctx.stdout).to.contain('restored')

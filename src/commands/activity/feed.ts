@@ -3,11 +3,7 @@ import {Flags} from '@oclif/core'
 import type {JsonObj} from '../../result.js'
 
 import {APICommand} from '../../index.js'
-
-interface AuditMessage {
-  message: string
-  scope: string
-}
+import {type AuditMessage, auditLines} from '../../util/audit-lines.js'
 
 interface FeedItem {
   action: string
@@ -90,11 +86,11 @@ translates JSON diffs into messages — this command does not re-translate.`
       const who = authorLabel(item)
       const when = relativeTime(item.date)
       const target = item.configType && item.configKey ? `${item.configType}/${item.configKey}` : '(workspace)'
-      lines.push(`${sha}  ${item.action.padEnd(9)}  ${target}  by ${who}  ${when}`)
-      for (const m of item.messages) {
-        lines.push(`    - ${m.message}`)
-      }
-      lines.push('')
+      lines.push(
+        `${sha}  ${item.action.padEnd(9)}  ${target}  by ${who}  ${when}`,
+        ...auditLines(item.action, item.messages),
+        '',
+      )
     }
 
     this.log(lines.join('\n').trimEnd())

@@ -2,12 +2,8 @@ import type {JsonObj} from '../../result.js'
 
 import {APICommand} from '../../index.js'
 import {resolveConfigByKey} from '../../util/activity-lookup.js'
+import {type AuditMessage, auditLines} from '../../util/audit-lines.js'
 import nameArg from '../../util/name-arg.js'
-
-interface AuditMessage {
-  message: string
-  scope: string
-}
 
 interface HistoryEntry {
   action: string
@@ -77,11 +73,7 @@ look like a fresh create.`
       const who = authorLabel(entry)
       const date = entry.date.slice(0, 19).replace('T', ' ')
       const marker = entry.action === 'restored' ? '★ restored' : entry.action
-      lines.push(`${sha}  ${marker.padEnd(11)}  ${date}  by ${who}`)
-      for (const m of entry.messages) {
-        lines.push(`    - ${m.message}`)
-      }
-      lines.push('')
+      lines.push(`${sha}  ${marker.padEnd(11)}  ${date}  by ${who}`, ...auditLines(entry.action, entry.messages), '')
     }
 
     this.log(lines.join('\n').trimEnd())
