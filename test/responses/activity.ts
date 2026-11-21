@@ -26,7 +26,10 @@ const FEED_ITEMS = [
     action: 'updated',
     configType: 'feature_flag',
     configKey: 'my.flag',
-    messages: [{scope: 'rule', message: 'Updated default rule from false to true'}],
+    messages: [
+      {scope: 'production', message: 'had no rules of its own, used the default'},
+      {scope: 'production', message: '+ everyone gets true'},
+    ],
   },
   {
     sha: 'bbbbbbbbbbbbbbbb',
@@ -36,7 +39,7 @@ const FEED_ITEMS = [
     action: 'created',
     configType: 'config',
     configKey: 'request.timeout',
-    messages: [{scope: 'config', message: 'Created config "request.timeout"'}],
+    messages: [{scope: 'metadata', message: 'Created config "request.timeout"'}],
   },
   {
     sha: 'ccccccccccccccccc',
@@ -57,7 +60,10 @@ const RICH_HISTORY_ITEMS = [
     authorEmail: 'alice@example.com',
     date: '2026-04-30T10:00:00.000Z',
     action: 'updated',
-    messages: [{scope: 'rule', message: 'Updated default rule from false to true'}],
+    messages: [
+      {scope: 'production', message: 'had no rules of its own, used the default'},
+      {scope: 'production', message: '+ everyone gets true'},
+    ],
   },
   {
     sha: 'ddddddddddddddddd',

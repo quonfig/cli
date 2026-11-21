@@ -33,7 +33,9 @@ describe('activity feed', () => {
       expect(ctx.stdout).to.contain('Alice')
       expect(ctx.stdout).to.contain('my.flag')
       expect(ctx.stdout).to.contain('updated')
-      expect(ctx.stdout).to.contain('Updated default rule from false to true')
+      // Each change line names its environment (the message's scope).
+      expect(ctx.stdout).to.contain('    production: + everyone gets true')
+      expect(ctx.stdout).to.not.contain('- + everyone')
       // Bot commit (empty authorName) falls back to authorEmail.
       expect(ctx.stdout).to.contain('gitea-bot@quonfig.com')
       expect(ctx.stdout).to.contain('request.timeout')
