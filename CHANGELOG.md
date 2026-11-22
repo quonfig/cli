@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1 - 2026-11-22
+
+- **fix(activity): `qfg activity feed` and `qfg activity history` show the environment of each change line.** Each line is printed as `<environment>: <change>`, for example `staging: - everyone gets false`, without the leading `- ` bullet. The first line of a created, deleted or restored entry is its header and has no prefix. Quonfig's activity messages are becoming redline-style lines that do not name their environment in the text, so without this the output would not say which environment changed. (qfg-yuyck.22)
+
 ## 0.12.0 - 2026-11-19
 
 - **feat(cr): propose without a clone.** `set-default`, `set-rollout`, `log-level`, `create` and `delete` take `--propose` (plus `--title` / `--description`). The change becomes a change request instead of going live. `--cr <n>` adds the change to open request #n. The output names the request, its link, the masked summary and `NOT LIVE`. `--json` returns `{proposed: true, applied: false, changeRequest}`. A proposed create can't carry `--secret`, `--confidential` or `--env-var`, so the command refuses before sending anything. (qfg-5bjew.37)
