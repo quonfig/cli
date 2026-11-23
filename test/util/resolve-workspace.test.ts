@@ -755,4 +755,23 @@ describe('resolve-workspace quonfig.json pin precedence', () => {
 
     expect(result.workspaceId).to.equal('ws-semgrep-uuid')
   })
+
+  it('in QUONFIG_API_KEY mode, uses the quonfig.json pin and never asks whoami (qfg-oscj0.8)', async () => {
+    process.env.QUONFIG_API_KEY = 'qf_uk_pin_test_only'
+    fs.writeFileSync(
+      path.join(workspaceDir, 'quonfig.json'),
+      JSON.stringify({workspace: 'mhw-works/our-config'}) + '\n',
+    )
+
+    const urls: string[] = []
+    globalThis.fetch = (async (url: unknown, init?: {headers?: Record<string, string>}) => {
+      urls.push(typeof url === 'string' ? url : (url as URL).toString())
+      return workspaceListFetch()(url as never, init as never)
+    }) as typeof globalThis.fetch
+
+    const result = await resolveWorkspaceUuid(makeFakeCommand(), undefined, workspaceDir)
+
+    expect(result).to.deep.equal({orgSlug: 'mhw-works', workspaceId: 'ws-our-config-uuid'})
+    expect(urls.some((u) => u.endsWith('/whoami'))).to.equal(false)
+  })
 })

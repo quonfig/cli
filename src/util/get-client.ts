@@ -3,6 +3,7 @@ import type {JsonObj, RequestResult} from '../result.js'
 import {APICommand} from '../index.js'
 import {Client} from '@quonfig/node'
 import {getApiUrl} from '../util/domain-urls.js'
+import {inferApiKeyWorkspace} from '../util/infer-api-key-workspace.js'
 import jsonMaybe from '../util/json-maybe.js'
 import {tryParseWorkspacePin} from '../util/quonfig-json.js'
 import {findOrgIdBySlug, getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
@@ -52,15 +53,14 @@ const getClient = async (command: APICommand, sdkKey?: string, profile?: string)
     }
 
     const workspaceOverride = profile ?? process.env.QUONFIG_WORKSPACE
-    if (!workspaceOverride) {
-      command.error(
-        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<org>/<workspace> (e.g. acme/foo). (UUIDs also work.)',
-        {exit: 1},
-      )
-    }
 
     const uuidPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
-    if (uuidPattern.test(workspaceOverride)) {
+    if (!workspaceOverride) {
+      // A key is bound to one workspace, so ask the server which (qfg-oscj0.8).
+      const inferred = await inferApiKeyWorkspace(command, jwt!)
+      workspaceId = inferred.workspaceId
+      if (inferred.orgSlug && inferred.workspaceSlug) workspaceLabel = `${inferred.orgSlug}/${inferred.workspaceSlug}`
+    } else if (uuidPattern.test(workspaceOverride)) {
       workspaceId = workspaceOverride
       command.verboseLog('ApiKey auth', {source: 'uuid', workspaceId})
     } else {
