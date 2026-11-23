@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0 - 2026-11-23
+
+- **feat(auth): `QUONFIG_WORKSPACE` is optional with `QUONFIG_API_KEY`.** An API key belongs to one workspace, so the CLI now asks Quonfig which one and uses it. `--workspace`, `QUONFIG_WORKSPACE` and a `quonfig.json` pin still win, and none of them triggers the lookup. This covers API commands, `qfg run`, `qfg generate`, `qfg pull`, `qfg push`, `qfg sync` and `qfg workspace bootstrap`. A rejected key now says the key was rejected instead of asking for a workspace. (qfg-oscj0.8)
+
+- **fix(workspace): `qfg workspace` with an API key accepts `<org>/<workspace>`.** It asked for a bare `<workspace-slug>` and matched only bare slugs. It now lists workspaces as `<org>/<workspace>`; bare slugs still match. (qfg-j0j8v)
+
 ## 0.12.1 - 2026-11-22
 
 - **fix(activity): `qfg activity feed` and `qfg activity history` show the environment of each change line.** Each line is printed as `<environment>: <change>`, for example `staging: - everyone gets false`, without the leading `- ` bullet. The first line of a created, deleted or restored entry is its header and has no prefix. Quonfig's activity messages are becoming redline-style lines that do not name their environment in the text, so without this the output would not say which environment changed. (qfg-yuyck.22)
