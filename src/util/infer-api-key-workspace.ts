@@ -43,6 +43,15 @@ export async function inferApiKeyWorkspace(command: InferCommand, apiKey: string
     command.error(`${NOT_INFERRED} (${error instanceof Error ? error.message : String(error)}). ${SET_IT}`, {exit: 1})
   }
 
+  // A rejected key is the real problem; setting QUONFIG_WORKSPACE would only
+  // move the same 401 to the next call.
+  if (res.status === 401 || res.status === 403) {
+    command.error(
+      `QUONFIG_API_KEY was rejected (whoami returned HTTP ${res.status}). Check that the key is valid and not revoked.`,
+      {exit: 1},
+    )
+  }
+
   if (!res.ok) {
     command.error(`${NOT_INFERRED} (whoami returned HTTP ${res.status}). ${SET_IT}`, {exit: 1})
   }

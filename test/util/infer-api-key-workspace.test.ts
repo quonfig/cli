@@ -146,7 +146,7 @@ describe('API-key workspace inference (qfg-oscj0.8)', () => {
       expect(result).to.deep.equal({orgSlug: '', workspaceId: WS_ID})
     })
 
-    it('errors telling the user to set QUONFIG_WORKSPACE when whoami fails', async () => {
+    it('says the key was rejected (not "set QUONFIG_WORKSPACE") when whoami returns 401', async () => {
       process.env.QUONFIG_API_KEY = 'qf_sa_inference_test'
       stubFetch({whoamiBody: {error: 'UNAUTHORIZED', message: 'Invalid API key'}, whoamiStatus: 401})
 
@@ -159,8 +159,26 @@ describe('API-key workspace inference (qfg-oscj0.8)', () => {
       }
 
       expect(caught, 'expected an error').to.exist
-      expect(caught!.message).to.include('QUONFIG_WORKSPACE=<org>/<workspace>')
+      expect(caught!.message).to.include('QUONFIG_API_KEY was rejected')
       expect(caught!.message).to.include('HTTP 401')
+      expect(caught!.message).to.not.include('Set QUONFIG_WORKSPACE')
+    })
+
+    it('errors telling the user to set QUONFIG_WORKSPACE when whoami fails with a server error', async () => {
+      process.env.QUONFIG_API_KEY = 'qf_sa_inference_test'
+      stubFetch({whoamiBody: {error: 'INTERNAL'}, whoamiStatus: 503})
+
+      const cmd = makeFakeCommand()
+      let caught: Error | undefined
+      try {
+        await resolveWorkspaceUuid(asResolveCmd(cmd))
+      } catch (error) {
+        caught = error as Error
+      }
+
+      expect(caught, 'expected an error').to.exist
+      expect(caught!.message).to.include('QUONFIG_WORKSPACE=<org>/<workspace>')
+      expect(caught!.message).to.include('HTTP 503')
     })
 
     it('does not call whoami when QUONFIG_WORKSPACE is a UUID (explicit value wins, unchanged)', async () => {

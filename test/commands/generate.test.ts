@@ -115,11 +115,11 @@ describe('generate', () => {
       delete process.env.QUONFIG_WORKSPACE
       delete process.env.QUONFIG_DIR
       // qfg-oscj0.8: with no QUONFIG_WORKSPACE the resolver now asks whoami
-      // for the key's workspace. Answer 401 so it fails with the
+      // for the key's workspace. Answer 503 so it fails with the
       // set-QUONFIG_WORKSPACE error without touching the network.
       originalFetch = globalThis.fetch
       globalThis.fetch = (async () =>
-        new Response(JSON.stringify({error: 'UNAUTHORIZED'}), {status: 401})) as typeof globalThis.fetch
+        new Response(JSON.stringify({error: 'UNAVAILABLE'}), {status: 503})) as typeof globalThis.fetch
     })
 
     afterEach(() => {

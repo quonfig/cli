@@ -123,9 +123,20 @@ describe('workspace — QUONFIG_API_KEY mode', () => {
     })
     .command(['workspace'])
     .catch((error) => {
-      expect(error.message).to.contain('QUONFIG_WORKSPACE=<org>/<workspace>')
+      expect(error.message).to.contain('QUONFIG_API_KEY was rejected')
       expect(error.message).to.contain('HTTP 401')
       expect(error.message).to.not.contain('<workspace-slug>')
+    })
+    .it('says the key was rejected when whoami returns 401 (qfg-oscj0.8)')
+
+  test
+    .do(() => {
+      server.use(http.get(`${getApiBase()}/public-api/v1/whoami`, () => HttpResponse.json({}, {status: 503})))
+    })
+    .command(['workspace'])
+    .catch((error) => {
+      expect(error.message).to.contain('QUONFIG_WORKSPACE=<org>/<workspace>')
+      expect(error.message).to.contain('HTTP 503')
     })
     .it('tells the user to set QUONFIG_WORKSPACE when the key workspace cannot be inferred (qfg-oscj0.8)')
 })
