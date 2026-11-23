@@ -100,22 +100,30 @@ describe('generate', () => {
     let originalApiKey: string | undefined
     let originalWorkspace: string | undefined
     let originalDir: string | undefined
+    let originalFetch: typeof globalThis.fetch
 
     beforeEach(() => {
       originalApiKey = process.env.QUONFIG_API_KEY
       originalWorkspace = process.env.QUONFIG_WORKSPACE
       originalDir = process.env.QUONFIG_DIR
       // Force the API-key auth branch so the test never touches stored OAuth
-      // tokens or the network. resolveWorkspaceUuid short-circuits with a
-      // specific error when QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is
-      // not — that error is the proof that generate now goes through auth
+      // tokens or the network. resolveWorkspaceUuid fails with a specific
+      // error when QUONFIG_API_KEY is set, QUONFIG_WORKSPACE is not, and the
+      // key's workspace cannot be inferred — that error is the proof that generate now goes through auth
       // resolution instead of bailing out with "No directory specified".
       process.env.QUONFIG_API_KEY = 'qf_uk_test_only_do_not_use'
       delete process.env.QUONFIG_WORKSPACE
       delete process.env.QUONFIG_DIR
+      // qfg-oscj0.8: with no QUONFIG_WORKSPACE the resolver now asks whoami
+      // for the key's workspace. Answer 401 so it fails with the
+      // set-QUONFIG_WORKSPACE error without touching the network.
+      originalFetch = globalThis.fetch
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({error: 'UNAUTHORIZED'}), {status: 401})) as typeof globalThis.fetch
     })
 
     afterEach(() => {
+      globalThis.fetch = originalFetch
       if (originalApiKey === undefined) delete process.env.QUONFIG_API_KEY
       else process.env.QUONFIG_API_KEY = originalApiKey
       if (originalWorkspace === undefined) delete process.env.QUONFIG_WORKSPACE

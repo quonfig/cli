@@ -2,6 +2,7 @@ import type {BaseCommand} from '../index.js'
 
 import {getApiUrl} from './domain-urls.js'
 import {getValidAccessToken} from './get-valid-token.js'
+import {inferApiKeyWorkspace} from './infer-api-key-workspace.js'
 import {readWorkspaceSlug, tryParseWorkspacePin} from './quonfig-json.js'
 import {
   type AuthConfig,
@@ -21,7 +22,8 @@ const BARE_SLUG_ENV_MIGRATION_MESSAGE =
 export interface ResolvedWorkspace {
   /**
    * Org slug that owns workspaceId. Empty string only when QUONFIG_API_KEY
-   * is set and the workspace is given as a UUID: no org slug is known then.
+   * is set and the workspace is given as a UUID, or was inferred from the key
+   * but the org could not be looked up: no org slug is known then.
    * Token minting never needs it in API-key mode
    * (`getValidAccessTokenForOrgSlug` short-circuits on the env key), but pin
    * comparison does, so callers must skip pin work when it is empty.
@@ -39,7 +41,8 @@ export interface ResolvedWorkspace {
  *   1. --workspace flag
  *   2. QUONFIG_WORKSPACE env
  *   3. the target dir's quonfig.json `workspace` pin (when `dir` is given)
- *   4. active OAuth profile / QUONFIG_API_KEY + QUONFIG_WORKSPACE
+ *   4. active OAuth profile, or with QUONFIG_API_KEY the key's own workspace
+ *      (asked of the server, qfg-oscj0.8)
  *
  * Ranking the pin above the active profile makes a pinned workspace dir
  * self-describing: a bare `qfg pull`/`qfg sync` inside it targets the pinned
@@ -63,10 +66,10 @@ export async function resolveWorkspaceUuid(
 
   if (apiKey && apiKey.length > 0) {
     if (!override) {
-      command.error(
-        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<org>/<workspace> (e.g. acme/foo) or pass --workspace=<org>/<workspace>. (UUIDs also work.)',
-        {exit: 1},
-      )
+      // A key is bound to one workspace, so ask the server which (qfg-oscj0.8).
+      const jwt = await getValidAccessToken('', command.verboseLog)
+      const {orgSlug, workspaceId} = await inferApiKeyWorkspace(command, jwt)
+      return {orgSlug, workspaceId}
     }
 
     if (UUID_PATTERN.test(override)) {

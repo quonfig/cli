@@ -3,6 +3,7 @@ import type {JsonObj} from '../result.js'
 import {BaseCommand} from '../index.js'
 import {getApiUrl} from '../util/domain-urls.js'
 import {getValidAccessToken} from '../util/get-valid-token.js'
+import {inferApiKeyWorkspace} from '../util/infer-api-key-workspace.js'
 import {tryParseWorkspacePin} from '../util/quonfig-json.js'
 import {findOrgIdBySlug, getActiveProfile, loadAuthConfig, loadTokens} from '../util/token-storage.js'
 
@@ -265,19 +266,22 @@ export default class Workspace extends BaseCommand {
   }
 
   private async runApiKeyMode(): Promise<JsonObj | void> {
-    const override = process.env.QUONFIG_WORKSPACE
-    if (!override) {
-      return this.err(
-        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<org>/<workspace> (e.g. acme/foo). (UUIDs also work.)',
-      )
-    }
-
     let jwt: string
     try {
       jwt = await getValidAccessToken('')
     } catch (error) {
       return this.err(error instanceof Error ? error.message : String(error))
     }
+
+    // No QUONFIG_WORKSPACE: a key is bound to one workspace, so ask the
+    // server which one (qfg-oscj0.8) and match it by id below.
+    const inferred = process.env.QUONFIG_WORKSPACE
+      ? undefined
+      : await inferApiKeyWorkspace({error: (message) => this.err(message), verboseLog: this.verboseLog}, jwt)
+    const override = process.env.QUONFIG_WORKSPACE || inferred!.workspaceId
+    const source = inferred
+      ? 'QUONFIG_API_KEY (workspace inferred from the key)'
+      : `QUONFIG_API_KEY + QUONFIG_WORKSPACE=${override}`
 
     const listed = await this.fetchWorkspaces(jwt)
     if (listed.kind === 'failed') {
@@ -317,7 +321,7 @@ export default class Workspace extends BaseCommand {
     const pin = `${orgSlug}/${match.workspaceSlug}`
     this.log(`Active workspace: ${pin}  (API key mode)`)
     this.log(`ID:               ${match.workspaceId}`)
-    this.log(`Source:           QUONFIG_API_KEY + QUONFIG_WORKSPACE=${override}`)
+    this.log(`Source:           ${source}`)
 
     return {
       activeWorkspace: pin,
