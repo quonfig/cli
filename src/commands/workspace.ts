@@ -268,7 +268,7 @@ export default class Workspace extends BaseCommand {
     const override = process.env.QUONFIG_WORKSPACE
     if (!override) {
       return this.err(
-        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<workspace-slug> (UUIDs also work).',
+        'QUONFIG_API_KEY is set but QUONFIG_WORKSPACE is not. Set QUONFIG_WORKSPACE=<org>/<workspace> (e.g. acme/foo). (UUIDs also work.)',
       )
     }
 
@@ -289,12 +289,27 @@ export default class Workspace extends BaseCommand {
       return this.err(`Failed to resolve workspace "${override}" — no entries returned.`)
     }
 
+    // Accept the same forms as every other surface: <org>/<workspace> or a
+    // UUID (qfg-j0j8v). A bare slug still matches here, as it always has.
+    const overridePin = tryParseWorkspacePin(override)
     const match = UUID_PATTERN.test(override)
       ? entries.find((w) => w.workspaceId === override)
-      : entries.find((w) => w.workspaceSlug === override)
+      : overridePin
+        ? entries.find(
+            (w) =>
+              (w.organizationSlug ?? slugFromName(w.organizationName)) === overridePin.orgSlug &&
+              w.workspaceSlug === overridePin.workspaceSlug,
+          )
+        : entries.find((w) => w.workspaceSlug === override)
 
     if (!match) {
-      const available = entries.map((w) => w.workspaceSlug).join(', ') || '(none)'
+      const available =
+        entries
+          .map((w) => {
+            const org = w.organizationSlug ?? slugFromName(w.organizationName)
+            return org ? `${org}/${w.workspaceSlug}` : w.workspaceSlug
+          })
+          .join(', ') || '(none)'
       return this.err(`Workspace "${override}" not accessible with this API key. Available: ${available}.`)
     }
 
