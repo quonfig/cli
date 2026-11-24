@@ -10,8 +10,10 @@
 // Edits in this copy (output unchanged, proven by the hash test):
 //   - findFingerprintCollision checks the known first collision (label
 //     indices 59381 and 122336, named in the vector's note) instead of
-//     searching ~122k keys, which takes several seconds per run.
-//   - gitleaks:allow on the published RFC 7748 / RFC 5869 test-vector lines.
+//     searching ~122k keys, which takes from about 7 s to over 40 s per run
+//     depending on the machine.
+//   - gitleaks:allow on the published RFC 7748 / RFC 5869 hex lines that
+//     gitleaks' generic-api-key rule would otherwise flag.
 //
 // Generates plans/secrets-qf1/vectors.json, deterministically.
 //
@@ -530,9 +532,9 @@ export function buildVectors() {
         sharedSecretHex: '4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742', // gitleaks:allow
       },
       rfc5869_A_1: {
-        ikmHex: '0b'.repeat(22), // gitleaks:allow
-        saltHex: '000102030405060708090a0b0c', // gitleaks:allow
-        infoHex: 'f0f1f2f3f4f5f6f7f8f9', // gitleaks:allow
+        ikmHex: '0b'.repeat(22),
+        saltHex: '000102030405060708090a0b0c',
+        infoHex: 'f0f1f2f3f4f5f6f7f8f9',
         length: 42,
         prkHex: '077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5', // gitleaks:allow
         okmHex: '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865', // gitleaks:allow
