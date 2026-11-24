@@ -63,7 +63,8 @@ export const SECRETS_STORAGE_RULES = {
 
 /** Spec 2. JS regexes without the `m` flag anchor at the string ends, so `$` never matches before a final LF. */
 export const KEYSET_NAME_RE = /^QUONFIG_KEYSET(?:_[\dA-Z]+)*$/
-const FINGERPRINT_RE = /^[\da-f]{8}$/
+/** Spec 3.1 / 4: exactly 8 lowercase hex characters. */
+export const FINGERPRINT_RE = /^[\da-f]{8}$/
 const VERSION_PREFIX_RE = /^qf[1-9]\d*:/
 const B64URL_RE = /^[\w-]+$/
 const QF1_PREFIX = 'qf1:'
@@ -109,8 +110,12 @@ export function isSmallOrder(u: Uint8Array): boolean {
 
 // ── Encodings (spec 3.4, 4) ─────────────────────────────────────────────
 
-/** Strict canonical unpadded base64url (spec 3.4); undefined when not canonical. */
-function decodeBase64UrlStrict(text: string): undefined | Uint8Array {
+/**
+ * Strict canonical unpadded base64url (spec 3.4); undefined when not canonical.
+ * Exported for the key-holding qf1 library (src/secrets/qf1.ts), whose
+ * private key entries follow the same rule.
+ */
+export function decodeBase64UrlStrict(text: string): undefined | Uint8Array {
   if (text.length === 0 || !B64URL_RE.test(text) || text.length % 4 === 1) return undefined
   const bytes = Buffer.from(text, 'base64url')
   if (bytes.toString('base64url') !== text) return undefined // non-zero trailing bits
@@ -130,18 +135,58 @@ export type Qf1KeylessParse =
   | {ephemeralPublicKey: Uint8Array; fingerprint: string; keyset: string; ok: true}
   | {errorClass: Qf1KeylessErrorClass; ok: false; reason: string}
 
-const fail = (errorClass: Qf1KeylessErrorClass, reason: string): Qf1KeylessParse => ({errorClass, ok: false, reason})
+/** The error classes spec 3.5 steps 1-6 can decide (no small-order test). */
+export type Qf1StructureErrorClass = Exclude<Qf1KeylessErrorClass, 'invalid_ephemeral_key'>
 
-/** Quote an untrusted name for an error message: truncated to 64, control characters escaped (spec 9.2). */
-const quoteName = (name: string): string => JSON.stringify(name.slice(0, 64))
+export type Qf1Structure =
+  | {
+      /** ASCII bytes of `qf1:<keyset>:<fingerprint>:` (spec 5.4). */
+      aad: Uint8Array
+      /** C || T: the GCM ciphertext followed by the 16-byte tag (spec 3.2). */
+      ciphertextAndTag: Uint8Array
+      /** E as transmitted (top bit clear; may be non-canonical or of small order). */
+      ephemeralPublicKey: Uint8Array
+      fingerprint: string
+      keyset: string
+      ok: true
+    }
+  | {errorClass: Qf1StructureErrorClass; ok: false; reason: string}
+
+const fail = <C extends Qf1KeylessErrorClass>(errorClass: C, reason: string) => ({
+  errorClass,
+  ok: false as const,
+  reason,
+})
+
+/** Every UTF-16 code unit outside printable ASCII (0x20-0x7E). */
+const NOT_PRINTABLE_ASCII_RE = /[^\u0020-\u007E]/g
 
 /**
- * Parse a qf1 value as far as possible without a key, in the spec's order:
- * the first failing step decides the class. Adds the small-order test on the
- * ephemeral key (spec 11.3, decision 37), which a reader reports as
- * `invalid_ephemeral_key`.
+ * Quote an untrusted name (for example a keyset name read from a ciphertext)
+ * for an error message (spec 9.2): truncated to 64 UTF-16 code units, quoted
+ * as JSON, then EVERY code unit outside printable ASCII escaped as \uXXXX.
+ * Keyset names are ASCII by spec, so nothing legitimate changes; controls,
+ * bidi and invisible or look-alike characters can neither drive a terminal
+ * nor make an invalid name look valid. The one implementation; src/secrets
+ * uses it too.
  */
-export function parseQf1Keyless(value: unknown): Qf1KeylessParse {
+export function quoteUntrustedName(name: string): string {
+  return JSON.stringify(name.slice(0, 64)).replaceAll(
+    NOT_PRINTABLE_ASCII_RE,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`, // eslint-disable-line unicorn/prefer-code-point
+  )
+}
+
+const quoteName = quoteUntrustedName
+
+/**
+ * Spec 3.5 steps 1-7 in the spec's order: the first failing step decides the
+ * class. Does NOT test the ephemeral key for small order: a key-holding reader
+ * must first report keyset_missing / key_not_held (spec 8 steps 2-3) and only
+ * then invalid_ephemeral_key (step 4), and qfg-verify adds the test itself
+ * (parseQf1Keyless).
+ */
+export function parseQf1Structure(value: unknown): Qf1Structure {
   if (typeof value !== 'string') return fail('malformed', 'value is not a string')
   // 1. version
   if (!value.startsWith(QF1_PREFIX)) {
@@ -171,6 +216,27 @@ export function parseQf1Keyless(value: unknown): Qf1KeylessParse {
   // 6. top bit of the ephemeral key
   const ephemeralPublicKey = payload.subarray(0, 32)
   if ((ephemeralPublicKey[31] & 0x80) !== 0) return fail('malformed', 'ephemeral public key has the top bit set')
+  // 7. C || T; the header up to its third colon is the AAD (5.4)
+  return {
+    aad: new Uint8Array(Buffer.from(`${QF1_PREFIX}${keyset}:${fingerprint}:`, 'latin1')),
+    ciphertextAndTag: payload.subarray(32),
+    ephemeralPublicKey,
+    fingerprint,
+    keyset,
+    ok: true,
+  }
+}
+
+/**
+ * Parse a qf1 value as far as possible without a key, in the spec's order:
+ * the first failing step decides the class. Adds the small-order test on the
+ * ephemeral key (spec 11.3, decision 37), which a reader reports as
+ * `invalid_ephemeral_key`.
+ */
+export function parseQf1Keyless(value: unknown): Qf1KeylessParse {
+  const parsed = parseQf1Structure(value)
+  if (!parsed.ok) return parsed
+  const {ephemeralPublicKey, fingerprint, keyset} = parsed
   // decision 37: small-order ephemeral key (no runtime could ever read it)
   if (isSmallOrder(ephemeralPublicKey)) {
     return fail('invalid_ephemeral_key', 'ephemeral public key is a point of small order')
@@ -423,7 +489,10 @@ function checkQf1Value(
 ): void {
   const parsed = parseQf1Keyless(value)
   if (!parsed.ok) {
-    error(`${ctx}: qf1 ${parsed.errorClass}: ${parsed.reason}`, `Write secret values with qfg (qfg secret set)`)
+    error(
+      `${ctx}: qf1 ${parsed.errorClass}: ${parsed.reason}`,
+      `secrets/ values are encrypted by qfg; do not edit them by hand`,
+    )
     return
   }
 

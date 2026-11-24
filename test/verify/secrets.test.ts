@@ -14,7 +14,14 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {isSmallOrder, parsePublicKeyEntry, parseQf1Keyless} from '../../src/verify/secrets.js'
+import {
+  decodeBase64UrlStrict,
+  isSmallOrder,
+  parsePublicKeyEntry,
+  parseQf1Keyless,
+  parseQf1Structure,
+  quoteUntrustedName,
+} from '../../src/verify/secrets.js'
 import {readFilesFromCommit, runHookChecks} from '../../src/verify/standalone.js'
 import {validateFileMap, validateWorkspace} from '../../src/verify/validate.js'
 import {isSmallOrderByLadder, x25519} from './x25519-oracle.js'
@@ -854,3 +861,214 @@ function commit(dir: string): string {
   execFileSync('git', ['commit', '--quiet', '-m', 'fixture'], {cwd: dir})
   return execFileSync('git', ['rev-parse', 'HEAD'], {cwd: dir, encoding: 'utf8'}).trim()
 }
+
+/**
+ * qfg-mol-hle PR 1: parseQf1Keyless is split into parseQf1Structure (spec 3.5
+ * steps 1-6) and the decision-37 small-order test, so a key-holding reader can
+ * report keyset_missing / key_not_held (spec 8 steps 2-3) before
+ * invalid_ephemeral_key (step 4). The split must not change what qfg-verify
+ * decides. preSplitParseQf1Keyless is the function as merged in #116
+ * (cli 55869fb), kept here verbatim as the oracle.
+ */
+const preSplitParseQf1Keyless = (() => {
+  const KEYSET_NAME_RE = /^QUONFIG_KEYSET(?:_[\dA-Z]+)*$/
+  const FINGERPRINT_RE = /^[\da-f]{8}$/
+  const VERSION_PREFIX_RE = /^qf[1-9]\d*:/
+  const B64URL_RE = /^[\w-]+$/
+  const QF1_PREFIX = 'qf1:'
+  const MIN_PAYLOAD_BYTES = 48
+  function decodeBase64UrlStrict(text: string): undefined | Uint8Array {
+    if (text.length === 0 || !B64URL_RE.test(text) || text.length % 4 === 1) return undefined
+    const bytes = Buffer.from(text, 'base64url')
+    if (bytes.toString('base64url') !== text) return undefined
+    return new Uint8Array(bytes)
+  }
+
+  type R =
+    | {ephemeralPublicKey: Uint8Array; fingerprint: string; keyset: string; ok: true}
+    | {errorClass: string; ok: false; reason: string}
+  const fail = (errorClass: string, reason: string): R => ({errorClass, ok: false, reason})
+  const quoteName = (name: string): string => JSON.stringify(name.slice(0, 64))
+  return (value: unknown): R => {
+    if (typeof value !== 'string') return fail('malformed', 'value is not a string')
+    if (!value.startsWith(QF1_PREFIX)) {
+      return VERSION_PREFIX_RE.test(value)
+        ? fail('unsupported_version', `version ${quoteName(value.slice(0, value.indexOf(':')))} is not supported`)
+        : fail('malformed', 'value does not start with "qf1:"')
+    }
+
+    const fields = value.split(':')
+    if (fields.length !== 4) return fail('malformed', `expected 4 colon-separated fields, found ${fields.length}`)
+    const [, keyset, fingerprint, payloadText] = fields
+    if (!KEYSET_NAME_RE.test(keyset)) {
+      return fail('invalid_keyset_name', `keyset name ${quoteName(keyset)} does not match ${KEYSET_NAME_RE.source}`)
+    }
+
+    if (!FINGERPRINT_RE.test(fingerprint)) return fail('malformed', 'fingerprint is not 8 lowercase hex characters')
+    const payload = decodeBase64UrlStrict(payloadText)
+    if (!payload) return fail('malformed', 'payload is not canonical unpadded base64url')
+    if (payload.length < MIN_PAYLOAD_BYTES) {
+      return fail('malformed', `payload is ${payload.length} bytes; minimum is ${MIN_PAYLOAD_BYTES}`)
+    }
+
+    const ephemeralPublicKey = payload.subarray(0, 32)
+    if ((ephemeralPublicKey[31] & 0x80) !== 0) return fail('malformed', 'ephemeral public key has the top bit set')
+    if (isSmallOrder(ephemeralPublicKey)) {
+      return fail('invalid_ephemeral_key', 'ephemeral public key is a point of small order')
+    }
+
+    return {ephemeralPublicKey, fingerprint, keyset, ok: true}
+  }
+})()
+
+describe('verify: parseQf1Keyless split (qfg-mol-hle)', () => {
+  const sample = positive('short-ascii').ciphertext
+  const inputs: unknown[] = [
+    ...vectors.positive.map((p) => p.ciphertext),
+    ...vectors.decryptOnly.map((p) => p.ciphertext),
+    ...vectors.negative.map((n) => n.ciphertext),
+    undefined,
+    null,
+    42,
+    {},
+    '',
+    'qf1:',
+    'qf0:x',
+    'qf12:QUONFIG_KEYSET:00000000:AAAA',
+    `qf${'9'.repeat(10_000)}:QUONFIG_KEYSET:00000000:AAAA`,
+    sample.slice(0, -1),
+    sample + 'A',
+    sample.replace('QUONFIG_KEYSET_TEST', 'QUONFIG_KEYSET_TEST\u0000'),
+  ]
+
+  it('parseQf1Keyless is unchanged on every fixture value', () => {
+    for (const input of inputs) {
+      const label = typeof input === 'string' ? input.slice(0, 80) : String(input)
+      expect(parseQf1Keyless(input), label).to.deep.equal(preSplitParseQf1Keyless(input))
+    }
+  })
+
+  it('parseQf1Structure leaves small-order E to the caller', () => {
+    const lowOrder = vectors.negative.filter((n) => n.name.startsWith('ephemeral-low-order-'))
+    expect(lowOrder).to.have.length(7)
+    for (const n of lowOrder) {
+      const keyless = parseQf1Keyless(n.ciphertext)
+      expect(keyless.ok, n.name).to.be.false
+      if (!keyless.ok) expect(keyless.errorClass).to.equal('invalid_ephemeral_key')
+      const structure = parseQf1Structure(n.ciphertext)
+      expect(structure.ok, n.name).to.be.true
+      if (structure.ok) expect(isSmallOrder(structure.ephemeralPublicKey), n.name).to.be.true
+    }
+  })
+
+  it('parseQf1Structure returns E, C || T and the AAD of spec 3.5 / 5.4', () => {
+    for (const p of vectors.positive) {
+      const parsed = parseQf1Structure(p.ciphertext)
+      expect(parsed.ok, p.name).to.be.true
+      if (!parsed.ok) continue
+      const blob = Buffer.from(p.ciphertext.split(':')[3], 'base64url')
+      expect(parsed.keyset).to.equal(p.keyset)
+      expect(parsed.fingerprint).to.equal(p.fingerprint)
+      expect(hex(parsed.ephemeralPublicKey)).to.equal(hex(blob.subarray(0, 32)))
+      expect(hex(parsed.ciphertextAndTag)).to.equal(hex(blob.subarray(32)))
+      expect(Buffer.from(parsed.aad).toString('latin1')).to.equal(`qf1:${p.keyset}:${p.fingerprint}:`)
+    }
+  })
+
+  it('parseQf1Structure decides every keyless class but invalid_ephemeral_key exactly as parseQf1Keyless', () => {
+    for (const input of inputs) {
+      const keyless = parseQf1Keyless(input)
+      const structure = parseQf1Structure(input)
+      if (!keyless.ok && keyless.errorClass === 'invalid_ephemeral_key') {
+        expect(structure.ok).to.be.true
+      } else if (keyless.ok) {
+        expect(structure.ok).to.be.true
+      } else {
+        expect(structure).to.deep.equal(keyless)
+      }
+    }
+  })
+
+  it('decodeBase64UrlStrict is canonical unpadded base64url (spec 3.4)', () => {
+    expect(decodeBase64UrlStrict('')).to.equal(undefined)
+    expect(decodeBase64UrlStrict('AA==')).to.equal(undefined)
+    expect(decodeBase64UrlStrict('A')).to.equal(undefined)
+    expect(decodeBase64UrlStrict('AB')).to.equal(undefined) // non-zero trailing bits
+    expect(decodeBase64UrlStrict('+w')).to.equal(undefined)
+    expect(hex(decodeBase64UrlStrict('_w')!)).to.equal('ff')
+  })
+
+  it('the hint for a bad secrets/ value names no command that does not exist', () => {
+    const doc = secretDoc('a.b', {
+      default: {rules: [{criteria: always, value: secretValue('qf1:QUONFIG_KEYSET:0000000:AAAA')}]},
+      environments: [],
+    })
+    const {issues} = validateFileMap(workspace({'secrets/a.b.json': doc}), {validateValues: true})
+    const issue = issues.find((i) => /qf1 malformed/.test(i.message))
+    expect(issue, JSON.stringify(issues)).to.exist
+    expect(issue!.suggestion).to.equal('secrets/ values are encrypted by qfg; do not edit them by hand')
+    expect(issue!.suggestion).not.to.match(/qfg secret set/)
+  })
+})
+
+describe('verify: quoteUntrustedName escapes every code unit outside printable ASCII (spec 9.2, qfg-mol-hle)', () => {
+  const PRINTABLE_ASCII = /^[ -~]*$/
+
+  it('is JSON.stringify for ordinary ASCII names', () => {
+    for (const name of [
+      'QUONFIG_KEYSET',
+      'HOME',
+      'quonfig_keyset_test',
+      '',
+      'a"b\\c',
+      'tab\there',
+      'nl\nhere',
+      '~!@#$%^&*()',
+    ]) {
+      expect(quoteUntrustedName(name), name).to.equal(JSON.stringify(name))
+    }
+  })
+
+  it('maps every UTF-16 code unit to printable ASCII, escaping all outside 0x20-0x7E as \\uXXXX', () => {
+    for (let code = 0; code <= 0xff_ff; code++) {
+      const ch = String.fromCharCode(code) // eslint-disable-line unicorn/prefer-code-point -- code units are the point
+      const quoted = quoteUntrustedName(`a${ch}b`)
+      expect(PRINTABLE_ASCII.test(quoted), `U+${code.toString(16)}`).to.be.true
+      if (code >= 0x20 && code <= 0x7e) {
+        expect(quoted).to.equal(JSON.stringify(`a${ch}b`))
+      } else if (code >= 0x80) {
+        expect(quoted, `U+${code.toString(16)}`).to.equal(`"a\\u${code.toString(16).padStart(4, '0')}b"`)
+      }
+    }
+  })
+
+  it('escapes look-alikes and invisibles (NBSP, soft hyphen, zero-width, BOM, specials, variation and tag characters)', () => {
+    expect(
+      quoteUntrustedName('A\u00A0\u00AD\u200B\u200C\u200D\u2060\u2064\u206A\u206F\uFEFF\uFFF9\uFFFB\uFE0F\u{E0041}'),
+    ).to.equal(
+      '"A\\u00a0\\u00ad\\u200b\\u200c\\u200d\\u2060\\u2064\\u206a\\u206f\\ufeff\\ufff9\\ufffb\\ufe0f\\udb40\\udc41"',
+    )
+  })
+
+  it('escapes DEL, C1 (including CSI), separators, bidi controls and surrogates', () => {
+    expect(quoteUntrustedName('a\u007F\u009B\u2028\u202E\u2066\uD800b\u{1F511}')).to.equal(
+      '"a\\u007f\\u009b\\u2028\\u202e\\u2066\\ud800b\\ud83d\\udd11"',
+    )
+  })
+
+  it('truncates to 64 UTF-16 code units before quoting, escaping a pair split by the cut', () => {
+    expect(quoteUntrustedName('X'.repeat(200))).to.equal(JSON.stringify('X'.repeat(64)))
+    expect(quoteUntrustedName(`${'X'.repeat(63)}\u{1F511}tail`)).to.equal(`"${'X'.repeat(63)}\\ud83d"`)
+  })
+
+  it('is what parseQf1Keyless uses for an invalid keyset name', () => {
+    const value = positive('short-ascii').ciphertext.replace('QUONFIG_KEYSET_TEST', 'QUONFIG_KEYSET_\u009B31m\u00A0')
+    const parsed = parseQf1Keyless(value)
+    expect(parsed.ok).to.be.false
+    if (!parsed.ok) {
+      expect(parsed.errorClass).to.equal('invalid_keyset_name')
+      expect(parsed.reason).to.include('"QUONFIG_KEYSET_\\u009b31m\\u00a0"')
+      expect(PRINTABLE_ASCII.test(parsed.reason)).to.be.true
+    }
+  })
+})
