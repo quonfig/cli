@@ -19,9 +19,14 @@
  *   - every secret document passes `assertWritableSecretDocument` and its key
  *     matches its file name;
  *   - the tree the commit would create passes the push hook's validator for
- *     every written file (src/verify `validateFileMap`, as the hook calls it);
- *   - the commit message is built from validated names only
- *     (`secretCommitMessage`), so no plaintext, length or tail can reach it.
+ *     every written file, and for quonfig.json and every secrets/ document
+ *     when quonfig.json changes (src/verify `validateFileMap`, as the hook
+ *     calls it);
+ *   - the commit message is an object only `secretCommitMessage` issues,
+ *     built from parts validated at run time, so no plaintext, length or
+ *     tail can reach it;
+ *   - every failure, including statuses `callConfigsPush` does not map, is
+ *     a SecretWriteError whose text carries no token and no qf1 value.
  * No plaintext and no private key exists anywhere on this path.
  */
 import type {ConfigPushInput, ConfigPushResult, PushDenial, ServerFileDelta} from '../push/run-push.js'
@@ -30,11 +35,18 @@ import {KEYSET_NAME_RE, FINGERPRINT_RE} from './qf1.js'
 import {SecretDocumentError, assertWritableSecretDocument, secretPath} from './secret-doc.js'
 import type {WorkspaceSnapshot} from './workspace-snapshot.js'
 import {validateFileMap} from '../verify/validate.js'
+import {redactToken} from '../util/git-ops.js'
 
 export type WorkspaceFileChange = {afterJson: string; path: string} | {delete: true; path: string}
 
-/** A commit message, by its parts: only names and fingerprints, never a value. */
-export type SecretCommitMessage = {readonly __secretCommitMessage: unique symbol} & string
+/**
+ * A commit message built by `secretCommitMessage`. Opaque: the writer
+ * accepts only an object this module issued (checked at run time), never a
+ * string, so free text cannot reach a commit.
+ */
+export type SecretCommitMessage = {readonly text: string}
+
+const ISSUED_MESSAGES = new WeakSet<object>()
 
 export type PushWorkspaceFilesInput = {
   files: WorkspaceFileChange[]
@@ -45,7 +57,16 @@ export type PushWorkspaceFilesInput = {
   workspaceId: string
 }
 
-export type SecretWriteErrorCode = 'bad_request' | 'conflict' | 'denied' | 'invalid_input' | 'refused'
+export type SecretWriteErrorCode =
+  | 'bad_request'
+  | 'conflict'
+  | 'denied'
+  | 'hook_rejected'
+  | 'invalid_input'
+  | 'refused'
+  | 'server_error'
+  | 'transport'
+  | 'unauthorized'
 
 export class SecretWriteError extends Error {
   readonly code: SecretWriteErrorCode
@@ -76,25 +97,42 @@ export type CommitParts =
   | {fingerprint: string; key: string; keyset: string; scope?: string; verb: 'create' | 'set'}
   | {key: string; verb: 'delete'}
 
+const VERBS: ReadonlySet<unknown> = new Set(['create', 'delete', 'set'])
+
 /**
  * `qfg: create secret <key> on <KEYSET> <fp>`, `qfg: set secret <key> (<scope>)
- * on <KEYSET> <fp>`, `qfg: delete secret <key>`. Every part is validated
- * (key by the push hook's rules, keyset by spec 2, fingerprint by spec 4,
- * scope as an environment id), so nothing else can be carried in.
+ * on <KEYSET> <fp>`, `qfg: delete secret <key>`. Every part is validated at
+ * run time: `verb` against the closed set, the key by the push hook's key
+ * rules, the keyset by spec 2, the fingerprint by spec 4, the scope as an
+ * environment id. Nothing else can be carried in.
  */
 export function secretCommitMessage(parts: CommitParts): SecretCommitMessage {
+  if (typeof parts !== 'object' || parts === null) bad('no parts')
+  if (!VERBS.has(parts.verb)) bad('unknown verb')
+  if (typeof parts.key !== 'string') bad('the key is not a valid secret key')
   try {
     secretPath(parts.key)
   } catch {
     bad('the key is not a valid secret key')
   }
 
-  if (parts.verb === 'delete') return `qfg: delete secret ${parts.key}` as SecretCommitMessage
-  if (typeof parts.keyset !== 'string' || !KEYSET_NAME_RE.test(parts.keyset)) bad('invalid keyset name')
-  if (typeof parts.fingerprint !== 'string' || !FINGERPRINT_RE.test(parts.fingerprint)) bad('invalid fingerprint')
-  if (parts.scope !== undefined && !SCOPE_RE.test(parts.scope)) bad('invalid scope')
-  const scope = parts.scope === undefined ? '' : ` (${parts.scope})`
-  return `qfg: ${parts.verb} secret ${parts.key}${scope} on ${parts.keyset} ${parts.fingerprint}` as SecretCommitMessage
+  let text: string
+  if (parts.verb === 'delete') {
+    text = `qfg: delete secret ${parts.key}`
+  } else {
+    if (typeof parts.keyset !== 'string' || !KEYSET_NAME_RE.test(parts.keyset)) bad('invalid keyset name')
+    if (typeof parts.fingerprint !== 'string' || !FINGERPRINT_RE.test(parts.fingerprint)) bad('invalid fingerprint')
+    if (parts.scope !== undefined && (typeof parts.scope !== 'string' || !SCOPE_RE.test(parts.scope))) {
+      bad('invalid scope')
+    }
+
+    const scope = parts.scope === undefined ? '' : ` (${parts.scope})`
+    text = `qfg: ${parts.verb} secret ${parts.key}${scope} on ${parts.keyset} ${parts.fingerprint}`
+  }
+
+  const message = Object.freeze({text})
+  ISSUED_MESSAGES.add(message)
+  return message
 }
 
 /** Turn the caller's changes into server deltas, with kind and beforeJson taken from the snapshot. */
@@ -149,9 +187,12 @@ function toDeltas(input: PushWorkspaceFilesInput): ServerFileDelta[] {
 }
 
 /**
- * Run the push hook's validator over the tree this commit would create and
- * refuse on any error that names a written file. Issues elsewhere in the
- * workspace are not this write's business: the server's own hook decides.
+ * Run the push hook's validator over the tree this commit would create (the
+ * NEW quonfig.json when the write changes it) and refuse on errors this
+ * write is responsible for: any error naming a written file; and, when the
+ * write changes quonfig.json, any error on quonfig.json or on any secrets/
+ * document (a keyset or public key removed while a secret still uses it).
+ * Errors elsewhere in the workspace are left to the server's own hook.
  */
 function preflight(input: PushWorkspaceFilesInput, deltas: ServerFileDelta[]): void {
   const files = input.snapshot.documents()
@@ -163,17 +204,40 @@ function preflight(input: PushWorkspaceFilesInput, deltas: ServerFileDelta[]): v
   }
 
   const written = new Set(deltas.map((d) => d.path))
+  const manifestChanged = written.has(QUONFIG_JSON)
+  const ours = (file: string) =>
+    written.has(file) || (manifestChanged && (file === QUONFIG_JSON || file.startsWith('secrets/')))
   const result = validateFileMap(files, {quonfigJson, validateValues: true})
   // A duplicate-key issue names every file of the group, comma-separated.
-  const errors = result.issues.filter(
-    (i) => i.severity === 'error' && i.file.split(', ').some((file) => written.has(file)),
-  )
+  const errors = result.issues.filter((i) => i.severity === 'error' && i.file.split(', ').some((f) => ours(f)))
   if (errors.length > 0) {
     throw new SecretWriteError(
       'refused',
       `the push hook would reject this write:\n${errors.map((i) => `  ${i.file}: ${i.message}`).join('\n')}`,
     )
   }
+}
+
+/** Server text made safe to show: no token-bearing URL, no bearer token, no qf1 value, bounded length. */
+function scrub(text: string): string {
+  return redactToken(text)
+    .replaceAll(/bearer\s+\S+/gi, 'Bearer ***')
+    .replaceAll(/qf1:[^\s"'\\]+/g, '[qf1 value]')
+    .slice(0, 500)
+}
+
+/** callConfigsPush throws for statuses it does not map; turn that into a SecretWriteError. */
+function transportError(error: unknown): SecretWriteError {
+  const text = scrub(error instanceof Error ? error.message : String(error))
+  const status = Number(/\(HTTP (\d{3})\)/.exec(text)?.[1] ?? Number.NaN)
+  if (status === 401) {
+    return new SecretWriteError('unauthorized', `the server did not accept this machine's credentials: ${text}`)
+  }
+
+  if (status === 403) return new SecretWriteError('denied', `the server refused the write: ${text}`, [])
+  if (status === 422) return new SecretWriteError('hook_rejected', `the workspace hook rejected the write: ${text}`)
+  if (status >= 500) return new SecretWriteError('server_error', `the server failed; nothing was written: ${text}`)
+  return new SecretWriteError('transport', `the write did not reach the server: ${text}`)
 }
 
 /** Commit the changes in one `configs.push`, locked to the snapshot's HEAD. Returns the new commit sha. */
@@ -186,14 +250,24 @@ export async function pushWorkspaceFiles(
     throw new SecretWriteError('invalid_input', 'the workspace snapshot has no HEAD sha to lock the write to')
   }
 
+  if (typeof input.message !== 'object' || input.message === null || !ISSUED_MESSAGES.has(input.message)) {
+    throw new SecretWriteError('invalid_input', 'the commit message must come from secretCommitMessage')
+  }
+
   const deltas = toDeltas(input)
   preflight(input, deltas)
 
   const send = push ?? (await import('../push/config-push-client.js')).callConfigsPush
-  const result = await send(
-    {expectedSha, files: deltas, message: input.message, workspaceId: input.workspaceId},
-    input.orgSlug,
-  )
+  let result: ConfigPushResult
+  try {
+    result = await send(
+      {expectedSha, files: deltas, message: input.message.text, workspaceId: input.workspaceId},
+      input.orgSlug,
+    )
+  } catch (error) {
+    throw transportError(error)
+  }
+
   switch (result.kind) {
     case 'success':
       return {commitSha: result.commitSha}
