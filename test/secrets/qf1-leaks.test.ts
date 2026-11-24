@@ -14,6 +14,7 @@
  */
 import {expect} from 'chai'
 import {createHash} from 'node:crypto'
+import {createRequire, syncBuiltinESMExports} from 'node:module'
 import {inspect} from 'node:util'
 import * as path from 'node:path'
 import {fileURLToPath, pathToFileURL} from 'node:url'
@@ -48,6 +49,10 @@ type Vectors = {
     recipientPublicKeyHex: string
   }>
 }
+
+// The CommonJS fs object: the one every module, ESM or CJS, writes through.
+const fs = createRequire(import.meta.url)('node:fs') as typeof import('node:fs')
+const fsMutable = fs as {writeSync: typeof fs.writeSync}
 
 const specDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'spec')
 const generator = (await import(pathToFileURL(path.join(specDir, 'generate-vectors.mjs')).href)) as {
@@ -226,6 +231,8 @@ function captureOutput(fn: () => void): string[] {
   const savedConsole = methods.map((m) => console[m])
   const savedOut = process.stdout.write
   const savedErr = process.stderr.write
+  const savedEmitWarning = process.emitWarning
+  const savedWriteSync = fs.writeSync
   const record = (...args: unknown[]) => {
     written.push(args.map((a) => inspect(a, {depth: Number.POSITIVE_INFINITY, showHidden: true})).join(' '))
   }
@@ -239,12 +246,27 @@ function captureOutput(fn: () => void): string[] {
     record(chunk)
     return true
   }) as typeof process.stderr.write
+  process.emitWarning = ((...args: unknown[]) => record('emitWarning', ...args)) as typeof process.emitWarning
+  // fs.writeSync(1 | 2, ...) bypasses process.stdout; record writes to those fds.
+  fsMutable.writeSync = ((fd: number, ...rest: unknown[]) => {
+    if (fd === 1 || fd === 2) {
+      record('writeSync', fd, ...rest)
+      return 0
+    }
+
+    return (savedWriteSync as (...a: unknown[]) => number)(fd, ...rest)
+  }) as typeof fs.writeSync
+  // ESM `import {writeSync} from 'node:fs'` bindings see the patch only after a sync.
+  syncBuiltinESMExports()
   try {
     fn()
   } finally {
     for (const [i, m] of methods.entries()) console[m] = savedConsole[i]
     process.stdout.write = savedOut
     process.stderr.write = savedErr
+    process.emitWarning = savedEmitWarning
+    fsMutable.writeSync = savedWriteSync
+    syncBuiltinESMExports()
   }
 
   return written

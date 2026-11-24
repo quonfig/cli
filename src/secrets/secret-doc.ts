@@ -6,9 +6,15 @@
  * decision 24: every rule value is `{type: "string", value: "qf1:...",
  * confidential: true}`; no `weighted_values`, no `provided`, no `variants`,
  * `sendToClientSdk` false or absent, never `decryptWith`.
- * `assertWritableSecretDocument` enforces that, and `serializeSecretDocument`
- * (the only way this module turns a document into text) runs it, so a writer
- * cannot produce a shape the push hook (src/verify) rejects.
+ * `assertWritableSecretDocument` enforces those shape rules, and
+ * `serializeSecretDocument` (the only way this module turns a document into
+ * text) runs it. That is a shape guard, not the whole hook: what depends on
+ * the rest of the workspace (the value's keyset and fingerprint declared in
+ * quonfig.json, environment ids, pooled keys) is checked by
+ * `pushWorkspaceFiles`' preflight, which runs the push hook's validator
+ * (src/verify) before anything is sent. The guard is never looser than the
+ * hook; it matches it member for member (`environments` may be absent, as
+ * the hook allows; documents built here always have it).
  *
  * Rule edits reuse the shared rulebook in src/util/rules.ts, so a secret's
  * scope is edited exactly as `qfg set-default` edits a config's.
@@ -112,6 +118,11 @@ export function secretValue(qf1: string): SecretValue {
 export type ScopeWrite = {
   /** Environment id; undefined for the `default` block. */
   envName?: string
+  /**
+   * The workspace's environment ids (quonfig.json `environments`). When
+   * given, an `envName` outside it is refused.
+   */
+  environments?: readonly string[]
   /** Collapse the scope to one unconditional rule (set-default --replace-targeting). */
   replaceTargeting?: boolean
   value: SecretValue
@@ -134,6 +145,20 @@ export type ScopeWriteResult = {
  * of `default.rules`. Never mutates `doc`.
  */
 export function setSecretScopeValue(doc: SecretDocument, write: ScopeWrite): ScopeWriteResult {
+  if (write.envName !== undefined) {
+    if (typeof write.envName !== 'string' || write.envName.length === 0 || write.envName === 'default') {
+      throw new SecretDocumentError(
+        `${JSON.stringify(write.envName)} is not an environment name; leave envName unset to write the default rules`,
+      )
+    }
+
+    if (write.environments && !write.environments.includes(write.envName)) {
+      throw new SecretDocumentError(
+        `${JSON.stringify(write.envName)} is not an environment of this workspace (${write.environments.join(', ')})`,
+      )
+    }
+  }
+
   const value = secretValue(write.value?.value) // re-checked: only a qf1 value object can be stored
   const next = structuredClone(doc)
   const {rules, seeded} = seedScopeRules(next, write.envName)
@@ -231,8 +256,8 @@ export function assertWritableSecretDocument(doc: unknown): asserts doc is Secre
   }
 
   if (!isPlainObject(doc.default) || !Array.isArray(doc.default.rules)) refuse('default.rules must be an array')
-  if (!Array.isArray(doc.environments)) refuse('environments must be an array')
-  for (const env of doc.environments as unknown[]) {
+  if (Object.hasOwn(doc, 'environments') && !Array.isArray(doc.environments)) refuse('environments must be an array')
+  for (const env of (doc.environments ?? []) as unknown[]) {
     if (!isPlainObject(env) || typeof env.id !== 'string' || !Array.isArray(env.rules ?? [])) {
       refuse('every environment needs a string id and a rules array')
     }

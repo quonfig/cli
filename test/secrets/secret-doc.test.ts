@@ -183,6 +183,26 @@ describe('secret documents (spec 10.2, qfg-mol-hle)', () => {
     expect(hookIssues({'secrets/db.password.json': serializeSecretDocument(r.document)})).to.deep.equal([])
   })
 
+  it('refuses the reserved scope name "default" and, given the workspace environments, an unknown one', () => {
+    const doc = newSecretDocument('db.password')
+    const value = valueOn('QUONFIG_KEYSET')
+    for (const envName of ['default', '']) {
+      expect(refusal(() => setSecretScopeValue(doc, {envName, value})).message).to.include('not an environment name')
+    }
+
+    const environments = ['production', 'staging']
+    expect(refusal(() => setSecretScopeValue(doc, {envName: 'prod', environments, value})).message).to.equal(
+      '"prod" is not an environment of this workspace (production, staging)',
+    )
+    expect(setSecretScopeValue(doc, {envName: 'staging', environments, value}).document.environments[0].id).to.equal(
+      'staging',
+    )
+    expect(
+      setSecretScopeValue(doc, {envName: 'qa', value}).document.environments[0].id,
+      'no list: not checked',
+    ).to.equal('qa')
+  })
+
   it('secretValuesOf lists every rule value with its scope, index, keyset and fingerprint', () => {
     const d = valueOn('QUONFIG_KEYSET')
     const p = valueOn('QUONFIG_KEYSET_PROD')
@@ -315,10 +335,11 @@ describe('the writer can never produce a shape spec 10.2 / decision 24 forbids (
     })
   }
 
-  it('sendToClientSdk absent is fine; variants absent is fine', () => {
+  it('sendToClientSdk, variants and environments absent are fine, as for the hook', () => {
     const d = good()
     delete d.sendToClientSdk
     delete d.variants
+    delete d.environments
     expect(() => assertWritableSecretDocument(d)).to.not.throw()
     expect(hookIssues({'secrets/db.password.json': serializeSecretDocument(d as never)})).to.deep.equal([])
   })

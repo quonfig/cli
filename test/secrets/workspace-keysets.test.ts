@@ -138,6 +138,12 @@ describe('localKeysetStatus (qfg-mol-hle)', () => {
     expect([...new Set(read)]).to.deep.equal(['QUONFIG_KEYSET_PROD'])
   })
 
+  it('reads only an own property: a keyset on the env prototype is absent', () => {
+    const env = Object.create({QUONFIG_KEYSET_PROD: write.privateEntry}) as Record<string, string>
+    expect(env.QUONFIG_KEYSET_PROD, 'inherited, visible to a plain lookup').to.equal(write.privateEntry)
+    expect(localKeysetStatus('QUONFIG_KEYSET_PROD', write.fingerprint, env)).to.deep.equal({status: 'absent'})
+  })
+
   it('an invalid keyset name never reads the environment', () => {
     const read: string[] = []
     const env = recordingEnv({HOME: '/home/x'}, read)
