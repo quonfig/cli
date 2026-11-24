@@ -1,5 +1,5 @@
 {
-  "NOTE": "Reduced copy of project/plans/secrets-qf1/vectors.json (qf1 spec, bead qfg-8seuf.2) for the keyless qfg-verify checks (bead qfg-8seuf.4). TEST KEYS ONLY. Public data only: no private keys, no intermediates.",
+  "NOTE": "Reduced copy of project/plans/secrets-qf1/vectors.json (qf1 spec, bead qfg-8seuf.2) for the keyless qfg-verify checks (bead qfg-8seuf.4). TEST KEYS ONLY. Public data only: no private keys or private-key entries, no intermediates. The spec case public-given-private-entry is built at runtime in secrets.test.ts.",
   "keysets": [
     {
       "name": "QUONFIG_KEYSET_TEST",
@@ -379,11 +379,6 @@
       "name": "public-valid",
       "input": "qf1-pub-bwoeNo6zN4l1BQ8BoZl584ubjJZ4nEtJfCQn6r_Flgk",
       "expectedHex": "6f0a1e368eb3378975050f01a19979f38b9b8c96789c4b497c2427eabfc59609"
-    },
-    {
-      "name": "public-given-private-entry",
-      "input": "qf1-priv-b8ATt1czbH445R8KfrXhT-kNHTU2FgWX_4id1OxVtE0",
-      "expectedError": "invalid_key_entry"
     },
     {
       "name": "public-non-canonical-base64",

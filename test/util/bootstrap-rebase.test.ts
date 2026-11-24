@@ -504,6 +504,17 @@ describe('bootstrap: a workspace is fresh only when it holds no documents', () =
     ])
   })
 
+  it('counts secrets/ documents (qfg-8seuf.4): a remote holding only secrets/ is not fresh', async () => {
+    const remote = provisionRemote(root, {'secrets/stripe.key.json': '{"key":"stripe.key"}\n'})
+    const dir = localRepo(root)
+    write(dir, 'feature-flags/a.json', '{"key":"a"}\n')
+    commitAll(dir, 'local config')
+    await gitSetRemote(dir, remote)
+    await gitFetch(dir)
+
+    expect(await workspaceDocumentsAtRef(dir, 'origin/main')).to.deep.equal(['secrets/stripe.key.json'])
+  })
+
   it('fails closed when the ref cannot be listed', async () => {
     const dir = localRepo(root)
     write(dir, 'feature-flags/a.json', '{"key":"a"}\n')

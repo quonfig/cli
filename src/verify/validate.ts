@@ -39,6 +39,7 @@ import {
   isTemporarySecretsDuplicate,
   type KeysetRegistry,
   type PooledKeyEntry,
+  reportUncheckableSecrets,
   validateSecretDocument,
   validateSecretsManifest,
 } from './secrets.js'
@@ -506,7 +507,10 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
   const schemaKeys = new Set<string>()
   const schemaDocuments = new Map<string, Record<string, unknown>>()
   const declaredEnvIds = new Set<string>()
-  let secretKeysets: KeysetRegistry = new Map()
+  // null: quonfig.json is not valid JSON, so secret values cannot be checked
+  // against its keysets (reported once by reportUncheckableSecrets).
+  let secretKeysets: KeysetRegistry | null = new Map()
+  let secretDocs = 0
 
   // Check for unexpected top-level entries
   let entries: fs.Dirent[]
@@ -579,7 +583,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
         })
       }
 
-      secretKeysets = validateSecretsManifest(quonfigParsed, issues)
+      secretKeysets = quonfigParsed === null ? null : validateSecretsManifest(quonfigParsed, issues)
     }
   } else {
     issues.push({
@@ -738,8 +742,12 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
 
       // Secrets family (qfg-8seuf.4): the rules of a secrets/ document, and
       // no qf1 value anywhere else.
-      if (dir === 'secrets') validateSecretDocument(parsed, relPath, secretKeysets, issues)
-      else checkNoQf1OutsideSecrets(parsed, relPath, issues)
+      if (dir === 'secrets') {
+        secretDocs++
+        validateSecretDocument(parsed, relPath, secretKeysets, issues)
+      } else {
+        checkNoQf1OutsideSecrets(parsed, relPath, issues)
+      }
 
       // Validate environment IDs are slugs, not UUIDs
       validateEnvironmentIds(config.environments, relPath, issues)
@@ -873,6 +881,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
   }
 
   detectReferenceCycles(cycleNodes, issues)
+  if (secretKeysets === null) reportUncheckableSecrets(secretDocs, issues)
 
   // Check for duplicate keys across directories (case-insensitive — see
   // detectDuplicateKeys).
@@ -960,20 +969,22 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
   // tree, every secrets/ value is re-checked against the keysets of the same
   // commit, so a quonfig.json-only change that drops a key still in use is
   // rejected (spec 11.5, decision 21).
-  let secretKeysets: KeysetRegistry = new Map()
+  // null: quonfig.json is not valid JSON, so secret values cannot be checked
+  // against its keysets; reported once below, and only when secrets/
+  // documents exist (reportUncheckableSecrets).
+  let secretKeysets: KeysetRegistry | null = new Map()
+  let secretDocs = 0
   const manifestText = quonfigContent ?? options.quonfigJson
   if (manifestText !== undefined) {
     let manifest: unknown
+    let parsedOk = true
     try {
       manifest = JSON.parse(manifestText)
     } catch {
-      // Invalid JSON in the map was reported above. Via options.quonfigJson it
-      // is not reported here (see ValidateOptions.quonfigJson): no keysets are
-      // registered, so any secret value is rejected as undeclared.
-      manifest = undefined
+      parsedOk = false
     }
 
-    secretKeysets = validateSecretsManifest(manifest, issues)
+    secretKeysets = parsedOk ? validateSecretsManifest(manifest, issues) : null
   }
 
   for (const [relPath, content] of files) {
@@ -1106,8 +1117,12 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
 
     // Secrets family (qfg-8seuf.4): the rules of a secrets/ document, and no
     // qf1 value anywhere else.
-    if (dir === 'secrets') validateSecretDocument(parsed, relPath, secretKeysets, issues)
-    else checkNoQf1OutsideSecrets(parsed, relPath, issues)
+    if (dir === 'secrets') {
+      secretDocs++
+      validateSecretDocument(parsed, relPath, secretKeysets, issues)
+    } else {
+      checkNoQf1OutsideSecrets(parsed, relPath, issues)
+    }
 
     validateEnvironmentIds(config.environments, relPath, issues)
 
@@ -1170,6 +1185,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
   }
 
   detectReferenceCycles(parsedConfigs, issues)
+  if (secretKeysets === null) reportUncheckableSecrets(secretDocs, issues)
 
   // Duplicate keys (case-insensitive — see detectDuplicateKeys).
   detectDuplicateKeys(allConfigs, 'key', issues, isTemporarySecretsDuplicate)

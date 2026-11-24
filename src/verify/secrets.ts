@@ -11,14 +11,14 @@
  * Self-contained on purpose: this directory is copied on its own into the
  * standalone bun-compiled pre-receive hook (app-gitea Dockerfile), so it may
  * import only `node:` builtins and the packages that build installs (zod, ajv).
- * X25519 is a small BigInt Montgomery ladder rather than node:crypto's
- * diffieHellman, so the small-order test behaves identically under node and
- * bun (OpenSSL refuses a small-order input with an exception; other runtimes
- * differ).
+ * The small-order test is a membership test against the five small-order
+ * u-coordinates (no scalar multiplication, same answer under node and bun);
+ * test/verify/x25519-oracle.ts proves it equals the spec's X25519 definition.
  *
  * Choices still awaiting Jeff's approval of the spec each live in ONE place:
  *   - PUBLIC_KEY_PREFIX              spec decision 23 (key entry text form)
- *   - SECRETS_STORAGE_RULES          spec decision 24 (storage restrictions)
+ *   - SECRETS_STORAGE_RULES          spec decision 24 (storage restrictions; see
+ *                                    its comment for which parts are NOT one-line flips)
  *   - isTemporarySecretsDuplicate    spec 11.6 / decision 29 (removed by qfg-8seuf.20)
  */
 
@@ -36,19 +36,23 @@ import type {ValidationIssue} from './validate.js'
 export const PUBLIC_KEY_PREFIX = 'qf1-pub-'
 
 /**
- * Storage restrictions for documents in `secrets/` and for the
- * `quonfig.json` `secrets` object beyond what the plan states.
- * NEEDS JEFF (spec decision 24): each one is a one-line flip.
+ * Storage restrictions beyond what the plan states.
+ * NEEDS JEFF (spec decision 24).
+ *
+ * One-line flips (relaxing them is safe as is):
+ *   - allowSendToClientSdk
+ *   - rejectUnknownManifestMembers
+ *
+ * NOT one-line flips: `weighted_values` rule values, `provided` rule values
+ * and non-empty `variants` in a secret are rejected in validateSecretDocument.
+ * Allowing any of them needs new validation of the relaxed shape (every inner
+ * value a well-formed qf1 string on a declared keyset with a listed
+ * fingerprint; for `provided`, a decision on what a secret may point at), so
+ * they deliberately have no switch here.
  */
 export const SECRETS_STORAGE_RULES = {
-  /** `provided` (ENV_VAR) rule values in a secret. */
-  allowProvidedValues: false,
   /** `sendToClientSdk: true` on a secret (false or absent is always fine). */
   allowSendToClientSdk: false,
-  /** Non-empty top-level `variants` on a secret. */
-  allowVariants: false,
-  /** `weighted_values` rule values in a secret. */
-  allowWeightedValues: false,
   /** Reject unknown members inside `secrets` and inside each keyset object. */
   rejectUnknownManifestMembers: true,
 } as const
@@ -64,28 +68,9 @@ const QF1_PREFIX = 'qf1:'
 const MIN_PAYLOAD_BYTES = 48 // 32-byte ephemeral key + 16-byte tag (empty plaintext)
 const PUBLIC_KEY_BODY_CHARS = 43
 
-// ── X25519 (RFC 7748 section 5), keyless use only ───────────────────────
+// ── Small-order points (spec 6.1, decision 37) ─────────────────────────
 
 const P = 2n ** 255n - 19n
-const A24 = 121_665n
-
-const mod = (a: bigint): bigint => {
-  const r = a % P
-  return r < 0n ? r + P : r
-}
-
-function modPow(base: bigint, exp: bigint): bigint {
-  let result = 1n
-  let b = mod(base)
-  let e = exp
-  while (e > 0n) {
-    if (e & 1n) result = mod(result * b)
-    b = mod(b * b)
-    e >>= 1n
-  }
-
-  return result
-}
 
 function decodeLittleEndian(bytes: Uint8Array): bigint {
   let n = 0n
@@ -93,76 +78,31 @@ function decodeLittleEndian(bytes: Uint8Array): bigint {
   return n
 }
 
-function encodeLittleEndian(n: bigint): Uint8Array {
-  const out = new Uint8Array(32)
-  let v = n
-  for (let i = 0; i < 32; i++) {
-    out[i] = Number(v & 0xffn)
-    v >>= 8n
-  }
-
-  return out
-}
+/**
+ * The u-coordinates (mod p) of every point of small order on Curve25519:
+ * 0 (the order-2 point), 1 and p-1 (order 4), and the two
+ * order-8 points. Spec 6.1 defines small order as "X25519 with the fixed
+ * scalar 0x01 x 32 is all zero", which holds exactly for these u; the test
+ * oracle (test/verify/x25519-oracle.ts) checks the equivalence.
+ */
+const SMALL_ORDER_U = new Set<bigint>([
+  0n,
+  1n,
+  P - 1n,
+  325_606_250_916_557_431_795_983_626_356_110_631_294_008_115_727_848_805_560_023_387_167_927_233_504n,
+  39_382_357_235_489_614_581_723_060_781_553_021_112_529_911_719_440_698_176_882_885_853_963_445_705_823n,
+])
 
 /**
- * X25519(k, u) per RFC 7748 section 5: clamps the scalar, masks the top bit of
- * u and reduces a non-canonical u mod p. Not constant time; qfg-verify only
- * ever runs it on public values with a fixed public scalar.
+ * True when u is a point of small order (spec 6.1). As X25519 does, the top
+ * bit is masked and a non-canonical u (p <= u < 2^255) is reduced mod p, so
+ * the encodings p and p+1 count too.
  */
-export function x25519(scalar: Uint8Array, u: Uint8Array): Uint8Array {
-  if (scalar.length !== 32 || u.length !== 32) throw new Error('x25519 needs 32-byte inputs')
-  const k = Uint8Array.from(scalar)
-  k[0] &= 248
-  k[31] &= 127
-  k[31] |= 64
-  const kn = decodeLittleEndian(k)
-  const uMasked = Uint8Array.from(u)
-  uMasked[31] &= 127
-  const x1 = mod(decodeLittleEndian(uMasked))
-
-  let x2 = 1n
-  let z2 = 0n
-  let x3 = x1
-  let z3 = 1n
-  let swap = 0n
-  for (let t = 254n; t >= 0n; t--) {
-    const kt = (kn >> t) & 1n
-    swap ^= kt
-    if (swap) {
-      ;[x2, x3] = [x3, x2]
-      ;[z2, z3] = [z3, z2]
-    }
-
-    swap = kt
-    const a = mod(x2 + z2)
-    const aa = mod(a * a)
-    const b = mod(x2 - z2)
-    const bb = mod(b * b)
-    const e = mod(aa - bb)
-    const c = mod(x3 + z3)
-    const d = mod(x3 - z3)
-    const da = mod(d * a)
-    const cb = mod(c * b)
-    x3 = mod((da + cb) ** 2n)
-    z3 = mod(x1 * mod((da - cb) ** 2n))
-    x2 = mod(aa * bb)
-    z2 = mod(e * mod(aa + A24 * e))
-  }
-
-  if (swap) {
-    ;[x2, x3] = [x3, x2]
-    ;[z2, z3] = [z3, z2]
-  }
-
-  return encodeLittleEndian(mod(x2 * modPow(z2, P - 2n)))
-}
-
-/** Spec 6.1: fixed scalar 0x01 x 32; after clamping it is a multiple of 8. */
-const SMALL_ORDER_PROBE_SCALAR = new Uint8Array(32).fill(0x01)
-
-/** True when u is a point of small order: X25519 with the probe scalar is all zero (spec 6.1). */
 export function isSmallOrder(u: Uint8Array): boolean {
-  return x25519(SMALL_ORDER_PROBE_SCALAR, u).every((byte) => byte === 0)
+  if (u.length !== 32) throw new Error('isSmallOrder needs a 32-byte u-coordinate')
+  const masked = Uint8Array.from(u)
+  masked[31] &= 0x7f
+  return SMALL_ORDER_U.has(decodeLittleEndian(masked) % P)
 }
 
 // ── Encodings (spec 3.4, 4) ─────────────────────────────────────────────
@@ -204,7 +144,7 @@ export function parseQf1Keyless(value: unknown): Qf1KeylessParse {
   // 1. version
   if (!value.startsWith(QF1_PREFIX)) {
     return VERSION_PREFIX_RE.test(value)
-      ? fail('unsupported_version', `version ${value.slice(0, value.indexOf(':'))} is not supported`)
+      ? fail('unsupported_version', `version ${quoteName(value.slice(0, value.indexOf(':')))} is not supported`)
       : fail('malformed', 'value does not start with "qf1:"')
   }
 
@@ -351,6 +291,21 @@ export function validateSecretsManifest(manifest: unknown, issues: ValidationIss
   return registry
 }
 
+/**
+ * When `quonfig.json` cannot be parsed, secret values cannot be checked
+ * against `secrets.keysets`. Report that ONCE, on quonfig.json, and only when
+ * `secrets/` documents exist, so workspaces without secrets see no change.
+ */
+export function reportUncheckableSecrets(secretDocCount: number, issues: ValidationIssue[]): void {
+  if (secretDocCount === 0) return
+  issues.push({
+    file: 'quonfig.json',
+    message: `quonfig.json is not valid JSON, so secrets/ values cannot be checked against secrets.keysets (${secretDocCount} secrets/ document(s))`,
+    severity: 'error',
+    suggestion: `Fix quonfig.json; its "secrets.keysets" lists the public keys every secrets/ value must use`,
+  })
+}
+
 // ── Documents in secrets/ (spec 10.2, 11.3) ─────────────────────────────
 
 type RawRule = {value?: unknown}
@@ -384,7 +339,7 @@ function ruleValues(doc: RawDoc): Array<{ctx: string; value: unknown}> {
 export function validateSecretDocument(
   raw: unknown,
   file: string,
-  keysets: KeysetRegistry,
+  keysets: KeysetRegistry | null,
   issues: ValidationIssue[],
 ): void {
   const doc = (raw ?? {}) as RawDoc
@@ -397,18 +352,20 @@ export function validateSecretDocument(
   }
 
   const variantCount = Array.isArray(doc.variants) ? doc.variants.length : 0
-  if (variantCount > 0 && !SECRETS_STORAGE_RULES.allowVariants) {
+  // Decision 24; not a one-line flip (see SECRETS_STORAGE_RULES).
+  if (variantCount > 0) {
     error(`Secret must not have variants (found ${variantCount})`, `Remove "variants" or set it to []`)
   }
 
   for (const {ctx, value} of ruleValues(doc)) {
     const v = (value ?? {}) as {confidential?: unknown; decryptWith?: unknown; type?: unknown; value?: unknown}
-    if (v.type === 'weighted_values' && !SECRETS_STORAGE_RULES.allowWeightedValues) {
+    // Decision 24; not one-line flips (see SECRETS_STORAGE_RULES).
+    if (v.type === 'weighted_values') {
       error(`${ctx}: weighted_values are not allowed in a secret`)
       continue
     }
 
-    if (v.type === 'provided' && !SECRETS_STORAGE_RULES.allowProvidedValues) {
+    if (v.type === 'provided') {
       error(
         `${ctx}: provided values are not allowed in a secret`,
         `Keep ENV_VAR provided values in configs/; secrets/ holds qf1 ciphertext only`,
@@ -436,7 +393,7 @@ export function validateSecretDocument(
 function checkQf1Value(
   value: unknown,
   ctx: string,
-  keysets: KeysetRegistry,
+  keysets: KeysetRegistry | null,
   error: (message: string, suggestion?: string) => void,
 ): void {
   const parsed = parseQf1Keyless(value)
@@ -445,6 +402,9 @@ function checkQf1Value(
     return
   }
 
+  // quonfig.json could not be parsed: the keyset checks cannot run, and that
+  // is reported once, on quonfig.json (reportUncheckableSecrets).
+  if (keysets === null) return
   const {fingerprint, keyset} = parsed
   const held = keysets.get(keyset)
   if (!held) {

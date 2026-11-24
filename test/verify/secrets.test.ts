@@ -3,7 +3,9 @@
  * project/plans/secrets-qf1-spec.md sections 2, 3, 4, 6.1, 10 and 11).
  *
  * The vectors in fixtures/qf1-verify-vectors.json are a reduced, public-only
- * copy of project/plans/secrets-qf1/vectors.json (TEST KEYS ONLY).
+ * copy of project/plans/secrets-qf1/vectors.json (TEST KEYS ONLY). The one spec
+ * key-entry case whose input is a private key entry (public-given-private-entry)
+ * is built at runtime below, so no private-key-shaped literal is in the repo.
  */
 import {expect} from 'chai'
 import {execFileSync} from 'node:child_process'
@@ -12,9 +14,12 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {isSmallOrder, parsePublicKeyEntry, parseQf1Keyless, x25519} from '../../src/verify/secrets.js'
+import {randomBytes} from 'node:crypto'
+
+import {isSmallOrder, parsePublicKeyEntry, parseQf1Keyless} from '../../src/verify/secrets.js'
 import {readFilesFromCommit, runHookChecks} from '../../src/verify/standalone.js'
 import {validateFileMap, validateWorkspace} from '../../src/verify/validate.js'
+import {isSmallOrderByLadder, x25519} from './x25519-oracle.js'
 
 type Vectors = {
   decryptOnly: Array<{ciphertext: string; name: string}>
@@ -38,6 +43,37 @@ const negative = (name: string) => vectors.negative.find((n) => n.name === name)
 const publicCase = (name: string) => vectors.publicKeyEntryCases.find((c) => c.name === name)!
 
 const VALID_KEYSETS = Object.fromEntries(vectors.keysets.map((k) => [k.name, {publicKeys: k.publicKeys}]))
+
+/** A valid public key entry's 43-character body, for prefix cases built at runtime. */
+const VALID_PUBLIC_BODY = vectors.keysets[0].publicKeys[0].slice('qf1-pub-'.length)
+
+/**
+ * Public key entry inputs that must be rejected: the fixture's, plus cases
+ * built here. `public-given-private-entry` mirrors the spec vector of that name
+ * (a private entry where a public one belongs); its body is a public key body,
+ * which is irrelevant to the check (the prefix decides).
+ */
+const INVALID_PUBLIC_ENTRIES: Array<{input: string; name: string}> = [
+  ...vectors.publicKeyEntryCases.filter((c) => c.expectedError),
+  {input: ['qf1', 'priv', VALID_PUBLIC_BODY].join('-'), name: 'public-given-private-entry'},
+  {input: `QF1-PUB-${VALID_PUBLIC_BODY}`, name: 'public-uppercase-prefix'},
+  {input: `qf2-pub-${VALID_PUBLIC_BODY}`, name: 'public-wrong-8-char-prefix'},
+]
+
+const P = 2n ** 255n - 19n
+const leBytes = (n: bigint): Uint8Array => {
+  const out = new Uint8Array(32)
+  let v = n
+  for (let i = 0; i < 32; i++) {
+    out[i] = Number(v % 256n)
+    v /= 256n
+  }
+
+  return out
+}
+
+const ephemeralOf = (ciphertext: string): Uint8Array =>
+  new Uint8Array(Buffer.from(ciphertext.split(':')[3], 'base64url').subarray(0, 32))
 
 const always = [{operator: 'ALWAYS_TRUE'}]
 const secretValue = (value: string, extra: Record<string, unknown> = {}) => ({
@@ -157,6 +193,57 @@ describe('verify: qf1 keyless primitives (qfg-8seuf.4)', () => {
     expect(hex(x25519(alicePriv, bobPub))).to.equal('4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742')
   })
 
+  describe('small-order membership test agrees with the X25519 ladder (spec 6.1 definition)', () => {
+    const agree = (u: Uint8Array, label: string) =>
+      expect(isSmallOrder(u), `${label}: ${hex(u)}`).to.equal(isSmallOrderByLadder(u))
+
+    it('on all seven top-bit-clear small-order encodings (0, 1, p-1, p, p+1, both order-8 points)', () => {
+      const order8 = [
+        325_606_250_916_557_431_795_983_626_356_110_631_294_008_115_727_848_805_560_023_387_167_927_233_504n,
+        39_382_357_235_489_614_581_723_060_781_553_021_112_529_911_719_440_698_176_882_885_853_963_445_705_823n,
+      ]
+      for (const u of [0n, 1n, P - 1n, P, P + 1n, ...order8]) {
+        expect(isSmallOrder(leBytes(u)), u.toString()).to.be.true
+        agree(leBytes(u), u.toString())
+      }
+    })
+
+    it('on every public key and ephemeral key in the vectors', () => {
+      for (const c of vectors.publicKeyEntryCases) {
+        const body = Buffer.from(c.input.slice(c.input.lastIndexOf('-') + 1), 'base64url')
+        if (body.length === 32) agree(new Uint8Array(body), c.name)
+      }
+
+      for (const k of vectors.keysets) {
+        for (const entry of k.publicKeys) agree(new Uint8Array(Buffer.from(entry.slice(8), 'base64url')), entry)
+      }
+
+      for (const c of [...vectors.positive, ...vectors.decryptOnly, ...vectors.negative]) {
+        const parts = c.ciphertext.split(':')
+        const blob = parts.length === 4 ? Buffer.from(parts[3], 'base64url') : Buffer.alloc(0)
+        if (blob.length >= 32 && (blob[31] & 0x80) === 0) agree(ephemeralOf(c.ciphertext), c.name)
+      }
+    })
+
+    it('on 3000 random top-bit-clear u, and on the neighbours of each small-order u', () => {
+      for (let i = 0; i < 3000; i++) {
+        const u = new Uint8Array(randomBytes(32))
+        u[31] &= 0x7f
+        agree(u, `random ${i}`)
+      }
+
+      for (const u of [2n, P - 2n, P + 2n, 2n ** 255n - 1n]) agree(leBytes(u), u.toString())
+
+      // Top bit set: masked first, as X25519 does (callers reject these
+      // encodings earlier, but the function must still match the definition).
+      for (const u of [0n, 1n, P - 1n]) {
+        const bytes = leBytes(u)
+        bytes[31] |= 0x80
+        agree(bytes, `${u} with top bit set`)
+      }
+    })
+  })
+
   it('isSmallOrder is false for every real public key in the vectors', () => {
     for (const keyset of vectors.keysets) {
       for (const entry of keyset.publicKeys) {
@@ -194,6 +281,15 @@ describe('verify: qf1 keyless primitives (qfg-8seuf.4)', () => {
     }
   })
 
+  it('truncates an unsupported version echoed in the reason', () => {
+    const parsed = parseQf1Keyless(`qf${'9'.repeat(10_000)}:QUONFIG_KEYSET:00000000:AAAA`)
+    expect(parsed.ok).to.be.false
+    if (!parsed.ok) {
+      expect(parsed.errorClass).to.equal('unsupported_version')
+      expect(parsed.reason.length, parsed.reason.slice(0, 200)).to.be.below(120)
+    }
+  })
+
   describe('parsePublicKeyEntry against vectors.json keyEntryCases', () => {
     for (const c of vectors.publicKeyEntryCases) {
       it(`${c.expectedError ? 'rejects' : 'accepts'} ${c.name}`, () => {
@@ -204,6 +300,13 @@ describe('verify: qf1 keyless primitives (qfg-8seuf.4)', () => {
           expect(parsed.ok).to.be.true
           if (parsed.ok) expect(hex(parsed.publicKey)).to.equal(c.expectedHex)
         }
+      })
+    }
+
+    for (const c of INVALID_PUBLIC_ENTRIES.filter((e) => !vectors.publicKeyEntryCases.some((v) => v.name === e.name))) {
+      it(`rejects ${c.name} (built at runtime)`, () => {
+        const parsed = parsePublicKeyEntry(c.input)
+        expect(parsed.ok, JSON.stringify(parsed)).to.be.false
       })
     }
 
@@ -293,7 +396,7 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
       expectOneMatching(errors(workspace(doc, quonfigJson({keysets}))), /QUONFIG_KEYSET_NONE.*publicKeys/)
     })
 
-    for (const c of vectors.publicKeyEntryCases.filter((v) => v.expectedError)) {
+    for (const c of INVALID_PUBLIC_ENTRIES) {
       it(`rejects public key entry ${c.name}`, () => {
         const keysets = {...VALID_KEYSETS, QUONFIG_KEYSET_BAD: {publicKeys: [c.input]}}
         expectOneMatching(
@@ -335,6 +438,10 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
     it('rejects an unknown member inside a keyset', () => {
       const keysets = {...VALID_KEYSETS, QUONFIG_KEYSET: {...VALID_KEYSETS.QUONFIG_KEYSET, writeKey: 0}}
       expectOneMatching(errors(workspace(doc, quonfigJson({keysets}))), /quonfig\.json: .*unknown member "writeKey"/)
+    })
+
+    it('rejects secrets: null', () => {
+      expectOneMatching(errors(workspace(doc, quonfigJson(null))), /quonfig\.json: .*"secrets" must be an object/)
     })
 
     it('rejects secrets that is not an object, and keysets that is not an object', () => {
@@ -566,6 +673,29 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
       expectOneMatching(errors(map), /differ only by case/)
     })
 
+    it('still rejects a configs/ copy whose decryptWith value is not confidential: true', () => {
+      const doc = configDoc('stripe.key', {
+        default: {rules: [{criteria: always, value: {type: 'string', value: 'abc--def', decryptWith: 'k'}}]},
+      })
+      expectOneMatching(
+        errors(workspace({'configs/stripe.key.json': doc, 'secrets/stripe.key.json': secretDoc('stripe.key')})),
+        dupRe,
+      )
+    })
+
+    it('counts RULE values only: a decryptWith inside weighted_values does not qualify the configs/ copy', () => {
+      const encrypted = {type: 'string', value: 'abc--def', confidential: true, decryptWith: 'k'}
+      const weighted = {type: 'weighted_values', value: {weightedValues: [{value: encrypted, weight: 100_000}]}}
+      const doc = configDoc('stripe.key', {
+        default: {rules: [{criteria: always, value: weighted}]},
+        variants: [{value: encrypted}],
+      })
+      expectOneMatching(
+        errors(workspace({'configs/stripe.key.json': doc, 'secrets/stripe.key.json': secretDoc('stripe.key')})),
+        dupRe,
+      )
+    })
+
     it('still rejects a three-way collision (configs + secrets + feature-flags)', () => {
       const flag = {...configDoc('stripe.key'), type: 'feature_flag'}
       const map = workspace({
@@ -574,6 +704,49 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
         'secrets/stripe.key.json': secretDoc('stripe.key'),
       })
       expectOneMatching(errors(map), dupRe)
+    })
+  })
+
+  describe('unparseable quonfig.json (spec 11.5)', () => {
+    const secretOnly = {'secrets/a.b.json': secretDoc('a.b')}
+    const notDeclared = /not declared|not in quonfig\.json/
+    const cannotCheck = /quonfig\.json: .*secrets\/ values cannot be checked/
+    const errorList = (issues: Array<{file: string; message: string; severity: string}>) =>
+      issues.filter((i) => i.severity === 'error').map((i) => `${i.file}: ${i.message}`)
+
+    // Not `errors()`: on origin/main the two paths already differ for an
+    // unparseable quonfig.json (the disk path also reports the missing
+    // "environments" array), so each path is checked on its own here.
+    const bothPaths = (map: Map<string, string>): string[][] => {
+      const dir = writeToDisk(map)
+      try {
+        return [errorList(validateFileMap(map).issues), errorList(validateWorkspace(dir).issues)]
+      } finally {
+        fs.rmSync(dir, {force: true, recursive: true})
+      }
+    }
+
+    const expectOneClearError = (list: string[]) => {
+      expect(list.filter((e) => cannotCheck.test(e)).length, JSON.stringify(list)).to.equal(1)
+      expect(list.filter((e) => notDeclared.test(e)).length, JSON.stringify(list)).to.equal(0)
+    }
+
+    it('gives ONE clear quonfig.json error, not a per-value "not declared", when secrets/ documents exist', () => {
+      for (const list of bothPaths(new Map([...workspace(secretOnly, null), ['quonfig.json', '{not json']]))) {
+        expectOneClearError(list)
+      }
+    })
+
+    it('does the same when the hook passes it as options.quonfigJson', () => {
+      expectOneClearError(errorList(validateFileMap(workspace(secretOnly, null), {quonfigJson: '{not json'}).issues))
+    })
+
+    it('adds nothing when there are no secrets/ documents', () => {
+      const configsOnly = workspace({'configs/x.json': configDoc('x')}, null)
+      expect(validateFileMap(configsOnly, {quonfigJson: '{not json'}).issues).to.deep.equal([])
+      for (const list of bothPaths(new Map([...configsOnly, ['quonfig.json', '{not json']]))) {
+        expect(list.filter((e) => cannotCheck.test(e))).to.deep.equal([])
+      }
     })
   })
 
