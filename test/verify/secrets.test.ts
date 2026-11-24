@@ -20,6 +20,7 @@ import {
   parsePublicKeyEntry,
   parseQf1Keyless,
   parseQf1Structure,
+  quoteUntrustedName,
 } from '../../src/verify/secrets.js'
 import {readFilesFromCommit, runHookChecks} from '../../src/verify/standalone.js'
 import {validateFileMap, validateWorkspace} from '../../src/verify/validate.js'
@@ -840,7 +841,7 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
   })
 })
 
-// ── git helpers (real repos, as standalone.test.ts does) ──────────────────
+// \u2500\u2500 git helpers (real repos, as standalone.test.ts does) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 function gitRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-secrets-hook-'))
@@ -1007,5 +1008,74 @@ describe('verify: parseQf1Keyless split (qfg-mol-hle)', () => {
     expect(issue, JSON.stringify(issues)).to.exist
     expect(issue!.suggestion).to.equal('secrets/ values are encrypted by qfg; do not edit them by hand')
     expect(issue!.suggestion).not.to.match(/qfg secret set/)
+  })
+})
+
+describe('verify: quoteUntrustedName escapes what a terminal would act on (spec 9.2, qfg-mol-hle)', () => {
+  const UNSAFE = /[\u007F-\u009F\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]/
+
+  it('is JSON.stringify for ordinary names', () => {
+    for (const name of [
+      'QUONFIG_KEYSET',
+      'HOME',
+      'quonfig_keyset_test',
+      '',
+      'a"b\\c',
+      'tab\there',
+      'nl\nhere',
+      'p\u00E4ss \u65E5',
+    ]) {
+      expect(quoteUntrustedName(name), name).to.equal(JSON.stringify(name))
+    }
+  })
+
+  it('escapes DEL, C1 controls (including CSI), U+2028/2029 and bidi controls as \\uXXXX', () => {
+    const codes = [
+      0x7f,
+      ...Array.from({length: 0x20}, (_, i) => 0x80 + i),
+      0x20_28,
+      0x20_29,
+      0x20_2a,
+      0x20_2b,
+      0x20_2c,
+      0x20_2d,
+      0x20_2e,
+      0x20_66,
+      0x20_67,
+      0x20_68,
+      0x20_69,
+      0x20_0e,
+      0x20_0f,
+      0x06_1c,
+    ]
+    for (const code of codes) {
+      const ch = String.fromCodePoint(code)
+      const quoted = quoteUntrustedName(`a${ch}b`)
+      expect(quoted, `U+${code.toString(16)}`).to.equal(`"a\\u${code.toString(16).padStart(4, '0')}b"`)
+      expect(UNSAFE.test(quoted)).to.be.false
+    }
+  })
+
+  it('escapes lone surrogates and keeps valid pairs', () => {
+    expect(quoteUntrustedName('a\uD800b')).to.equal('"a\\ud800b"')
+    expect(quoteUntrustedName('a\uDC00b')).to.equal('"a\\udc00b"')
+    expect(quoteUntrustedName('\u{1F511}')).to.equal('"\u{1F511}"')
+  })
+
+  it('truncates to 64 UTF-16 code units before quoting, escaping a pair split by the cut', () => {
+    expect(quoteUntrustedName('X'.repeat(200))).to.equal(JSON.stringify('X'.repeat(64)))
+    const cut = quoteUntrustedName(`${'X'.repeat(63)}\u{1F511}tail`)
+    expect(cut).to.equal(`"${'X'.repeat(63)}\\ud83d"`)
+  })
+
+  it('is what parseQf1Keyless uses for an invalid keyset name', () => {
+    const value = positive('short-ascii').ciphertext.replace('QUONFIG_KEYSET_TEST', 'QUONFIG_KEYSET_\u009B31m')
+    const parsed = parseQf1Keyless(value)
+    expect(parsed.ok).to.be.false
+    if (!parsed.ok) {
+      expect(parsed.errorClass).to.equal('invalid_keyset_name')
+      expect(parsed.reason).to.include('"QUONFIG_KEYSET_\\u009b31m"')
+      expect(UNSAFE.test(parsed.reason)).to.be.false
+    }
   })
 })

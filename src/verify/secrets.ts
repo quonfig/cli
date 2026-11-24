@@ -63,7 +63,8 @@ export const SECRETS_STORAGE_RULES = {
 
 /** Spec 2. JS regexes without the `m` flag anchor at the string ends, so `$` never matches before a final LF. */
 export const KEYSET_NAME_RE = /^QUONFIG_KEYSET(?:_[\dA-Z]+)*$/
-const FINGERPRINT_RE = /^[\da-f]{8}$/
+/** Spec 3.1 / 4: exactly 8 lowercase hex characters. */
+export const FINGERPRINT_RE = /^[\da-f]{8}$/
 const VERSION_PREFIX_RE = /^qf[1-9]\d*:/
 const B64URL_RE = /^[\w-]+$/
 const QF1_PREFIX = 'qf1:'
@@ -157,8 +158,28 @@ const fail = <C extends Qf1KeylessErrorClass>(errorClass: C, reason: string) => 
   reason,
 })
 
-/** Quote an untrusted name for an error message: truncated to 64, control characters escaped (spec 9.2). */
-const quoteName = (name: string): string => JSON.stringify(name.slice(0, 64))
+/**
+ * Characters JSON.stringify leaves raw that a terminal or log viewer acts on:
+ * DEL and the C1 controls (U+007F-U+009F, CSI is U+009B), the line and
+ * paragraph separators, and the bidi marks, embeddings, overrides and
+ * isolates. Lone surrogates are already escaped by JSON.stringify.
+ */
+const UNSAFE_IN_QUOTE_RE = /[\u007F-\u009F\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]/g
+
+/**
+ * Quote an untrusted name (for example a keyset name read from a ciphertext)
+ * for an error message: truncated to 64 UTF-16 code units, then quoted as
+ * JSON with every control, separator and bidi character escaped as \uXXXX
+ * (spec 9.2). The one implementation; src/secrets uses it too.
+ */
+export function quoteUntrustedName(name: string): string {
+  return JSON.stringify(name.slice(0, 64)).replaceAll(
+    UNSAFE_IN_QUOTE_RE,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`, // eslint-disable-line unicorn/prefer-code-point
+  )
+}
+
+const quoteName = quoteUntrustedName
 
 /**
  * Spec 3.5 steps 1-7 in the spec's order: the first failing step decides the
