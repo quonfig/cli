@@ -841,7 +841,7 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
   })
 })
 
-// \u2500\u2500 git helpers (real repos, as standalone.test.ts does) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── git helpers (real repos, as standalone.test.ts does) ──────────────────
 
 function gitRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quonfig-secrets-hook-'))
@@ -1011,10 +1011,10 @@ describe('verify: parseQf1Keyless split (qfg-mol-hle)', () => {
   })
 })
 
-describe('verify: quoteUntrustedName escapes what a terminal would act on (spec 9.2, qfg-mol-hle)', () => {
-  const UNSAFE = /[\u007F-\u009F\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]/
+describe('verify: quoteUntrustedName escapes every code unit outside printable ASCII (spec 9.2, qfg-mol-hle)', () => {
+  const PRINTABLE_ASCII = /^[ -~]*$/
 
-  it('is JSON.stringify for ordinary names', () => {
+  it('is JSON.stringify for ordinary ASCII names', () => {
     for (const name of [
       'QUONFIG_KEYSET',
       'HOME',
@@ -1023,59 +1023,52 @@ describe('verify: quoteUntrustedName escapes what a terminal would act on (spec 
       'a"b\\c',
       'tab\there',
       'nl\nhere',
-      'p\u00E4ss \u65E5',
+      '~!@#$%^&*()',
     ]) {
       expect(quoteUntrustedName(name), name).to.equal(JSON.stringify(name))
     }
   })
 
-  it('escapes DEL, C1 controls (including CSI), U+2028/2029 and bidi controls as \\uXXXX', () => {
-    const codes = [
-      0x7f,
-      ...Array.from({length: 0x20}, (_, i) => 0x80 + i),
-      0x20_28,
-      0x20_29,
-      0x20_2a,
-      0x20_2b,
-      0x20_2c,
-      0x20_2d,
-      0x20_2e,
-      0x20_66,
-      0x20_67,
-      0x20_68,
-      0x20_69,
-      0x20_0e,
-      0x20_0f,
-      0x06_1c,
-    ]
-    for (const code of codes) {
-      const ch = String.fromCodePoint(code)
+  it('maps every UTF-16 code unit to printable ASCII, escaping all outside 0x20-0x7E as \\uXXXX', () => {
+    for (let code = 0; code <= 0xff_ff; code++) {
+      const ch = String.fromCharCode(code) // eslint-disable-line unicorn/prefer-code-point -- code units are the point
       const quoted = quoteUntrustedName(`a${ch}b`)
-      expect(quoted, `U+${code.toString(16)}`).to.equal(`"a\\u${code.toString(16).padStart(4, '0')}b"`)
-      expect(UNSAFE.test(quoted)).to.be.false
+      expect(PRINTABLE_ASCII.test(quoted), `U+${code.toString(16)}`).to.be.true
+      if (code >= 0x20 && code <= 0x7e) {
+        expect(quoted).to.equal(JSON.stringify(`a${ch}b`))
+      } else if (code >= 0x80) {
+        expect(quoted, `U+${code.toString(16)}`).to.equal(`"a\\u${code.toString(16).padStart(4, '0')}b"`)
+      }
     }
   })
 
-  it('escapes lone surrogates and keeps valid pairs', () => {
-    expect(quoteUntrustedName('a\uD800b')).to.equal('"a\\ud800b"')
-    expect(quoteUntrustedName('a\uDC00b')).to.equal('"a\\udc00b"')
-    expect(quoteUntrustedName('\u{1F511}')).to.equal('"\u{1F511}"')
+  it('escapes look-alikes and invisibles (NBSP, soft hyphen, zero-width, BOM, specials, variation and tag characters)', () => {
+    expect(
+      quoteUntrustedName('A\u00A0\u00AD\u200B\u200C\u200D\u2060\u2064\u206A\u206F\uFEFF\uFFF9\uFFFB\uFE0F\u{E0041}'),
+    ).to.equal(
+      '"A\\u00a0\\u00ad\\u200b\\u200c\\u200d\\u2060\\u2064\\u206a\\u206f\\ufeff\\ufff9\\ufffb\\ufe0f\\udb40\\udc41"',
+    )
+  })
+
+  it('escapes DEL, C1 (including CSI), separators, bidi controls and surrogates', () => {
+    expect(quoteUntrustedName('a\u007F\u009B\u2028\u202E\u2066\uD800b\u{1F511}')).to.equal(
+      '"a\\u007f\\u009b\\u2028\\u202e\\u2066\\ud800b\\ud83d\\udd11"',
+    )
   })
 
   it('truncates to 64 UTF-16 code units before quoting, escaping a pair split by the cut', () => {
     expect(quoteUntrustedName('X'.repeat(200))).to.equal(JSON.stringify('X'.repeat(64)))
-    const cut = quoteUntrustedName(`${'X'.repeat(63)}\u{1F511}tail`)
-    expect(cut).to.equal(`"${'X'.repeat(63)}\\ud83d"`)
+    expect(quoteUntrustedName(`${'X'.repeat(63)}\u{1F511}tail`)).to.equal(`"${'X'.repeat(63)}\\ud83d"`)
   })
 
   it('is what parseQf1Keyless uses for an invalid keyset name', () => {
-    const value = positive('short-ascii').ciphertext.replace('QUONFIG_KEYSET_TEST', 'QUONFIG_KEYSET_\u009B31m')
+    const value = positive('short-ascii').ciphertext.replace('QUONFIG_KEYSET_TEST', 'QUONFIG_KEYSET_\u009B31m\u00A0')
     const parsed = parseQf1Keyless(value)
     expect(parsed.ok).to.be.false
     if (!parsed.ok) {
       expect(parsed.errorClass).to.equal('invalid_keyset_name')
-      expect(parsed.reason).to.include('"QUONFIG_KEYSET_\\u009b31m"')
-      expect(UNSAFE.test(parsed.reason)).to.be.false
+      expect(parsed.reason).to.include('"QUONFIG_KEYSET_\\u009b31m\\u00a0"')
+      expect(PRINTABLE_ASCII.test(parsed.reason)).to.be.true
     }
   })
 })

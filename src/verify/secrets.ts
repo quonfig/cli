@@ -158,23 +158,21 @@ const fail = <C extends Qf1KeylessErrorClass>(errorClass: C, reason: string) => 
   reason,
 })
 
-/**
- * Characters JSON.stringify leaves raw that a terminal or log viewer acts on:
- * DEL and the C1 controls (U+007F-U+009F, CSI is U+009B), the line and
- * paragraph separators, and the bidi marks, embeddings, overrides and
- * isolates. Lone surrogates are already escaped by JSON.stringify.
- */
-const UNSAFE_IN_QUOTE_RE = /[\u007F-\u009F\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]/g
+/** Every UTF-16 code unit outside printable ASCII (0x20-0x7E). */
+const NOT_PRINTABLE_ASCII_RE = /[^\u0020-\u007E]/g
 
 /**
  * Quote an untrusted name (for example a keyset name read from a ciphertext)
- * for an error message: truncated to 64 UTF-16 code units, then quoted as
- * JSON with every control, separator and bidi character escaped as \uXXXX
- * (spec 9.2). The one implementation; src/secrets uses it too.
+ * for an error message (spec 9.2): truncated to 64 UTF-16 code units, quoted
+ * as JSON, then EVERY code unit outside printable ASCII escaped as \uXXXX.
+ * Keyset names are ASCII by spec, so nothing legitimate changes; controls,
+ * bidi and invisible or look-alike characters can neither drive a terminal
+ * nor make an invalid name look valid. The one implementation; src/secrets
+ * uses it too.
  */
 export function quoteUntrustedName(name: string): string {
   return JSON.stringify(name.slice(0, 64)).replaceAll(
-    UNSAFE_IN_QUOTE_RE,
+    NOT_PRINTABLE_ASCII_RE,
     (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`, // eslint-disable-line unicorn/prefer-code-point
   )
 }
