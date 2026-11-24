@@ -15,7 +15,8 @@
  * u-coordinates (no scalar multiplication, same answer under node and bun);
  * test/verify/x25519-oracle.ts proves it equals the spec's X25519 definition.
  *
- * Choices still awaiting Jeff's approval of the spec each live in ONE place:
+ * Contract choices of the spec (approved 2026-11-24, Gate A) each live in ONE
+ * place, so a later change is local:
  *   - PUBLIC_KEY_PREFIX              spec decision 23 (key entry text form)
  *   - SECRETS_STORAGE_RULES          spec decision 24 (storage restrictions; see
  *                                    its comment for which parts are NOT one-line flips)
@@ -27,17 +28,18 @@ import {createHash} from 'node:crypto'
 
 import type {ValidationIssue} from './validate.js'
 
-// ── Flagged choices (one place each) ────────────────────────────────────
+// ── Contract choices (one place each) ────────────────────────────────────
 
 /**
  * Text prefix of a public key entry in `quonfig.json` (spec 6.1).
- * NEEDS JEFF (spec decision 23): flipping the format is a change here.
+ * Spec decision 23 (approved): customer-visible and permanent; changing it
+ * needs a migration.
  */
 export const PUBLIC_KEY_PREFIX = 'qf1-pub-'
 
 /**
- * Storage restrictions beyond what the plan states.
- * NEEDS JEFF (spec decision 24).
+ * Storage restrictions beyond what the plan states (spec decision 24,
+ * approved).
  *
  * One-line flips (relaxing them is safe as is):
  *   - allowSendToClientSdk
