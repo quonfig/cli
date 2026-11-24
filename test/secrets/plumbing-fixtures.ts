@@ -47,18 +47,33 @@ export function git(cwd: string, ...args: string[]): string {
  * A bare repo whose `main` holds `files` (path -> text) in one commit, as a
  * workspace repo on Gitea would. Returns the bare repo path and main's sha.
  */
-export function bareWorkspaceRepo(root: string, files: Record<string, string>): {bare: string; headSha: string} {
+export function bareWorkspaceRepo(
+  root: string,
+  files: Record<string, string>,
+  options: {branch?: string; symlinks?: Record<string, string>} = {},
+): {bare: string; headSha: string} {
   const work = path.join(root, 'work')
   const bare = path.join(root, 'workspace.git')
   fs.mkdirSync(work, {recursive: true})
   git(work, 'init', '-q')
-  git(work, 'checkout', '-q', '-b', 'main')
+  git(work, 'checkout', '-q', '-b', options.branch ?? 'main')
   for (const [rel, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(work, rel)), {recursive: true})
     fs.writeFileSync(path.join(work, rel), text)
   }
 
   git(work, 'add', '-A')
+  // Symlink entries go straight into the index (mode 120000), so the fixture
+  // needs no symlink support from the filesystem (Windows CI).
+  for (const [rel, target] of Object.entries(options.symlinks ?? {})) {
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+      cwd: work,
+      encoding: 'utf8',
+      input: target,
+    }).trim()
+    git(work, 'update-index', '--add', '--cacheinfo', `120000,${blob},${rel}`)
+  }
+
   git(work, 'commit', '-q', '-m', 'seed')
   git(root, 'clone', '-q', '--bare', work, bare)
   return {bare, headSha: git(work, 'rev-parse', 'HEAD')}

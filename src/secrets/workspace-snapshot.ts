@@ -12,7 +12,18 @@
  * checkout. Nothing in the clone's `.git` names the URL afterwards. git runs
  * through `runGit` (no credential helper, no prompts, tokens redacted from
  * errors). The temp directory is removed on every failure inside this
- * module, and by `cleanup()` / `withWorkspaceSnapshot` otherwise.
+ * module, and by `cleanup()` / `withWorkspaceSnapshot` otherwise. On
+ * SIGINT/SIGTERM mid-write it is left behind in the OS temp directory (no
+ * signal handler is installed here); it holds the workspace's committed
+ * files and no token.
+ *
+ * Containment. The push hook accepts symlinks in a workspace repo, so a
+ * committed symlink must never make a read return a LOCAL file (which a
+ * write would then send as `beforeJson`). Two layers: the checkout runs with
+ * `core.symlinks=false`, and every read and listing walks the path with
+ * lstat, refusing any component that is a symlink or a git symlink /
+ * submodule entry. `.git` (any case), `..` and absolute paths are refused
+ * after normalization.
  */
 import * as fs from 'node:fs'
 import * as os from 'node:os'
@@ -39,7 +50,11 @@ export interface WorkspaceSnapshot {
   headSha: string
   /** Names of the `*.json` files directly in `subdir` (none when it does not exist). */
   listJson(subdir: string): string[]
-  /** Text of a file in the snapshot, or undefined when it does not exist. */
+  /**
+   * Text of a regular file in the snapshot, or undefined when it does not
+   * exist. Throws SnapshotPathError for anything outside the snapshot, in
+   * `.git`, or reached through a symlink.
+   */
   readFile(relPath: string): string | undefined
 }
 
@@ -54,39 +69,100 @@ const SHA_RE = /^[\da-f]{40}([\da-f]{24})?$/
 
 const removeDir = (dir: string) => fs.promises.rm(dir, {force: true, maxRetries: 3, recursive: true})
 
-/** Resolve `rel` inside `dir`, refusing anything that escapes it or reaches `.git`. */
-function inside(dir: string, rel: string): string {
-  const parts = rel.split(/[/\\]/)
-  if (path.isAbsolute(rel) || parts.includes('..') || parts[0] === '.git' || rel.length === 0) {
-    throw new Error(`${JSON.stringify(rel)} is outside the workspace snapshot`)
+/** Thrown for a path the snapshot will not read: outside it, in `.git`, or not a regular file. */
+export class SnapshotPathError extends Error {
+  constructor(rel: string, why: string) {
+    super(`${JSON.stringify(rel)} ${why}`)
+    this.name = 'SnapshotPathError'
   }
-
-  return path.join(dir, ...parts)
 }
 
-function snapshotAt(dir: string, headSha: string): WorkspaceSnapshot {
-  const readFile = (rel: string) => {
-    try {
-      return fs.readFileSync(inside(dir, rel), 'utf8')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-      throw error
-    }
+/**
+ * The normalized segments of `rel`, a path inside the snapshot. Refuses
+ * absolute paths, any `..` segment, and `.git` in any letter case (on a
+ * case-insensitive filesystem `.GIT` is the same directory), after
+ * normalizing `\`, `./` and repeated separators.
+ */
+function segmentsOf(rel: string): string[] {
+  const outside = () => new SnapshotPathError(rel, 'is outside the workspace snapshot')
+  if (typeof rel !== 'string' || rel.length === 0 || rel.includes('\0')) throw outside()
+  const slashed = rel.replaceAll('\\', '/')
+  if (path.isAbsolute(rel) || slashed.startsWith('/') || /^[A-Za-z]:/.test(slashed)) throw outside()
+  const raw = slashed.split('/')
+  if (raw.includes('..')) throw outside()
+  const parts = raw.filter((p) => p !== '' && p !== '.')
+  if (parts.length === 0 || parts.some((p) => p.toLowerCase() === '.git')) throw outside()
+  return parts
+}
+
+/**
+ * Where a git symlink or submodule entry sits, by path. The checkout runs
+ * with `core.symlinks=false`, so such an entry is a small text file on disk
+ * holding the link target; this set is what tells it apart from a document.
+ */
+async function nonFileEntries(dir: string): Promise<Set<string>> {
+  const {stdout} = await runGit(['-C', dir, 'ls-tree', '-r', '-z', '--full-tree', 'HEAD'])
+  const out = new Set<string>()
+  for (const entry of stdout.split('\0')) {
+    const tab = entry.indexOf('\t')
+    if (tab === -1) continue
+    const mode = entry.slice(0, entry.indexOf(' '))
+    if (mode !== '100644' && mode !== '100755') out.add(entry.slice(tab + 1))
   }
 
-  const entries = (subdir: string) => {
-    try {
-      return fs.readdirSync(inside(dir, subdir), {withFileTypes: true}).filter((d) => d.isFile())
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (code === 'ENOENT' || code === 'ENOTDIR') return []
-      throw error
+  return out
+}
+
+function snapshotAt(dir: string, headSha: string, nonFiles: ReadonlySet<string>): WorkspaceSnapshot {
+  /**
+   * Resolve `rel` to an on-disk path, checking every component with lstat:
+   * none may be a symlink (or a git symlink / submodule entry), the last must
+   * be a `kind`. Undefined when a component does not exist.
+   */
+  const resolve = (rel: string, kind: 'dir' | 'file'): string | undefined => {
+    const parts = segmentsOf(rel)
+    let current = dir
+    for (const [i, part] of parts.entries()) {
+      if (nonFiles.has(parts.slice(0, i + 1).join('/'))) {
+        throw new SnapshotPathError(rel, 'is not a regular file in the workspace repo (a symlink or submodule)')
+      }
+
+      current = path.join(current, part)
+      let stat: fs.Stats
+      try {
+        stat = fs.lstatSync(current)
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'ENOENT' || code === 'ENOTDIR') return undefined
+        throw error
+      }
+
+      const last = i === parts.length - 1
+      const ok = last ? (kind === 'file' ? stat.isFile() : stat.isDirectory()) : stat.isDirectory()
+      if (!ok) throw new SnapshotPathError(rel, `is not a regular ${kind} inside the workspace snapshot`)
     }
+
+    return current
+  }
+
+  const readFile = (rel: string) => {
+    const full = resolve(rel, 'file')
+    return full === undefined ? undefined : fs.readFileSync(full, 'utf8')
+  }
+
+  /** Regular files directly in `subdir` (symlinks, submodules and directories are left out). */
+  const entries = (subdir: string): string[] => {
+    const full = resolve(subdir, 'dir')
+    if (full === undefined) return []
+    const prefix = segmentsOf(subdir).join('/')
+    return fs
+      .readdirSync(full, {withFileTypes: true})
+      .filter((d) => d.isFile() && !nonFiles.has(`${prefix}/${d.name}`))
+      .map((d) => d.name)
   }
 
   const listJson = (subdir: string) =>
     entries(subdir)
-      .map((d) => d.name)
       .filter((name) => name.endsWith('.json') && !name.startsWith('.'))
       .sort()
 
@@ -100,7 +176,7 @@ function snapshotAt(dir: string, headSha: string): WorkspaceSnapshot {
     documents() {
       const out = new Map<string, string>()
       for (const sub of [...KNOWN_DIRS].sort()) {
-        for (const d of entries(sub)) out.set(`${sub}/${d.name}`, readFile(`${sub}/${d.name}`) ?? '')
+        for (const name of entries(sub)) out.set(`${sub}/${name}`, readFile(`${sub}/${name}`) ?? '')
       }
 
       return out
@@ -142,10 +218,23 @@ export async function cloneWorkspaceSnapshot(
     const {stdout} = await runGit(['-C', dir, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}'])
     const headSha = stdout.trim()
     if (!SHA_RE.test(headSha)) throw new Error(`workspace snapshot: unexpected HEAD ${JSON.stringify(headSha)}`)
-    await runGit(['-C', dir, '-c', 'advice.detachedHead=false', 'checkout', '-q', '--detach', headSha])
+    // core.symlinks=false: a symlink in the repo is checked out as a small
+    // text file, never as a link that could point outside the clone.
+    await runGit([
+      '-C',
+      dir,
+      '-c',
+      'core.symlinks=false',
+      '-c',
+      'advice.detachedHead=false',
+      'checkout',
+      '-q',
+      '--detach',
+      headSha,
+    ])
     // FETCH_HEAD names the fetch source; nothing reads it after this point.
     await fs.promises.rm(path.join(dir, '.git', 'FETCH_HEAD'), {force: true})
-    return snapshotAt(dir, headSha)
+    return snapshotAt(dir, headSha, await nonFileEntries(dir))
   } catch (error) {
     await removeDir(dir)
     throw error
