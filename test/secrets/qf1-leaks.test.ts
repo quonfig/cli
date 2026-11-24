@@ -38,6 +38,7 @@ type Env = Record<string, string>
 type Vectors = {
   keyEntryCases: Array<{expectedError?: string; input: string; keyset?: string; kind: string; name: string}>
   negative: Array<{ciphertext: string; env: Env; expectedError: string; name: string; note: string}>
+  positive: Array<{aesKeyHex: string; ciphertext: string; name: string}>
   writerCases: Array<{
     ephemeralPrivateKeyHex: string
     expectedError: string
@@ -64,6 +65,9 @@ const reference = (await import(pathToFileURL(path.join(specDir, 'reference.mjs'
   x25519: (k: Buffer, u: Buffer) => Buffer
 }
 const vectors = JSON.parse(generator.buildVectorsJson()) as Vectors
+const shortAscii = vectors.positive.find((p) => p.name === 'short-ascii')!
+/** Negative vectors that only flip a ciphertext or tag byte of `short-ascii`. */
+const TAMPERED_SHORT_ASCII = new Set(['tampered-ciphertext-byte', 'tampered-tag-byte'])
 
 /** The renderings of secret bytes: raw latin1, lossy UTF-8, hex (both cases, plain and spaced), base64, base64url, decimal lists. */
 function renderings(bytes: Uint8Array): string[] {
@@ -108,6 +112,19 @@ function walk(value: unknown, out: string[], seen: Set<unknown>): void {
 
   if (seen.has(value)) return
   seen.add(value)
+  // Map and Set hold their entries in internal slots, not own properties, and
+  // util.inspect prints typed arrays one number per line: walk them explicitly.
+  if (value instanceof Map) {
+    for (const [k, v] of value) {
+      walk(k, out, seen)
+      walk(v, out, seen)
+    }
+  }
+
+  if (value instanceof Set) {
+    for (const v of value) walk(v, out, seen)
+  }
+
   for (const key of Reflect.ownKeys(value)) {
     out.push(typeof key === 'symbol' ? String(key.description) : key)
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key)
@@ -197,15 +214,55 @@ function expectNoLeak(err: Qf1Error, secrets: string[], where: string): void {
   }
 }
 
-function qf1ErrorOf(fn: () => unknown): Qf1Error {
-  try {
-    fn()
-  } catch (error) {
-    expect(error, String(error)).to.be.instanceOf(Qf1Error)
-    return error as Qf1Error
+/**
+ * Run `fn` with console.* and process.stdout/stderr.write replaced by
+ * recorders, restore them, and return what was written. The library must
+ * never write anything itself: a `console.error(secret)` at a failure site
+ * would bypass every check on the error object.
+ */
+function captureOutput(fn: () => void): string[] {
+  const written: string[] = []
+  const methods = ['log', 'error', 'warn', 'info', 'debug', 'trace', 'dir'] as const
+  const savedConsole = methods.map((m) => console[m])
+  const savedOut = process.stdout.write
+  const savedErr = process.stderr.write
+  const record = (...args: unknown[]) => {
+    written.push(args.map((a) => inspect(a, {depth: Number.POSITIVE_INFINITY, showHidden: true})).join(' '))
   }
 
-  expect.fail('expected a Qf1Error')
+  for (const m of methods) console[m] = record
+  process.stdout.write = ((chunk: unknown) => {
+    record(chunk)
+    return true
+  }) as typeof process.stdout.write
+  process.stderr.write = ((chunk: unknown) => {
+    record(chunk)
+    return true
+  }) as typeof process.stderr.write
+  try {
+    fn()
+  } finally {
+    for (const [i, m] of methods.entries()) console[m] = savedConsole[i]
+    process.stdout.write = savedOut
+    process.stderr.write = savedErr
+  }
+
+  return written
+}
+
+function qf1ErrorOf(fn: () => unknown): Qf1Error {
+  let caught: unknown
+  const written = captureOutput(() => {
+    try {
+      fn()
+    } catch (error) {
+      caught = error
+    }
+  })
+  expect(written, 'the qf1 library wrote to the console, stdout or stderr').to.deep.equal([])
+  if (caught === undefined) expect.fail('expected a Qf1Error')
+  expect(caught, String(caught)).to.be.instanceOf(Qf1Error)
+  return caught as Qf1Error
 }
 
 describe('qf1 errors never leak secrets (spec 9.2, qfg-mol-hle)', () => {
@@ -221,6 +278,14 @@ describe('qf1 errors never leak secrets (spec 9.2, qfg-mol-hle)', () => {
         const derived = derivedSecrets(n.ciphertext, n.env)
         // Where the reader derived keys (every decrypt_failed vector), S, PRK, OKM, K and N are checked too.
         if (n.expectedError === 'decrypt_failed') expect(derived, 'derived secrets').to.have.length(6)
+        // The two tampered short-ascii vectors keep its E and key, so the derived
+        // AES key must be the one the vector file states: proves derivedSecrets
+        // really derived what the reader derives.
+        if (TAMPERED_SHORT_ASCII.has(n.name)) {
+          expect(Buffer.from(derived[3]).toString('hex'), 'derived AES key').to.equal(shortAscii.aesKeyHex)
+          secrets.push(...renderings(Buffer.from(shortAscii.aesKeyHex, 'hex')))
+        }
+
         for (const bytes of derived) secrets.push(...renderings(bytes))
         expectNoLeak(err, secrets, n.name)
       })
