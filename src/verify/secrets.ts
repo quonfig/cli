@@ -291,16 +291,39 @@ export function validateSecretsManifest(manifest: unknown, issues: ValidationIss
   return registry
 }
 
+/** What the secrets checks got from `quonfig.json`. */
+export type SecretsManifestRead = {keysets: KeysetRegistry; problem?: undefined} | {keysets: null; problem: string}
+
 /**
- * When `quonfig.json` cannot be parsed, secret values cannot be checked
- * against `secrets.keysets`. Report that ONCE, on quonfig.json, and only when
- * `secrets/` documents exist, so workspaces without secrets see no change.
+ * Read `quonfig.json` text for the secrets keysets. When it is empty, not
+ * valid JSON or not a JSON object, the keysets are unknown (`keysets: null`)
+ * and `problem` says why; reportUncheckableSecrets reports it. Issues inside
+ * a valid `secrets` member are pushed by validateSecretsManifest.
  */
-export function reportUncheckableSecrets(secretDocCount: number, issues: ValidationIssue[]): void {
+export function readSecretsManifest(text: string, issues: ValidationIssue[]): SecretsManifestRead {
+  if (text.trim() === '') return {keysets: null, problem: 'is empty'}
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(text)
+  } catch {
+    return {keysets: null, problem: 'is not valid JSON'}
+  }
+
+  if (!isPlainObject(manifest)) return {keysets: null, problem: 'is not a JSON object'}
+  return {keysets: validateSecretsManifest(manifest, issues)}
+}
+
+/**
+ * When `quonfig.json` cannot be read as an object, secret values cannot be
+ * checked against `secrets.keysets`. Report that ONCE, on quonfig.json, and
+ * only when `secrets/` documents exist, so workspaces without secrets see no
+ * change.
+ */
+export function reportUncheckableSecrets(secretDocCount: number, problem: string, issues: ValidationIssue[]): void {
   if (secretDocCount === 0) return
   issues.push({
     file: 'quonfig.json',
-    message: `quonfig.json is not valid JSON, so secrets/ values cannot be checked against secrets.keysets (${secretDocCount} secrets/ document(s))`,
+    message: `quonfig.json ${problem}, so secrets/ values cannot be checked against secrets.keysets (${secretDocCount} secrets/ document(s))`,
     severity: 'error',
     suggestion: `Fix quonfig.json; its "secrets.keysets" lists the public keys every secrets/ value must use`,
   })

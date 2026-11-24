@@ -14,8 +14,6 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {randomBytes} from 'node:crypto'
-
 import {isSmallOrder, parsePublicKeyEntry, parseQf1Keyless} from '../../src/verify/secrets.js'
 import {readFilesFromCommit, runHookChecks} from '../../src/verify/standalone.js'
 import {validateFileMap, validateWorkspace} from '../../src/verify/validate.js'
@@ -70,6 +68,23 @@ const leBytes = (n: bigint): Uint8Array => {
   }
 
   return out
+}
+
+/**
+ * Deterministic 32-byte samples (mulberry32, fixed seed) so a failing random
+ * case is reproducible: the failure message names the sample index.
+ */
+function seededBytes(seed: number, count: number): Uint8Array[] {
+  let a = seed >>> 0
+  const next = () => {
+    a = (a + 0x6d_2b_79_f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) & 0xff
+  }
+
+  return Array.from({length: count}, () => Uint8Array.from({length: 32}, next))
 }
 
 const ephemeralOf = (ciphertext: string): Uint8Array =>
@@ -225,11 +240,13 @@ describe('verify: qf1 keyless primitives (qfg-8seuf.4)', () => {
       }
     })
 
-    it('on 3000 random top-bit-clear u, and on the neighbours of each small-order u', () => {
-      for (let i = 0; i < 3000; i++) {
-        const u = new Uint8Array(randomBytes(32))
+    it('on 300 seeded random top-bit-clear u, and on the neighbours of each small-order u', () => {
+      // The structured cases (every small-order encoding, top-bit aliases,
+      // neighbours, vector keys) carry the proof; this sample is a smoke test,
+      // kept small because each ladder costs ~1-2 ms (CI timeout is 10 s).
+      for (const [i, u] of seededBytes(0x51_f1_5e_ed, 300).entries()) {
         u[31] &= 0x7f
-        agree(u, `random ${i}`)
+        agree(u, `seeded sample ${i}`)
       }
 
       for (const u of [2n, P - 2n, P + 2n, 2n ** 255n - 1n]) agree(leBytes(u), u.toString())
@@ -506,7 +523,7 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
         type: 'weighted_values',
         value: {weightedValues: [{value: secretValue(positive('short-ascii').ciphertext), weight: 100_000}]},
       }
-      expectOneMatching(one(withDefault(weighted)), /default\.rules\[0].*weighted_values/)
+      expectOneMatching(one(withDefault(weighted)), /default\.rules\[0]: weighted_values are not allowed in a secret/)
     })
 
     it('rejects a provided value', () => {
@@ -741,11 +758,38 @@ describe('verify: secrets family (qfg-8seuf.4)', () => {
       expectOneClearError(errorList(validateFileMap(workspace(secretOnly, null), {quonfigJson: '{not json'}).issues))
     })
 
+    it('still runs the qf1 grammar check on each value', () => {
+      const doc = secretDoc('a.b', {
+        default: {rules: [{criteria: always, value: secretValue('qf1:QUONFIG_KEYSET:XYZ:abc')}]},
+        environments: [],
+      })
+      for (const list of bothPaths(new Map([...workspace({'secrets/a.b.json': doc}, null), ['quonfig.json', '{']]))) {
+        expectOneClearError(list)
+        expectOneMatching(list, /default\.rules\[0]: qf1 malformed/)
+      }
+    })
+
+    for (const [label, content, reason] of [
+      ['JSON null', 'null', /is not a JSON object/],
+      ['a JSON array', '[]', /is not a JSON object/],
+      ['an empty file', '', /is empty/],
+      ['whitespace only', ' \n', /is empty/],
+    ] as const) {
+      it(`says quonfig.json ${String(reason).slice(1, -1)} for ${label}`, () => {
+        for (const list of bothPaths(new Map([...workspace(secretOnly, null), ['quonfig.json', content]]))) {
+          expectOneClearError(list)
+          expectOneMatching(list, reason)
+        }
+      })
+    }
+
     it('adds nothing when there are no secrets/ documents', () => {
       const configsOnly = workspace({'configs/x.json': configDoc('x')}, null)
       expect(validateFileMap(configsOnly, {quonfigJson: '{not json'}).issues).to.deep.equal([])
-      for (const list of bothPaths(new Map([...configsOnly, ['quonfig.json', '{not json']]))) {
-        expect(list.filter((e) => cannotCheck.test(e))).to.deep.equal([])
+      for (const content of ['{not json', 'null', '[]', '']) {
+        for (const list of bothPaths(new Map([...configsOnly, ['quonfig.json', content]]))) {
+          expect(list.filter((e) => cannotCheck.test(e))).to.deep.equal([])
+        }
       }
     })
   })

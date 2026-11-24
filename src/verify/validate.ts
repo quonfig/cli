@@ -37,11 +37,11 @@ import {
   checkNoQf1OutsideSecrets,
   hasLegacyEncryptedRuleValue,
   isTemporarySecretsDuplicate,
-  type KeysetRegistry,
   type PooledKeyEntry,
+  readSecretsManifest,
   reportUncheckableSecrets,
+  type SecretsManifestRead,
   validateSecretDocument,
-  validateSecretsManifest,
 } from './secrets.js'
 import {
   DURATION_FORMAT_HINT,
@@ -507,9 +507,10 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
   const schemaKeys = new Set<string>()
   const schemaDocuments = new Map<string, Record<string, unknown>>()
   const declaredEnvIds = new Set<string>()
-  // null: quonfig.json is not valid JSON, so secret values cannot be checked
-  // against its keysets (reported once by reportUncheckableSecrets).
-  let secretKeysets: KeysetRegistry | null = new Map()
+  // keysets null: quonfig.json is empty, unreadable, not valid JSON or not an
+  // object, so secret values cannot be checked against its keysets (reported
+  // once by reportUncheckableSecrets, only when secrets/ documents exist).
+  let secretsManifest: SecretsManifestRead = {keysets: new Map()}
   let secretDocs = 0
 
   // Check for unexpected top-level entries
@@ -549,8 +550,10 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
     let quonfigRaw: string
     try {
       quonfigRaw = fs.readFileSync(quonfigPath, 'utf8')
+      secretsManifest = readSecretsManifest(quonfigRaw, issues)
     } catch (error: unknown) {
       quonfigRaw = ''
+      secretsManifest = {keysets: null, problem: 'could not be read'}
       issues.push({
         file: 'quonfig.json',
         message: `Cannot read quonfig.json: ${(error as Error).message}`,
@@ -582,8 +585,6 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
           suggestion: `Format: {"environments": ["production", "staging"]}`,
         })
       }
-
-      secretKeysets = quonfigParsed === null ? null : validateSecretsManifest(quonfigParsed, issues)
     }
   } else {
     issues.push({
@@ -744,7 +745,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
       // no qf1 value anywhere else.
       if (dir === 'secrets') {
         secretDocs++
-        validateSecretDocument(parsed, relPath, secretKeysets, issues)
+        validateSecretDocument(parsed, relPath, secretsManifest.keysets, issues)
       } else {
         checkNoQf1OutsideSecrets(parsed, relPath, issues)
       }
@@ -881,7 +882,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
   }
 
   detectReferenceCycles(cycleNodes, issues)
-  if (secretKeysets === null) reportUncheckableSecrets(secretDocs, issues)
+  if (secretsManifest.keysets === null) reportUncheckableSecrets(secretDocs, secretsManifest.problem, issues)
 
   // Check for duplicate keys across directories (case-insensitive — see
   // detectDuplicateKeys).
@@ -969,23 +970,13 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
   // tree, every secrets/ value is re-checked against the keysets of the same
   // commit, so a quonfig.json-only change that drops a key still in use is
   // rejected (spec 11.5, decision 21).
-  // null: quonfig.json is not valid JSON, so secret values cannot be checked
-  // against its keysets; reported once below, and only when secrets/
-  // documents exist (reportUncheckableSecrets).
-  let secretKeysets: KeysetRegistry | null = new Map()
+  // keysets null: quonfig.json is empty, not valid JSON or not an object, so
+  // secret values cannot be checked against its keysets; reported once below,
+  // and only when secrets/ documents exist (reportUncheckableSecrets).
+  let secretsManifest: SecretsManifestRead = {keysets: new Map()}
   let secretDocs = 0
   const manifestText = quonfigContent ?? options.quonfigJson
-  if (manifestText !== undefined) {
-    let manifest: unknown
-    let parsedOk = true
-    try {
-      manifest = JSON.parse(manifestText)
-    } catch {
-      parsedOk = false
-    }
-
-    secretKeysets = parsedOk ? validateSecretsManifest(manifest, issues) : null
-  }
+  if (manifestText !== undefined) secretsManifest = readSecretsManifest(manifestText, issues)
 
   for (const [relPath, content] of files) {
     const parts = relPath.split('/')
@@ -1119,7 +1110,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
     // qf1 value anywhere else.
     if (dir === 'secrets') {
       secretDocs++
-      validateSecretDocument(parsed, relPath, secretKeysets, issues)
+      validateSecretDocument(parsed, relPath, secretsManifest.keysets, issues)
     } else {
       checkNoQf1OutsideSecrets(parsed, relPath, issues)
     }
@@ -1185,7 +1176,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
   }
 
   detectReferenceCycles(parsedConfigs, issues)
-  if (secretKeysets === null) reportUncheckableSecrets(secretDocs, issues)
+  if (secretsManifest.keysets === null) reportUncheckableSecrets(secretDocs, secretsManifest.problem, issues)
 
   // Duplicate keys (case-insensitive — see detectDuplicateKeys).
   detectDuplicateKeys(allConfigs, 'key', issues, isTemporarySecretsDuplicate)
