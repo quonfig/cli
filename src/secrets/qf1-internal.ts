@@ -43,8 +43,14 @@ export {FINGERPRINT_RE, KEYSET_NAME_RE, PUBLIC_KEY_PREFIX} from '../verify/secre
 
 // ── Constants (spec 5.1, 6.1) ────────────────────────────────────────────
 
-/** HKDF info: the 22 ASCII bytes `quonfig.com/qf1/X25519`. */
-export const HKDF_INFO: Uint8Array = new Uint8Array(Buffer.from('quonfig.com/qf1/X25519', 'ascii'))
+/** HKDF info: the 22 ASCII bytes `quonfig.com/qf1/X25519`. Private: never hand out the live buffer. */
+const HKDF_INFO: Uint8Array = new Uint8Array(Buffer.from('quonfig.com/qf1/X25519', 'ascii'))
+
+/** A fresh copy of the HKDF info bytes (for tests); mutating it cannot affect encryption. */
+export function hkdfInfo(): Uint8Array {
+  return Uint8Array.from(HKDF_INFO)
+}
+
 /** HKDF output length: 32-byte AES-256 key || 12-byte GCM nonce. */
 export const OKM_LENGTH = 44
 export const TAG_LENGTH = 16
@@ -368,10 +374,18 @@ export type SealInput = {
 
 /** Spec 2 keyset-name check, as the writer's first step (spec 7 step 1). */
 export function checkWriterKeysetName(keyset: unknown): asserts keyset is string {
-  if (typeof keyset !== 'string' || !KEYSET_NAME_RE.test(keyset)) {
-    fail(
+  if (typeof keyset !== 'string') {
+    // Never String() an arbitrary value into the message: it may be anything.
+    throw new Qf1Error(
       'invalid_keyset_name',
-      `keyset name ${quoteUntrustedName(String(keyset))} does not match ${KEYSET_NAME_RE.source}`,
+      `keyset name is not a string (got ${keyset === null ? 'null' : typeof keyset})`,
+    )
+  }
+
+  if (!KEYSET_NAME_RE.test(keyset)) {
+    throw new Qf1Error(
+      'invalid_keyset_name',
+      `keyset name ${quoteUntrustedName(keyset)} does not match ${KEYSET_NAME_RE.source}`,
     )
   }
 }
@@ -452,7 +466,7 @@ export function decodePublicKeyEntryForWriter(entry: unknown): Uint8Array {
 export type EnvLookup = Readonly<Record<string, string | undefined>>
 
 /**
- * Decrypt a qf1 value with the private keys in `env` (default: process.env).
+ * Decrypt a qf1 value with the private keys in `env` (default: this program's environment).
  * Reads ONLY the variable named by the value's keyset, and only after that name
  * passed spec 2; looks the key up by (keyset, fingerprint), never by trying
  * keys. Throws Qf1Error.

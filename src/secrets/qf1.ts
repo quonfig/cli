@@ -15,6 +15,7 @@ import {randomBytes} from 'node:crypto'
 
 import {
   type Keypair,
+  Qf1Error,
   checkWriterKeysetName,
   decodePublicKeyEntryForWriter,
   mintKeypairWith,
@@ -25,19 +26,15 @@ import {
 export {
   type EnvLookup,
   FINGERPRINT_RE,
-  HKDF_INFO,
   type HeldKey,
   KEYSET_NAME_RE,
   type Keypair,
-  MIN_PAYLOAD,
-  OKM_LENGTH,
   PRIVATE_KEY_PREFIX,
   PUBLIC_KEY_PREFIX,
   Qf1Error,
   type Qf1ErrorCode,
   type Qf1ErrorFields,
   type Qf1Parsed,
-  TAG_LENGTH,
   decrypt,
   fingerprint,
   formatPrivateKeyEntry,
@@ -68,6 +65,11 @@ export type EncryptInput = {
  * Throws Qf1Error: invalid_keyset_name, invalid_public_key, invalid_plaintext.
  */
 export function encrypt(input: EncryptInput): string {
+  if (typeof input !== 'object' || input === null) {
+    // spec 7 step 1 starts with the keyset name, and there is none. The argument is never echoed.
+    throw new Qf1Error('invalid_keyset_name', 'encrypt needs {keyset, plaintext, recipient}; no keyset name was given')
+  }
+
   const {keyset, plaintext, recipient} = input
   checkWriterKeysetName(keyset) // spec 7 step 1 starts with the name, before the recipient is read
   const publicKey = decodePublicKeyEntryForWriter(recipient)

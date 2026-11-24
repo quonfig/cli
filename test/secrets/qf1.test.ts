@@ -9,6 +9,7 @@ import {expect} from 'chai'
 import {createHash, randomBytes} from 'node:crypto'
 
 import {
+  PRIVATE_KEY_PREFIX,
   Qf1Error,
   decrypt,
   encrypt,
@@ -106,6 +107,52 @@ describe('qf1 library (qfg-mol-hle)', () => {
         expect(encryptErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: 'x', recipient}), String(recipient)).to.equal(
           'invalid_public_key',
         )
+      }
+    })
+
+    it('refuses a private key entry as the recipient even when its bytes would be a valid public key', () => {
+      const privateKey = Buffer.alloc(32, 0x01) // top bit clear and canonical: only the prefix check can refuse it
+      expect(privateKey[31] & 0x80).to.equal(0)
+      expect(
+        sealWithEphemeralKey({keyset: 'QUONFIG_KEYSET', plaintext: 'x', publicKey: privateKey}, label('e')),
+      ).to.match(/^qf1:/)
+      const recipient = formatPrivateKeyEntry(privateKey)
+      const err = qf1ErrorOf(() => encrypt({keyset: 'QUONFIG_KEYSET', plaintext: 'x', recipient}))
+      expect(err.code).to.equal('invalid_public_key')
+      expect(err.message).not.to.include(recipient.slice(PRIVATE_KEY_PREFIX.length, PRIVATE_KEY_PREFIX.length + 8))
+    })
+
+    it('refuses a recipient entry whose base64url is not canonical (spec 3.4)', () => {
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+      const last = alphabet.indexOf(pubEntryA.at(-1)!)
+      const bumped = pubEntryA.slice(0, -1) + alphabet[last % 2 === 0 ? last + 1 : last + 2]
+      expect(Buffer.from(bumped.slice(8), 'base64url').equals(pubA)).to.be.true // a lenient decoder accepts it
+      expect(encryptErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: 'x', recipient: bumped})).to.equal(
+        'invalid_public_key',
+      )
+    })
+
+    it('reports a bad keyset name before a malformed recipient (decision 47 order)', () => {
+      for (const recipient of ['garbage', '', entryA, `${pubEntryA}=`]) {
+        expect(encryptErrorCode({keyset: 'HOME', plaintext: 'x', recipient}), recipient).to.equal('invalid_keyset_name')
+      }
+    })
+
+    it('refuses a missing or non-object input with a Qf1Error that does not echo the argument', () => {
+      const sentinel = 'SENTINEL-ARGUMENT-0001'
+      const sneaky = {toString: () => sentinel}
+      for (const input of [
+        undefined,
+        null,
+        42,
+        sentinel,
+        [],
+        sneaky,
+        {keyset: sneaky, plaintext: 'x', recipient: pubEntryA},
+      ]) {
+        const err = qf1ErrorOf(() => encrypt(input as unknown as Parameters<typeof encrypt>[0]))
+        expect(err.code, String(typeof input)).to.equal('invalid_keyset_name')
+        expect(err.message).not.to.include('SENTINEL')
       }
     })
 
@@ -345,6 +392,18 @@ describe('qf1 library (qfg-mol-hle)', () => {
         expect(err.code).to.equal('invalid_keyset_name')
         expect(err.message).to.include(escaped)
         expect(/[\u007F-\u009F\u2028-\u202E\u2066-\u2069]/.test(err.message), err.message).to.be.false
+      }
+    })
+
+    it('invalid_keyset_name escapes every non-printable-ASCII code unit (look-alikes and invisibles)', () => {
+      const name = 'QUONFIG_KEYSET\u00A0\u00AD\u200B\u2060\uFEFF\uFE0F\u{E0041}\u00E4'
+      const reader = qf1ErrorOf(() => decrypt(value.replace('QUONFIG_KEYSET_PROD', name), {}))
+      const writer = qf1ErrorOf(() => encrypt({keyset: name, plaintext: 'x', recipient: pubEntryA}))
+      for (const err of [reader, writer]) {
+        expect(err.message).to.include(
+          '"QUONFIG_KEYSET\\u00a0\\u00ad\\u200b\\u2060\\ufeff\\ufe0f\\udb40\\udc41\\u00e4"',
+        )
+        expect(/^[\u0020-\u007E]*$/.test(err.message), err.message).to.be.true
       }
     })
 

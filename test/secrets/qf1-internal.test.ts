@@ -7,7 +7,7 @@ import {expect} from 'chai'
 import {createHash} from 'node:crypto'
 
 import {Qf1Error, formatPrivateKeyEntry, formatPublicKeyEntry, publicKeyFromPrivate} from '../../src/secrets/qf1.js'
-import {parseKeysetEnvWith, sealWithEphemeralKey, x25519} from '../../src/secrets/qf1-internal.js'
+import {hkdfInfo, parseKeysetEnvWith, sealWithEphemeralKey, x25519} from '../../src/secrets/qf1-internal.js'
 
 const label = (s: string) => createHash('sha256').update(`qfg-mol-hle qf1-internal.test.ts key: ${s}`).digest()
 const priv = label('A')
@@ -35,6 +35,19 @@ describe('qf1 internal module (qfg-mol-hle)', () => {
     it('refuses an ephemeral key that is not 32 bytes', () => {
       const input = {keyset: 'QUONFIG_KEYSET', plaintext: 'x', publicKey: pub}
       expect(() => sealWithEphemeralKey(input, label('e').subarray(0, 31))).to.throw(/32 bytes/)
+    })
+  })
+
+  describe('HKDF info is not a shared mutable buffer', () => {
+    it('hkdfInfo returns a fresh copy; mutating it cannot change encryption output', () => {
+      const input = {keyset: 'QUONFIG_KEYSET', plaintext: 'x', publicKey: pub}
+      const before = sealWithEphemeralKey(input, label('e'))
+      const info = hkdfInfo()
+      expect(Buffer.from(info).toString('ascii')).to.equal('quonfig.com/qf1/X25519')
+      info.fill(0)
+      expect(Buffer.from(hkdfInfo()).toString('ascii')).to.equal('quonfig.com/qf1/X25519')
+      expect(hkdfInfo()).not.to.equal(hkdfInfo())
+      expect(sealWithEphemeralKey(input, label('e'))).to.equal(before)
     })
   })
 

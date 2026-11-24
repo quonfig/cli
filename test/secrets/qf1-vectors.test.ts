@@ -16,17 +16,17 @@ import {fileURLToPath, pathToFileURL} from 'node:url'
 // The deterministic seam and the raw primitives live in the internal module;
 // only tests (and src/secrets/qf1.ts) import it.
 import {
+  OKM_LENGTH,
   buildAad,
   deriveKeyAndNonce,
   hkdf,
+  hkdfInfo,
   hkdfExpand,
   hkdfExtract,
   sealWithEphemeralKey,
   x25519,
 } from '../../src/secrets/qf1-internal.js'
 import {
-  HKDF_INFO,
-  OKM_LENGTH,
   PRIVATE_KEY_PREFIX,
   PUBLIC_KEY_PREFIX,
   Qf1Error,
@@ -159,8 +159,8 @@ describe('qf1 vectors (spec section 14, qfg-mol-hle)', () => {
   })
 
   it('constants match spec 5.1 and 6.1', () => {
-    expect(Buffer.from(HKDF_INFO).toString('ascii')).to.equal(vectors.constants.hkdfInfoAscii)
-    expect(hex(HKDF_INFO)).to.equal(vectors.constants.hkdfInfoHex)
+    expect(Buffer.from(hkdfInfo()).toString('ascii')).to.equal(vectors.constants.hkdfInfoAscii)
+    expect(hex(hkdfInfo())).to.equal(vectors.constants.hkdfInfoHex)
     expect(OKM_LENGTH).to.equal(vectors.constants.okmLength)
     expect(PRIVATE_KEY_PREFIX).to.equal(vectors.constants.privateKeyPrefix)
     expect(PUBLIC_KEY_PREFIX).to.equal(vectors.constants.publicKeyPrefix)
@@ -226,7 +226,7 @@ describe('qf1 vectors (spec section 14, qfg-mol-hle)', () => {
         expect(hex(S), 'S').to.equal(p.sharedSecretHex)
         const d = deriveKeyAndNonce(S, E, recipient)
         expect(hex(d.hkdfSalt), 'salt').to.equal(p.hkdfSaltHex)
-        expect(hex(HKDF_INFO), 'info').to.equal(p.hkdfInfoHex)
+        expect(hex(hkdfInfo()), 'info').to.equal(p.hkdfInfoHex)
         expect(hex(d.prk), 'PRK').to.equal(p.prkHex)
         expect(hex(d.okm), 'OKM').to.equal(p.okmHex)
         expect(hex(d.aesKey), 'K').to.equal(p.aesKeyHex)
@@ -371,7 +371,7 @@ describe('qf1 vectors (spec section 14, qfg-mol-hle)', () => {
     it('hkdf agrees with crypto.hkdfSync on the qf1 parameters of every positive vector', () => {
       count('rfcExtra')
       for (const p of vectors.positive) {
-        const okm = hkdfSync('sha256', fromHex(p.sharedSecretHex), fromHex(p.hkdfSaltHex), HKDF_INFO, OKM_LENGTH)
+        const okm = hkdfSync('sha256', fromHex(p.sharedSecretHex), fromHex(p.hkdfSaltHex), hkdfInfo(), OKM_LENGTH)
         expect(hex(new Uint8Array(okm)), p.name).to.equal(p.okmHex)
       }
     })
