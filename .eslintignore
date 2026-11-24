@@ -16,3 +16,6 @@ test/migrate/fixtures/**/raw/
 test/migrate/fixtures/**/expected/
 # Vendored from github.com/quonfig/skills by scripts/sync-agent-skill.mjs; --check compares bytes.
 src/agent/skill-bundle.generated.ts
+# Vendored spec generator and reference implementation (bead qfg-mol-hle):
+# pinned by the vectors hash test; a local lint --fix must never touch them.
+test/secrets/spec/

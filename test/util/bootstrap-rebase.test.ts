@@ -158,7 +158,13 @@ async function failureOf(fn: () => Promise<unknown>): Promise<string> {
   throw new Error('expected the call to fail, but it succeeded')
 }
 
-describe('bootstrap: rebase onto origin and push (no force)', () => {
+describe('bootstrap: rebase onto origin and push (no force)', function () {
+  // Every test here builds bare repos and runs a dozen git processes. They take
+  // 2.4-5.2 s on windows-latest and once hit the 10 s global limit there (the
+  // hand-resolved merge conflict case). 30 s is about 6x the slowest normal run,
+  // so it absorbs a slow runner but still fails a real hang. Suite-level on
+  // purpose: .mocharc.json's 10 s stays the default everywhere else.
+  this.timeout(30_000)
   let root: string
 
   beforeEach(() => {
