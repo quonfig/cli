@@ -1,0 +1,434 @@
+{
+  "NOTE": "Reduced copy of project/plans/secrets-qf1/vectors.json (qf1 spec, bead qfg-8seuf.2) for the keyless qfg-verify checks (bead qfg-8seuf.4). TEST KEYS ONLY. Public data only: no private keys or private-key entries, no intermediates. The spec case public-given-private-entry is built at runtime in secrets.test.ts.",
+  "keysets": [
+    {
+      "name": "QUONFIG_KEYSET_TEST",
+      "publicKeys": ["qf1-pub-bwoeNo6zN4l1BQ8BoZl584ubjJZ4nEtJfCQn6r_Flgk"],
+      "fingerprints": ["b3f48931"]
+    },
+    {
+      "name": "QUONFIG_KEYSET",
+      "publicKeys": ["qf1-pub-KOHi3-DVoS1EBQRRMx1U4xfLVYc5PV-w-Ef61q7ZKyc"],
+      "fingerprints": ["6a65019a"]
+    },
+    {
+      "name": "QUONFIG_KEYSET_TEST_PROD",
+      "publicKeys": [
+        "qf1-pub-rkDDmoo6EO01u3sOAko8pOL0WfHv7PdplmDYJ2GXnw8",
+        "qf1-pub-7nzf9QFmubLdr9zt_AqSYwfVrx0sBj1SnErauSXqqFI"
+      ],
+      "fingerprints": ["9a37dd78", "c50145fc"]
+    }
+  ],
+  "positive": [
+    {
+      "name": "short-ascii",
+      "keyset": "QUONFIG_KEYSET_TEST",
+      "fingerprint": "b3f48931",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw"
+    },
+    {
+      "name": "empty-string",
+      "keyset": "QUONFIG_KEYSET_TEST",
+      "fingerprint": "b3f48931",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:YhYw7rw5F4BbKi5Hhvq8su8BWtU09Ubn5kms8AqTACoGbHgUU05I1XV2kX-hVQyC"
+    },
+    {
+      "name": "multibyte-utf8",
+      "keyset": "QUONFIG_KEYSET_TEST",
+      "fingerprint": "b3f48931",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:3ySqGY3PBaWMwp4qw2Y7UPeMYbV73kI76ADEqYrLiUk_NxOEthO7jEMiHx_msf4AZIjiIRr0ExDasB8G6BaeWNoH6kM_F76c-A"
+    },
+    {
+      "name": "leading-bom-kept",
+      "keyset": "QUONFIG_KEYSET_TEST",
+      "fingerprint": "b3f48931",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:pAk3t70tnlJV7LkCOKuZSEWadmmx52Z9FWFQ-F7nShweUnKRzlaVnKWiDQBPYAdGLSrN1g3j9ulIMVA3"
+    },
+    {
+      "name": "json-special-chars",
+      "keyset": "QUONFIG_KEYSET_TEST",
+      "fingerprint": "b3f48931",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:pgQyRp9a4B6AfPS8G3Eyqtg73lg6yPf4MxRpWy7oPUazHTmamQCAuEGqz8p-nO6eqScFCJ2dOUHbwwCkKXczXdn0Rw"
+    },
+    {
+      "name": "long-value",
+      "keyset": "QUONFIG_KEYSET_TEST",
+      "fingerprint": "b3f48931",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:HC1UOPTRiYlyCxMt7G8XguHy86ucKLZuqZwkA2JFyTeRBepRJMwUvgxp75eYK8tp_mG8weCLgFt6mr4q1miWFFl7S1vzWLm236RNbXpjEp2s3v3wVlkSifEgKI3AvpyUT8DCXaSJD3mu1_6g7u4amam9sxEUXuwFhsUEBk5xdf717YInXmIoQ0HEkf5Z6EVTiC-Of-vJNHV-VnprJ2eADbx-T-40HTMD8c84tyBmfRNUChFcrUKiuxYYdI45PnchIy4Qxe_wkNtLVPlCnkdseXyNOFQd5vVpfz0ZZuEPE0ALDMSDVCQfBV1m-UA46nni5hGJP2nxLdIFupioO4vJesT0Ec3TgzTLTxXj0CPTTcXP_xt38Y39xAowX-D09IFI8BSAxhDXBwBfIZZ-8AZnEhpgD1yXBB6j3OABMat2t345-2QOrRCAWKa_GXuduUKZyHe-L534t1TMipVadd018E8-0-vhOD6-huaJxyibiJhYne05eFW7C2xraaWmSjnb2D526M5R2ktEMVUMn9ywJSwBt3xLwEDjz0fmT1q3oGWCiFirkVOliLwfBgVCWStSpiGGioCoZefejBFolWEyrPs5b3zHmlimqp1XdCZ1Yca5wfBIxyRRXn2530-gjd1I2dbNlxXWlm_imM_jpUhWPz2sFoWRXd4fcXFMR1mKytYWNaHfvG7di07841mlrspSEDD4dUoxTvPqJgipaG6mis2g5ZnGv2bwTJUVw8lFkq4BtxuFnqASDQoGG49iVFgMFVEXUYz29kc4exoRiuaLUfWJjBfycqr7-gImjqX6fkTYe40l7LQDZd5f5gwf5humbpd3X171dEw-5ZUAIzHBwlIgfnxJapgApolqyUrePy-M-061m-sHuRUkHLnskxKCEtR5F0y4WOsnNtfHEuKAITYtJNUjRW83GUzLKBuhknAPU-q243QG--yRwSGo_uqJji5jVTXXuV7TyvnlVL6t9-6TdHWlQUJq3PBnUTl59jGy5OrWS2JrC6olZy1rV0t7pETvBRNVYU1NmAn_ppV-tynzSLdTGR0EkCvWth1gUF_GzYVDA4qScpyjLWqmLlf4u2JDMp9iD7AYDo01bo9M-nItQFwNv55lMhBllPkes6Rn8XMSZXZ8A1iFmBduf5mG-W-ZBz_XKmBERcS8r4Qu_8E7DUfHxJrlYpQetEb-9cVe394M-fEVVZrvBQIJdrWugqiuI4Rj6OPPszm1ipsNh-Lq5RDJpqsTqEWk58o_0FryN2hwSN4sl7PFn0DCH2pEibxerQhGaorfuIZps1TMxny7cKSdvhgGPgfzKlBrw4-lI6BvmWy8e-kXi6DHDSDKn14-_fvdpDFR2bgButVIYfhtp19czB2S1Krxwijf5SWmUe_98iMS67s6VtFlWJx-t324P1HtkwBI1WeCfNkRLR0Cho7Ys35bPLAc1LBG0rHLdjh3rBuZ1ixkDESbo-91HNrf1xP08WAQuMriydI9WaHkEcH6N-fthED9yV-PdQIko28du11lp9wvMeRdU2uUwxgxoXKNs2MbDsfJvjBKc_eNdfn00q4XOsA8mpKY9GHz6YG9ZwVox0cAcbhkEJF1Fpf0ekyFsncOZwKPmXRtFLW3RE0-g-96dzH05fma6qu98u3VxuOKJjFKGsCbYNwzNMbIyn8XGGl889QPjVTAAQQ9oeUtWYvV9wPzYQXrGOxeEGAiwcbNJkBnwgiJ5I8ad5CFDCjcci_LizJWorqZDqQHrCBz2SabvVJHbEqKPlANm18HvVucO0NJAEfS3O-WupLFwECW2_JG1gHIbvDu3CJidhvCcuGd2Gi7O8OMahFEXRFGgomwUXrv27bcxNtwO-9-j4i5KolRtVD_qkSPisDUHbJdR1-qBxcNiRdZ6TDVPtt3g7O15bHMOi-BdkCNPjasJEMtrSFSmSrvmJoAO7C1Qj8c1zW-oC3eDz2oFLCatb1_cDS5pQtwKVI8O1DOURI30sYJ_Xg-JWNYROyJi-c_7Zk0nH0iJgXDb7jQgkwmdVYJPdfWd0twTIOrk6XELwY9TrIzop3jc5fIIxJ-oZbNZNf1wvDNt6tuaxeagB88HDxik-3wP9j7LoPNhAn2kgy90uPaa-cawi_20KqcAnLM08lieQs"
+    },
+    {
+      "name": "bare-default-keyset",
+      "keyset": "QUONFIG_KEYSET",
+      "fingerprint": "6a65019a",
+      "ciphertext": "qf1:QUONFIG_KEYSET:6a65019a:8zGE7N5uVZodIUGo7cH4jr_uLjEzJ44JkazEh1zJdRB9RtU39dg4hLsd3rfud5GrsryE5dcwND9zZOaHXRenKDjlMFYR-9NAEud_WA"
+    },
+    {
+      "name": "two-key-keyset-write-key",
+      "keyset": "QUONFIG_KEYSET_TEST_PROD",
+      "fingerprint": "9a37dd78",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST_PROD:9a37dd78:4omlb-yZJdo1UPuCPYuiC0DXjew_IKvfdr8h-tNl7iJ1HC_SsCPAy9lbpkVekyYE3P_ZYh-BZo2IOsKKW94jqSEF5sGec2WgTJ37_uKf6cRT"
+    },
+    {
+      "name": "two-key-keyset-older-key",
+      "keyset": "QUONFIG_KEYSET_TEST_PROD",
+      "fingerprint": "c50145fc",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST_PROD:c50145fc:3x7fsFu9z_2P1zNhIJL4dBN9cUvEO_qgcAIOzNQkQl0NInlvtjZdtw5iQ_lJ5_wDdhEY2oWIO0u7X_W5iyBotKats3wOEWM"
+    }
+  ],
+  "decryptOnly": [
+    {
+      "name": "ephemeral-non-canonical-u-accepted",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:9v_______________________________________3_IKknQEe3djQ8owmZ3dFttJoGao30"
+    }
+  ],
+  "negative": [
+    {
+      "name": "version-qf2",
+      "ciphertext": "qf2:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "unsupported_version"
+    },
+    {
+      "name": "version-uppercase",
+      "ciphertext": "QF1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "legacy-ct-iv-tag",
+      "ciphertext": "deadbeef--00112233445566778899aabb--00112233445566778899aabbccddeeff",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "too-few-fields",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "extra-field",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw:extra",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "trailing-colon",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw:",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "trailing-double-colon",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw::",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "leading-whitespace",
+      "ciphertext": " qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "trailing-newline",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw\n",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "fingerprint-uppercase",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:B3F48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "fingerprint-7-chars",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f4893:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "fingerprint-trailing-newline",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931\n:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "blob-padded",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw=",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "blob-standard-alphabet",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:+LJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "blob-non-canonical",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nx",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "blob-empty",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "blob-truncated-47-bytes",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "blob-length-mod-4-is-1",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nwAA",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "ephemeral-top-bit-set",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:-NC86gJEOzplmarZqx4A68HVZSOCkiTEmXHL5NTKzJnT9HvSQug5qHxasiNI2GxdPCcxPgY",
+      "expectedError": "malformed"
+    },
+    {
+      "name": "keyset-name-QUONFIG-KEYSETX",
+      "ciphertext": "qf1:QUONFIG_KEYSETX:b3f48931:ifY9bnwRmZ2NN6aYOyRB1vKREtMgHITlNTDmU_7UaFCC9u2BhyUxeO5Lmu1nLiKeVDDfOFM",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-QUONFIG-KEYSET",
+      "ciphertext": "qf1:QUONFIG_KEYSET_:b3f48931:Cbove6ChgjIxdEJeixUMPOCMiDxwgIMpvTmFeYxUaQadqD6r3vA1UtGTcZwiAv-u1O36qWw",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-QUONFIG-KEYSET-TEST",
+      "ciphertext": "qf1:QUONFIG_KEYSET__TEST:b3f48931:2A9lC87uoffhxKm4XXQF8xLAzJ2mU7sLxBeZe5qeVxt8ZY6llNNx5D1vI9_lqOi7DzqlfXw",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-QUONFIG-KEYSET-test",
+      "ciphertext": "qf1:QUONFIG_KEYSET_test:b3f48931:LHRlO0pU-XVGoiQ3qvJAZzmfbY6XnnX4uJyrPehTLzxCKfx2V81lCW2lNpf69gpr-BJHzbU",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-quonfig-keyset-test",
+      "ciphertext": "qf1:quonfig_keyset_test:b3f48931:hWEQj8KtnPvLIN1nZXPhs7H4E8pfvver9bLbMv38aAJaHZlfDFmQvnS30SKVE3URF78KyBM",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-HOME",
+      "ciphertext": "qf1:HOME:b3f48931:MPBl7oeyrtzxrUiB6WdjvWvp-haGMgqflgNAz5sjvUT8umaj3sO0o1tqcKqfEW6gvD_RZaw",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-QUONFIG-KEYSET-TEST-LF",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST\n:b3f48931:kybkTd-HeuWPCe57Zyv3RcMxeoJs-9--G0ZH7rQhyWKRVnDQvUnosOxfrMl_FKbHWIesvZE",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-HOME-LF-QUONFIG-KEYSET",
+      "ciphertext": "qf1:HOME\nQUONFIG_KEYSET:b3f48931:KyXC7paZWug0556EHOUrX9iahoqmQE6_lrjVPcIr7miuaXRwYc_evbjonRLyWoDEGqsIhfE",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-QUONFIG-KEYSET-TEST-LF-HOME",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST\nHOME:b3f48931:TIU_s1S59AqKEqyIjtSmOxe0oIK7yjNpMiYoownaTzVmWP04yvzM0gq6u0W9wY9QPixpbM8",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-name-empty",
+      "ciphertext": "qf1::b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "invalid_keyset_name"
+    },
+    {
+      "name": "keyset-missing",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_missing"
+    },
+    {
+      "name": "keyset-empty-string",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_missing"
+    },
+    {
+      "name": "keyset-only-separators",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_missing"
+    },
+    {
+      "name": "keyset-bad-entry",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "keyset-holds-public-entry",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "keyset-entry-trailing-vertical-tab",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "keyset-entry-trailing-form-feed",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "keyset-entry-trailing-nbsp",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "keyset-entry-trailing-u2028",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "keyset-fingerprint-collision",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST_COLLISION:53c7a489:4wPQGIx958EcVT_HG3q9v3LERSfKZbP1yGQLkaraayC_iNNacC2rdIqaGpAvoJShASXZVIUhrTZD",
+      "expectedError": "keyset_invalid"
+    },
+    {
+      "name": "fingerprint-not-held",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:00000000:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "key_not_held"
+    },
+    {
+      "name": "fingerprint-from-other-keyset",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:6a65019a:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "key_not_held"
+    },
+    {
+      "name": "trial-decryption-unknown-fingerprint",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:00000000:0FR_2YOvkag4npsL6sSCXAFm0EI4zeD2cZmHSBRczSf6VLRA52Mge0l8PSr-heqzfNDgBro",
+      "expectedError": "key_not_held"
+    },
+    {
+      "name": "cross-keyset-lookup",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:6a65019a:n-AfWiJKYLr16CWkii2vXiWlHwG_b4AD9Z523_HZuhPeMkYzvSSUOkcgGztVDrAKXlHHdQY",
+      "expectedError": "key_not_held"
+    },
+    {
+      "name": "ephemeral-low-order-u-0-order-2",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACn3gf8xJxUIK8CFdT4feDJADfMG9k",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "ephemeral-low-order-u-1-order-4",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABbAhcErtfPhcJ7sPOJeOmuAk-QxqM",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "ephemeral-low-order-u-p-1-order-4",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:7P_______________________________________38ExUyfnYGcMI0F0T6YfspXvAgjR70",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "ephemeral-low-order-order-8-a",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:4Ot6fDtBuK4WVuP68Z_EatoJjeucMrH9hmIFFl9JuAAsJnAQxW-8Dby7Z_XkE1Xe4bEglVo",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "ephemeral-low-order-order-8-b",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:X5yVvKNQjCSx0LFVnIPvWwREXMRYHI6G2CJO3dCfEVehBNA9LB6JzMm6eyhj_VW_E2_IvgE",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "ephemeral-low-order-u-p-non-canonical-0",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:7f_______________________________________38yl4iQ80VWlEgWr_jZL3UesBMs8rs",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "ephemeral-low-order-u-p-1-non-canonical-1",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:7v_______________________________________3_2cRcYItQjni4FFgMczYk5OQUQgBc",
+      "expectedError": "invalid_ephemeral_key"
+    },
+    {
+      "name": "tampered-ciphertext-byte",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvyHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "tampered-tag-byte",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6n0",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "tampered-ephemeral-key",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:CbJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "tampered-header-keyset",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST_COPY:b3f48931:CLJG5KLq4QCVQrnkKCO7zaVaURFjqcMuezW6OQejFEvzHBh794Ws71yVj4eHPBQ9NM2M6nw",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "tampered-header-fingerprint",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST_PROD:9a37dd78:3x7fsFu9z_2P1zNhIJL4dBN9cUvEO_qgcAIOzNQkQl0NInlvtjZdtw5iQ_lJ5_wDdhEY2oWIO0u7X_W5iyBotKats3wOEWM",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "invalid-utf8-plaintext",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:KLPLLyINPIIfpoP1pupxIgegXEROCC4XxRLvC0jSCXpH4-k6zkO2eY3vVNh-jiMgcsWtKA",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "utf8-encoded-surrogate",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:m_w-XF6LLwrDSD5deiN_0HrkZp-MMnTiHACwTWhpdgSLC4dMC2sj7NJSTbQT-m3eHY2Kqpw",
+      "expectedError": "decrypt_failed"
+    },
+    {
+      "name": "utf8-overlong-nul",
+      "ciphertext": "qf1:QUONFIG_KEYSET_TEST:b3f48931:O-en3INLsQ3YTyzKLojaB2I-t8PZDFGCmk2WmsRE3g5s34xuS00t-EBiCMvAwze1z7m_0g",
+      "expectedError": "decrypt_failed"
+    }
+  ],
+  "publicKeyEntryCases": [
+    {
+      "name": "public-valid",
+      "input": "qf1-pub-bwoeNo6zN4l1BQ8BoZl584ubjJZ4nEtJfCQn6r_Flgk",
+      "expectedHex": "6f0a1e368eb3378975050f01a19979f38b9b8c96789c4b497c2427eabfc59609"
+    },
+    {
+      "name": "public-non-canonical-base64",
+      "input": "qf1-pub-bwoeNo6zN4l1BQ8BoZl584ubjJZ4nEtJfCQn6r_Flgl",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-non-canonical-u",
+      "input": "qf1-pub-9v_______________________________________38",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-u-0-order-2",
+      "input": "qf1-pub-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-u-1-order-4",
+      "input": "qf1-pub-AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-u-p-1-order-4",
+      "input": "qf1-pub-7P_______________________________________38",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-order-8-a",
+      "input": "qf1-pub-4Ot6fDtBuK4WVuP68Z_EatoJjeucMrH9hmIFFl9JuAA",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-order-8-b",
+      "input": "qf1-pub-X5yVvKNQjCSx0LFVnIPvWwREXMRYHI6G2CJO3dCfEVc",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-u-p-non-canonical-0",
+      "input": "qf1-pub-7f_______________________________________38",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-low-order-u-p-1-non-canonical-1",
+      "input": "qf1-pub-7v_______________________________________38",
+      "expectedError": "invalid_key_entry"
+    },
+    {
+      "name": "public-top-bit-set",
+      "input": "qf1-pub-bwoeNo6zN4l1BQ8BoZl584ubjJZ4nEtJfCQn6r_Flok",
+      "expectedError": "invalid_key_entry"
+    }
+  ]
+}
