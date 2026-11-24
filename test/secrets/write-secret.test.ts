@@ -283,6 +283,14 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
       expect(err.code).to.equal('invalid_input')
     })
 
+    it('a delete of quonfig.json (the workspace manifest is only ever modified)', async () => {
+      const err = await refusalOf(
+        write([{delete: true, path: 'quonfig.json'}], secretCommitMessage({key: 'db.password', verb: 'delete'})),
+      )
+      expect(err.code).to.equal('invalid_input')
+      expect(err.message).to.equal('quonfig.json cannot be deleted')
+    })
+
     it('no files', async () => {
       expect((await refusalOf(write([]))).code).to.equal('invalid_input')
     })

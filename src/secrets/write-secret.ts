@@ -118,6 +118,7 @@ function toDeltas(input: PushWorkspaceFilesInput): ServerFileDelta[] {
 
     const before = input.snapshot.readFile(filePath)
     if ('delete' in change) {
+      if (filePath === QUONFIG_JSON) invalid('quonfig.json cannot be deleted')
       if (before === undefined) invalid(`cannot delete ${filePath}: the workspace does not have it`)
       return {beforeJson: before, kind: 'delete', path: filePath}
     }
