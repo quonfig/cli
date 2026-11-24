@@ -8,3 +8,7 @@ README.md
 test/migrate/fixtures/**/raw/*.json
 # Vendored from github.com/quonfig/skills by scripts/sync-agent-skill.mjs; --check compares bytes.
 src/agent/skill-bundle.generated.ts
+# Vendored spec generator and reference implementation (bead qfg-mol-hle):
+# copied byte-for-byte from project/plans/secrets-qf1/ and pinned by the
+# vectors hash test, so a local format run must never touch them.
+test/secrets/spec/
