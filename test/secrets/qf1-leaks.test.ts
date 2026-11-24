@@ -4,16 +4,21 @@
  * over EVERY negative vector, key-entry case and writer case, and explicitly
  * on the non-UTF-8 decrypt path (bead qfg-mol-hle PR 1).
  *
- * The "surface" of an error is its message, String(), stack, JSON form and
- * every enumerable field. A secret leaks if any 8-character piece of it, in
- * any of its usual renderings, appears on that surface.
+ * The "surface" of an error is its message, String(), stack, JSON form,
+ * util.inspect with hidden properties, and an explicit walk of every own
+ * property (enumerable or not, string or symbol keyed) including the `cause`
+ * chain, with byte arrays rendered as bytes. A secret leaks if any 8-character
+ * piece of it, in any of its renderings (raw, latin1, hex in both cases,
+ * spaced hex, base64, base64url, decimal lists), appears on that surface.
+ * Secrets include the derived values spec 9.2 names: S, PRK, OKM, K and N.
  */
 import {expect} from 'chai'
 import {createHash} from 'node:crypto'
+import {inspect} from 'node:util'
 import * as path from 'node:path'
 import {fileURLToPath, pathToFileURL} from 'node:url'
 
-import {sealWithEphemeralKey} from '../../src/secrets/qf1-internal.js'
+import {deriveKeyAndNonce, sealWithEphemeralKey, x25519} from '../../src/secrets/qf1-internal.js'
 import {
   PRIVATE_KEY_PREFIX,
   PUBLIC_KEY_PREFIX,
@@ -25,13 +30,14 @@ import {
   parseKeysetEnv,
   parsePrivateKeyEntry,
   parsePublicKeyEntry,
+  parseQf1,
   publicKeyFromPrivate,
 } from '../../src/secrets/qf1.js'
 
 type Env = Record<string, string>
 type Vectors = {
   keyEntryCases: Array<{expectedError?: string; input: string; keyset?: string; kind: string; name: string}>
-  negative: Array<{ciphertext: string; env: Env; name: string; note: string}>
+  negative: Array<{ciphertext: string; env: Env; expectedError: string; name: string; note: string}>
   writerCases: Array<{
     ephemeralPrivateKeyHex: string
     expectedError: string
@@ -59,29 +65,99 @@ const reference = (await import(pathToFileURL(path.join(specDir, 'reference.mjs'
 }
 const vectors = JSON.parse(generator.buildVectorsJson()) as Vectors
 
-/** Every rendering of the error a user, a log or a JSON consumer could see. */
-function surfaceOf(err: Qf1Error): string {
-  return [
-    err.message,
-    String(err),
-    err.stack ?? '',
-    JSON.stringify(err),
-    JSON.stringify(Object.entries(err)),
-    ...Object.values(err).map(String),
-  ].join('\n')
-}
-
-/** The renderings of secret bytes: raw latin1, lossy UTF-8, hex (both cases), base64 and base64url. */
+/** The renderings of secret bytes: raw latin1, lossy UTF-8, hex (both cases, plain and spaced), base64, base64url, decimal lists. */
 function renderings(bytes: Uint8Array): string[] {
   const b = Buffer.from(bytes)
+  const decimal = [...b].map(String)
+  const hex = b.toString('hex')
   return [
     b.toString('latin1'),
     b.toString('utf8'),
-    b.toString('hex'),
-    b.toString('hex').toUpperCase(),
+    hex,
+    hex.toUpperCase(),
+    hex.replaceAll(/(..)(?!$)/g, '$1 '),
     b.toString('base64'),
     b.toString('base64url'),
+    decimal.join(','),
+    decimal.join(', '),
   ]
+}
+
+/** Walk every own property (string and symbol keys, enumerable or not) and the cause chain. */
+function walk(value: unknown, out: string[], seen: Set<unknown>): void {
+  if (value === null || value === undefined) return
+  if (typeof value === 'string') {
+    out.push(value)
+    return
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    out.push(...renderings(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)))
+    return
+  }
+
+  if (value instanceof ArrayBuffer) {
+    out.push(...renderings(new Uint8Array(value)))
+    return
+  }
+
+  if (typeof value !== 'object' && typeof value !== 'function') {
+    out.push(String(value))
+    return
+  }
+
+  if (seen.has(value)) return
+  seen.add(value)
+  for (const key of Reflect.ownKeys(value)) {
+    out.push(typeof key === 'symbol' ? String(key.description) : key)
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key)
+    let v: unknown = descriptor?.value
+    if (descriptor && descriptor.get) {
+      try {
+        v = descriptor.get.call(value)
+      } catch {
+        v = undefined
+      }
+    }
+
+    if (typeof v !== 'function' || key === 'toString') walk(typeof v === 'function' ? safeCall(v, value) : v, out, seen)
+  }
+}
+
+function safeCall(fn: unknown, self: unknown): unknown {
+  try {
+    return (fn as (this: unknown) => unknown).call(self)
+  } catch {
+    return undefined
+  }
+}
+
+/** Every rendering of the error a user, a log, a debugger or a JSON consumer could see. */
+function surfaceOf(err: Qf1Error): string {
+  const out: string[] = [err.message, String(err), err.stack ?? '', JSON.stringify(err) ?? '']
+  out.push(inspect(err, {depth: Number.POSITIVE_INFINITY, showHidden: true}))
+  walk(err, out, new Set())
+  return out.join('\n')
+}
+
+/**
+ * The derived secrets of a value a reader can open (spec 9.2): S, PRK, OKM,
+ * K, N and the private key. Empty when the reader would stop before step 4 or
+ * S is all zero (nothing secret was derived).
+ */
+function derivedSecrets(value: string, env: Env): Uint8Array[] {
+  try {
+    const parsed = parseQf1(value)
+    const raw = Object.hasOwn(env, parsed.keyset) ? env[parsed.keyset] : undefined
+    const key = parseKeysetEnv(parsed.keyset, raw).get(parsed.fingerprint)
+    if (!key) return []
+    const S = x25519(key.privateKey, parsed.ephemeralPublicKey)
+    if (S.every((x) => x === 0)) return []
+    const d = deriveKeyAndNonce(S, parsed.ephemeralPublicKey, key.publicKey)
+    return [S, d.prk, d.okm, d.aesKey, d.nonce, key.privateKey]
+  } catch {
+    return []
+  }
 }
 
 /** The secret material in a keyset env var value: each piece, its entry body, and its key bytes in every rendering. */
@@ -142,6 +218,10 @@ describe('qf1 errors never leak secrets (spec 9.2, qfg-mol-hle)', () => {
         const bytesHex = /plaintext bytes ([\da-f]+)/.exec(n.note)?.[1]
         if (bytesHex) secrets.push(...renderings(Buffer.from(bytesHex, 'hex')))
         secrets.push('hello') // every sealed negative vector encrypts "hello"
+        const derived = derivedSecrets(n.ciphertext, n.env)
+        // Where the reader derived keys (every decrypt_failed vector), S, PRK, OKM, K and N are checked too.
+        if (n.expectedError === 'decrypt_failed') expect(derived, 'derived secrets').to.have.length(6)
+        for (const bytes of derived) secrets.push(...renderings(bytes))
         expectNoLeak(err, secrets, n.name)
       })
     }
@@ -181,6 +261,14 @@ describe('qf1 errors never leak secrets (spec 9.2, qfg-mol-hle)', () => {
       })
     }
 
+    it('a private entry passed as the recipient is never echoed', () => {
+      const privateKey = Buffer.alloc(32, 0x01) // top bit clear: only the prefix check refuses it
+      const recipient = formatPrivateKeyEntry(privateKey)
+      const err = qf1ErrorOf(() => encrypt({keyset: 'QUONFIG_KEYSET', plaintext: 'x', recipient}))
+      expect(err.code).to.equal('invalid_public_key')
+      expectNoLeak(err, [recipient, ...envSecrets(recipient)], 'private entry as recipient')
+    })
+
     it('a long invalid plaintext is not echoed', () => {
       const plaintext = `SENTINEL-WRITER-PLAINTEXT-${'z'.repeat(40)}\uD800`
       const recipient = formatPublicKeyEntry(publicKeyFromPrivate(Buffer.alloc(32, 3)))
@@ -215,7 +303,17 @@ describe('qf1 errors never leak secrets (spec 9.2, qfg-mol-hle)', () => {
       const env = {QUONFIG_KEYSET_LEAK: formatPrivateKeyEntry(priv)}
       const err = qf1ErrorOf(() => decrypt(ciphertext, env))
       expect(err.code).to.equal('decrypt_failed')
-      expectNoLeak(err, [...renderings(plaintextBytes), ...envSecrets(env.QUONFIG_KEYSET_LEAK)], 'non-utf8')
+      const derived = derivedSecrets(ciphertext, env)
+      expect(derived).to.have.length(6)
+      expectNoLeak(
+        err,
+        [
+          ...renderings(plaintextBytes),
+          ...envSecrets(env.QUONFIG_KEYSET_LEAK),
+          ...derived.flatMap((b) => renderings(b)),
+        ],
+        'non-utf8',
+      )
     })
   })
 })
