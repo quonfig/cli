@@ -67,18 +67,27 @@ describe('dependency direction: src/verify imports nothing outside src/verify (q
     })
   }
 
-  it('within src/, only src/secrets/qf1.ts imports the internal qf1 module (seams and raw primitives)', () => {
-    const importers = tsFiles(path.join(root, 'src'))
+  it('within src/, only src/secrets/qf1.ts mentions the internal qf1 module at all', () => {
+    // A plain substring search, so template-literal import(), computed
+    // specifiers and createRequire forms are caught too.
+    const mentions = tsFiles(path.join(root, 'src'))
       .filter((f) => f !== INTERNAL_MODULE)
-      .filter((f) => specifiers(fs.readFileSync(f, 'utf8')).some((s) => /(^|\/)qf1-internal(\.js)?$/.test(s)))
+      .filter((f) => fs.readFileSync(f, 'utf8').includes('qf1-internal'))
       .map((f) => path.relative(root, f).split(path.sep).join('/'))
-    expect(importers).to.deep.equal(['src/secrets/qf1.ts'])
+    expect(mentions).to.deep.equal(['src/secrets/qf1.ts'])
   })
 
-  it('no code in src/secrets reads NODE_ENV', () => {
+  it('src/secrets reads the environment in exactly one place: the default env of decrypt', () => {
+    const hits: string[] = []
     for (const f of tsFiles(libDir)) {
-      expect(fs.readFileSync(f, 'utf8'), path.basename(f)).not.to.match(/NODE_ENV/)
+      for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
+        if (/\bprocess\b|NODE_ENV|\benv\s*\[\s*["'`]/.test(line)) hits.push(`${path.basename(f)}: ${line.trim()}`)
+      }
     }
+
+    expect(hits).to.deep.equal([
+      'qf1-internal.ts: export function decrypt(value: string, env: EnvLookup = process.env): string {',
+    ])
   })
 
   it('the qf1 library imports the shared keyless pieces from src/verify', () => {
