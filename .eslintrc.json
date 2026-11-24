@@ -40,6 +40,24 @@
       }
     },
     {
+      "files": ["src/**/*.ts"],
+      "excludedFiles": ["src/secrets/qf1.ts", "src/secrets/qf1-internal.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": ["domain", "freelist", "smalloc", "punycode", "sys", "querystring", "colors"],
+            "patterns": [
+              {
+                "group": ["**/qf1-internal", "**/qf1-internal.js"],
+                "message": "Import qf1 from src/secrets/qf1.ts. qf1-internal holds the deterministic test seams and raw primitives (qfg-mol-hle)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["test/**/*.ts"],
       "rules": {
         "@typescript-eslint/no-explicit-any": "off",

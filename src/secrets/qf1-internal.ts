@@ -1,20 +1,22 @@
 /**
- * qf1: the CLI's secret value format (bead qfg-mol-hle). Normative spec:
- * project/plans/secrets-qf1-spec.md (APPROVED 2026-11-24, Gate A). Section
- * numbers in comments refer to it.
+ * INTERNAL qf1 implementation (bead qfg-mol-hle). Commands MUST NOT import
+ * this module: they import src/secrets/qf1.ts, the curated public API. Only
+ * that module and tests import this one (test/secrets/dependency-direction
+ * and an eslint no-restricted-imports rule enforce it).
  *
+ * Why the split: this module holds the deterministic seams the known-answer
+ * vectors need (sealWithEphemeralKey, mintKeypairWith) and the raw KDF and
+ * X25519 primitives. A reused ephemeral key to one recipient repeats the AES
+ * key and nonce, so no production code path may reach a seam; no environment
+ * switch guards them, the module boundary does.
+ *
+ * Normative spec: project/plans/secrets-qf1-spec.md (APPROVED 2026-11-24).
  *   qf1:<KEYSET>:<FINGERPRINT>:<base64url(E || C || T)>
  *   X25519 (RFC 7748) + HKDF-SHA256 (RFC 5869, written out from HMAC) + AES-256-GCM
- *
- * `node:crypto` only. The KEYLESS pieces (keyset-name rule, fingerprint,
- * public key entries, strict base64url, the ciphertext grammar) live in
- * src/verify/secrets.ts, which is compiled on its own into the Gitea
- * pre-receive hook; this module imports them and adds everything that needs a
- * key. The dependency only ever points this way (src/verify imports nothing
- * from here; test/secrets/dependency-direction.test.ts checks it).
- *
- * Error text follows spec 9.2: messages name keysets and fingerprints and
- * never contain key material, env values or plaintext.
+ * `node:crypto` only. The keyless pieces come from src/verify/secrets.ts
+ * (compiled alone into the pre-receive hook); nothing there imports from here.
+ * Error text follows spec 9.2: keysets and fingerprints, never key material,
+ * env values or plaintext.
  */
 
 /* eslint-disable no-bitwise -- X25519 encodings and bit tests are bitwise by definition */
@@ -25,7 +27,6 @@ import {
   createPrivateKey,
   createPublicKey,
   diffieHellman,
-  randomBytes,
 } from 'node:crypto'
 
 import {
@@ -35,9 +36,10 @@ import {
   fingerprintOf,
   parsePublicKeyEntry as parsePublicKeyEntryKeyless,
   parseQf1Structure,
+  quoteUntrustedName,
 } from '../verify/secrets.js'
 
-export {KEYSET_NAME_RE, PUBLIC_KEY_PREFIX} from '../verify/secrets.js'
+export {FINGERPRINT_RE, KEYSET_NAME_RE, PUBLIC_KEY_PREFIX} from '../verify/secrets.js'
 
 // ── Constants (spec 5.1, 6.1) ────────────────────────────────────────────
 
@@ -100,9 +102,6 @@ const fail = (code: Qf1ErrorCode, detail: string, fields?: Qf1ErrorFields): neve
   throw new Qf1Error(code, detail, fields)
 }
 
-/** Quote an untrusted name: truncated to 64, control characters escaped (spec 9.2). */
-const quoteName = (name: string): string => JSON.stringify(name.slice(0, 64))
-
 // ── HKDF-SHA256 from HMAC (RFC 5869; spec 5.3) ──────────────────────────
 
 export function hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {
@@ -151,12 +150,17 @@ const isAllZero = (b: Uint8Array): boolean => b.every((x) => x === 0)
  * ONLY that refusal becomes 32 zero bytes, so callers' all-zero checks cover
  * both behaviours. Any other error propagates.
  */
-export function x25519(scalar: Uint8Array, u: Uint8Array): Uint8Array {
+export function x25519(
+  scalar: Uint8Array,
+  u: Uint8Array,
+  /** Injectable for tests of the error mapping only; production always uses node:crypto. */
+  dh: typeof diffieHellman = diffieHellman,
+): Uint8Array {
   if (scalar.length !== 32 || u.length !== 32) throw new Error('x25519 needs 32-byte inputs')
   const privateKey = createPrivateKey({format: 'der', key: Buffer.concat([PKCS8_X25519_PREFIX, scalar]), type: 'pkcs8'})
   const publicKey = createPublicKey({format: 'der', key: Buffer.concat([SPKI_X25519_PREFIX, u]), type: 'spki'})
   try {
-    return new Uint8Array(diffieHellman({privateKey, publicKey}))
+    return new Uint8Array(dh({privateKey, publicKey}))
   } catch (error) {
     if ((error as {code?: unknown})?.code === 'ERR_OSSL_FAILED_DURING_DERIVATION') return new Uint8Array(32)
     throw error
@@ -237,6 +241,19 @@ const ENV_STRIP_RE = /^[\t\n\r ]+|[\t\n\r ]+$/g
  * different public keys with one fingerprint make the keyset invalid.
  */
 export function parseKeysetEnv(keyset: string, value: string | undefined): Map<string, HeldKey> {
+  return parseKeysetEnvWith(parsePrivateKeyEntry, keyset, value)
+}
+
+/**
+ * parseKeysetEnv with the entry parser injectable (tests only). Only a
+ * Qf1Error `invalid_key_entry` from the parser becomes `keyset_invalid`; any
+ * other error is a bug and propagates.
+ */
+export function parseKeysetEnvWith(
+  parseEntry: (entry: string) => Uint8Array,
+  keyset: string,
+  value: string | undefined,
+): Map<string, HeldKey> {
   if (value === undefined || value === null) {
     return fail('keyset_missing', `this machine has no ${keyset}`, {keyset})
   }
@@ -251,8 +268,9 @@ export function parseKeysetEnv(keyset: string, value: string | undefined): Map<s
   for (const [index, entry] of entries.entries()) {
     let privateKey: Uint8Array
     try {
-      privateKey = parsePrivateKeyEntry(entry)
-    } catch {
+      privateKey = parseEntry(entry)
+    } catch (error) {
+      if (!(error instanceof Qf1Error) || error.code !== 'invalid_key_entry') throw error
       return fail('keyset_invalid', `${keyset} entry ${index + 1} is not a qf1 private key`, {
         entry: index + 1,
         keyset,
@@ -341,28 +359,36 @@ function isWellFormedUtf16(s: string): boolean {
   return true
 }
 
-export type EncryptInput = {
-  /**
-   * TEST VECTORS ONLY: a fixed ephemeral private key, accepted only when
-   * NODE_ENV is "test". Real writes always draw a fresh one (spec 7 step 2).
-   */
-  ephemeralPrivateKey?: Uint8Array
+export type SealInput = {
   keyset: string
   plaintext: string
-  /** The recipient public key: normally the first entry of `quonfig.json` `secrets.keysets.<keyset>.publicKeys`. */
+  /** The recipient public key as 32 raw bytes. */
   publicKey: Uint8Array
 }
 
-/** Encrypt a plaintext string to one public key of a keyset. Needs no private key. */
-export function encrypt({ephemeralPrivateKey, keyset, plaintext, publicKey}: EncryptInput): string {
-  // Step 1, in this order (decision 47): keyset name, recipient key, plaintext.
+/** Spec 2 keyset-name check, as the writer's first step (spec 7 step 1). */
+export function checkWriterKeysetName(keyset: unknown): asserts keyset is string {
   if (typeof keyset !== 'string' || !KEYSET_NAME_RE.test(keyset)) {
-    return fail(
+    fail(
       'invalid_keyset_name',
-      `keyset name ${quoteName(String(keyset))} does not match ${KEYSET_NAME_RE.source}`,
+      `keyset name ${quoteUntrustedName(String(keyset))} does not match ${KEYSET_NAME_RE.source}`,
     )
   }
+}
 
+/**
+ * THE DETERMINISTIC SEAM (spec 7 with a caller-chosen priv_e). Holds ALL writer
+ * checks, in the decision-47 order: keyset name, recipient key (length, top
+ * bit, canonical), plaintext well-formedness, then the small-order check on S.
+ * Only the public `encrypt` (fresh randomBytes(32) per call) and the vector
+ * tests call it; reusing an ephemeral key repeats the AES key and nonce.
+ */
+export function sealWithEphemeralKey(
+  {keyset, plaintext, publicKey}: SealInput,
+  ephemeralPrivateKey: Uint8Array,
+): string {
+  // Step 1, in this order (decision 47).
+  checkWriterKeysetName(keyset)
   if (
     !(publicKey instanceof Uint8Array) ||
     publicKey.length !== 32 ||
@@ -375,24 +401,17 @@ export function encrypt({ephemeralPrivateKey, keyset, plaintext, publicKey}: Enc
   }
 
   if (typeof plaintext !== 'string' || !isWellFormedUtf16(plaintext)) {
-    return fail('invalid_plaintext', 'plaintext is not a well-formed Unicode string (unpaired surrogate)', {keyset})
+    return fail('invalid_plaintext', 'plaintext is not a well-formed Unicode string', {keyset})
   }
 
-  // Step 2: a fresh ephemeral key per value.
-  let ephemeral: Uint8Array
-  if (ephemeralPrivateKey === undefined) {
-    ephemeral = new Uint8Array(randomBytes(32))
-  } else {
-    if (process.env.NODE_ENV !== 'test') {
-      throw new Error('qf1 encrypt: an ephemeral key may only be injected in tests (NODE_ENV=test)')
-    }
-
-    ephemeral = ephemeralPrivateKey
+  // Step 2 is the caller's: priv_e.
+  if (!(ephemeralPrivateKey instanceof Uint8Array) || ephemeralPrivateKey.length !== 32) {
+    throw new Error('qf1 seal: the ephemeral private key must be 32 bytes')
   }
 
   // Step 3.
-  const ephemeralPublicKey = publicKeyFromPrivate(ephemeral)
-  const sharedSecret = x25519(ephemeral, publicKey)
+  const ephemeralPublicKey = publicKeyFromPrivate(ephemeralPrivateKey)
+  const sharedSecret = x25519(ephemeralPrivateKey, publicKey)
   if (isAllZero(sharedSecret)) {
     return fail('invalid_public_key', 'recipient public key is a point of small order', {keyset})
   }
@@ -404,6 +423,28 @@ export function encrypt({ephemeralPrivateKey, keyset, plaintext, publicKey}: Enc
   cipher.setAAD(buildAad(keyset, fp))
   const sealed = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final(), cipher.getAuthTag()])
   return `qf1:${keyset}:${fp}:${Buffer.concat([ephemeralPublicKey, sealed]).toString('base64url')}`
+}
+
+/**
+ * The 32 bytes of a `qf1-pub-` entry, structure only (prefix, 43 canonical
+ * base64url characters). Canonical-u, top-bit and small-order checks are left
+ * to sealWithEphemeralKey so the writer keeps the decision-47 order.
+ */
+export function decodePublicKeyEntryForWriter(entry: unknown): Uint8Array {
+  if (typeof entry !== 'string' || !entry.startsWith(PUBLIC_KEY_PREFIX)) {
+    return fail('invalid_public_key', `recipient is not a "${PUBLIC_KEY_PREFIX}" public key entry`)
+  }
+
+  const body = entry.slice(PUBLIC_KEY_PREFIX.length)
+  const bytes = body.length === ENTRY_BODY_CHARS ? decodeBase64UrlStrict(body) : undefined
+  if (!bytes || bytes.length !== 32) {
+    return fail(
+      'invalid_public_key',
+      `recipient is not "${PUBLIC_KEY_PREFIX}" followed by ${ENTRY_BODY_CHARS} canonical base64url characters (32 bytes)`,
+    )
+  }
+
+  return bytes
 }
 
 // ── Decrypt (spec 8) ────────────────────────────────────────────────────
@@ -492,13 +533,13 @@ export function decrypt(value: string, env: EnvLookup = process.env): string {
 export type Keypair = {fingerprint: string; privateKey: Uint8Array; publicKey: Uint8Array}
 
 /**
- * A new random keypair whose fingerprint is not in `existingFingerprints`
- * (the keyset's current fingerprints): redraw on a collision. `random` is
- * injectable for tests only.
+ * DETERMINISTIC SEAM for key minting: draw from `random` until the
+ * fingerprint is not in `existingFingerprints` (decision 42). The public
+ * `mintKeypair` passes node:crypto randomBytes; tests inject a sequence.
  */
-export function mintKeypair(
+export function mintKeypairWith(
   existingFingerprints: ReadonlySet<string>,
-  random: (size: number) => Uint8Array = (size) => randomBytes(size),
+  random: (size: number) => Uint8Array,
 ): Keypair {
   for (;;) {
     const privateKey = new Uint8Array(random(32))

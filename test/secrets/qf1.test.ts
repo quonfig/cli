@@ -22,6 +22,7 @@ import {
   parseQf1,
   publicKeyFromPrivate,
 } from '../../src/secrets/qf1.js'
+import {mintKeypairWith, sealWithEphemeralKey} from '../../src/secrets/qf1-internal.js'
 
 const label = (s: string) => createHash('sha256').update(`qfg-mol-hle qf1.test.ts key: ${s}`).digest()
 
@@ -31,6 +32,7 @@ const entryA = formatPrivateKeyEntry(privA)
 const privB = label('B')
 const pubB = publicKeyFromPrivate(privB)
 const entryB = formatPrivateKeyEntry(privB)
+const pubEntryA = formatPublicKeyEntry(pubA)
 
 /** The order-8 point of spec 6.1 (vector `ephemeral-low-order-order-8-a`). */
 const ORDER_8 = Buffer.from('e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800', 'hex')
@@ -53,6 +55,8 @@ function qf1ErrorOf(fn: () => unknown): Qf1Error {
 }
 
 const encryptErrorCode = (input: Parameters<typeof encrypt>[0]): string => qf1ErrorOf(() => encrypt(input)).code
+const sealErrorCode = (input: Parameters<typeof sealWithEphemeralKey>[0]): string =>
+  qf1ErrorOf(() => sealWithEphemeralKey(input, randomBytes(32))).code
 
 /** Seal a value under `keyset` with an arbitrary E, as the vectors' sealRaw does: here E is a small-order point. */
 function lowOrderValueTo(keyset: string, fp: string): string {
@@ -64,8 +68,8 @@ function lowOrderValueTo(keyset: string, fp: string): string {
 describe('qf1 library (qfg-mol-hle)', () => {
   describe('encrypt', () => {
     it('draws a fresh ephemeral key per call; both values decrypt', () => {
-      const a = encrypt({keyset: 'QUONFIG_KEYSET_X', plaintext: 'same input', publicKey: pubA})
-      const b = encrypt({keyset: 'QUONFIG_KEYSET_X', plaintext: 'same input', publicKey: pubA})
+      const a = encrypt({keyset: 'QUONFIG_KEYSET_X', plaintext: 'same input', recipient: pubEntryA})
+      const b = encrypt({keyset: 'QUONFIG_KEYSET_X', plaintext: 'same input', recipient: pubEntryA})
       expect(a).not.to.equal(b)
       expect(Buffer.from(parseQf1(a).ephemeralPublicKey).equals(parseQf1(b).ephemeralPublicKey)).to.be.false
       const env = {QUONFIG_KEYSET_X: entryA}
@@ -74,28 +78,45 @@ describe('qf1 library (qfg-mol-hle)', () => {
     })
 
     it('names the keyset and the recipient fingerprint in the header', () => {
-      const v = encrypt({keyset: 'QUONFIG_KEYSET_PROD', plaintext: '', publicKey: pubA})
+      const v = encrypt({keyset: 'QUONFIG_KEYSET_PROD', plaintext: '', recipient: pubEntryA})
       expect(v.startsWith(`qf1:QUONFIG_KEYSET_PROD:${fingerprint(pubA)}:`)).to.be.true
       expect(decrypt(v, {QUONFIG_KEYSET_PROD: entryA})).to.equal('')
     })
 
-    it('refuses an injected ephemeral key outside NODE_ENV=test', () => {
-      const saved = process.env.NODE_ENV
-      try {
-        for (const mode of ['production', 'development', undefined]) {
-          if (mode === undefined) delete process.env.NODE_ENV
-          else process.env.NODE_ENV = mode
-          expect(() =>
-            encrypt({ephemeralPrivateKey: label('e'), keyset: 'QUONFIG_KEYSET', plaintext: 'x', publicKey: pubA}),
-          ).to.throw(/ephemeral key may only be injected in tests/)
-        }
-      } finally {
-        process.env.NODE_ENV = saved
-      }
+    it('takes one argument and has no ephemeral-key seam: an injected key is ignored, even under NODE_ENV=test', () => {
+      expect(encrypt.length).to.equal(1)
+      expect(process.env.NODE_ENV).to.equal('test')
+      const input = {keyset: 'QUONFIG_KEYSET', plaintext: 'x', recipient: pubEntryA}
+      const withKey = {...input, ephemeralPrivateKey: label('e')} as unknown as Parameters<typeof encrypt>[0]
+      const a = encrypt(withKey)
+      const b = encrypt(withKey)
+      expect(a).not.to.equal(b)
+      expect(sealWithEphemeralKey({...input, publicKey: pubA}, label('e'))).not.to.be.oneOf([a, b])
+    })
 
-      expect(
-        encrypt({ephemeralPrivateKey: label('e'), keyset: 'QUONFIG_KEYSET', plaintext: 'x', publicKey: pubA}),
-      ).to.equal(encrypt({ephemeralPrivateKey: label('e'), keyset: 'QUONFIG_KEYSET', plaintext: 'x', publicKey: pubA}))
+    it('takes the recipient as a qf1-pub- entry: a private entry or raw bytes are refused', () => {
+      for (const recipient of [
+        entryA,
+        pubEntryA.slice(1),
+        `${pubEntryA}=`,
+        '',
+        pubA as unknown as string,
+        7 as unknown as string,
+      ]) {
+        expect(encryptErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: 'x', recipient}), String(recipient)).to.equal(
+          'invalid_public_key',
+        )
+      }
+    })
+
+    it('refuses a plaintext that is not a string (spec 3.3)', () => {
+      for (const plaintext of [undefined, null, 42, Buffer.from('x'), ['x']]) {
+        const bad = plaintext as unknown as string
+        expect(encryptErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: bad, recipient: pubEntryA})).to.equal(
+          'invalid_plaintext',
+        )
+        expect(sealErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: bad, publicKey: pubA})).to.equal('invalid_plaintext')
+      }
     })
 
     describe('writer check order (spec 7 step 1, decision 47)', () => {
@@ -146,27 +167,32 @@ describe('qf1 library (qfg-mol-hle)', () => {
       ]
       for (const c of cases) {
         it(`${c.name}: ${c.expected}`, () => {
-          expect(encryptErrorCode(c)).to.equal(c.expected)
+          expect(sealErrorCode(c)).to.equal(c.expected)
+          if (c.publicKey.length === 32) {
+            // The public writer takes the same key as a qf1-pub- entry and reaches the same class.
+            const recipient = formatPublicKeyEntry(c.publicKey)
+            expect(encryptErrorCode({keyset: c.keyset, plaintext: c.plaintext, recipient})).to.equal(c.expected)
+          }
         })
       }
 
       it('rejects every lone surrogate position and accepts paired surrogates', () => {
         for (const bad of ['\uD800', '\uDC00', 'x\uDBFF', '\uDFFFx', '\uDC00\uD800', '\uD83D\u{1F511}']) {
-          expect(encryptErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: bad, publicKey: pubA})).to.equal(
+          expect(encryptErrorCode({keyset: 'QUONFIG_KEYSET', plaintext: bad, recipient: pubEntryA})).to.equal(
             'invalid_plaintext',
           )
         }
 
         const ok = 'key \u{1F511} \u{1F511}'
         expect(
-          decrypt(encrypt({keyset: 'QUONFIG_KEYSET', plaintext: ok, publicKey: pubA}), {QUONFIG_KEYSET: entryA}),
+          decrypt(encrypt({keyset: 'QUONFIG_KEYSET', plaintext: ok, recipient: pubEntryA}), {QUONFIG_KEYSET: entryA}),
         ).to.equal(ok)
       })
     })
   })
 
   describe('decrypt', () => {
-    const value = encrypt({keyset: 'QUONFIG_KEYSET_PROD', plaintext: 'top secret', publicKey: pubA})
+    const value = encrypt({keyset: 'QUONFIG_KEYSET_PROD', plaintext: 'top secret', recipient: pubEntryA})
 
     it('reads only the env var named by the keyset', () => {
       const touched: string[] = []
@@ -258,7 +284,7 @@ describe('qf1 library (qfg-mol-hle)', () => {
   describe('error text (spec 9.2)', () => {
     const fpA = fingerprint(pubA)
     const fpB = fingerprint(pubB)
-    const value = encrypt({keyset: 'QUONFIG_KEYSET_PROD', plaintext: 'SENTINEL-PLAINTEXT-0001', publicKey: pubA})
+    const value = encrypt({keyset: 'QUONFIG_KEYSET_PROD', plaintext: 'SENTINEL-PLAINTEXT-0001', recipient: pubEntryA})
 
     it('key_not_held names the keyset, the needed fingerprint and the held ones, sorted', () => {
       const privC = label('C')
@@ -309,6 +335,26 @@ describe('qf1 library (qfg-mol-hle)', () => {
       expect(err.message).not.to.include('\n')
     })
 
+    it('invalid_keyset_name escapes DEL, C1 and bidi controls on the reader and writer paths', () => {
+      const name = 'A\u007FB\u009BC\u202ED\u2066E\u2028F'
+      const esc = (code: number) => `\\u${code.toString(16).padStart(4, '0')}`
+      const escaped = `"A${esc(0x7f)}B${esc(0x9b)}C${esc(0x20_2e)}D${esc(0x20_66)}E${esc(0x20_28)}F"`
+      const reader = qf1ErrorOf(() => decrypt(value.replace('QUONFIG_KEYSET_PROD', name), {}))
+      const writer = qf1ErrorOf(() => encrypt({keyset: name, plaintext: 'x', recipient: pubEntryA}))
+      for (const err of [reader, writer]) {
+        expect(err.code).to.equal('invalid_keyset_name')
+        expect(err.message).to.include(escaped)
+        expect(/[\u007F-\u009F\u2028-\u202E\u2066-\u2069]/.test(err.message), err.message).to.be.false
+      }
+    })
+
+    it('invalid_keyset_name truncates the quoted name to 64 characters on the writer path', () => {
+      const name = `home_${'Y'.repeat(200)}`
+      const err = qf1ErrorOf(() => encrypt({keyset: name, plaintext: 'x', recipient: pubEntryA}))
+      expect(err.message).to.include(JSON.stringify(name.slice(0, 64)))
+      expect(err.message).not.to.include(name.slice(0, 65))
+    })
+
     it('decrypt_failed names the keyset and fingerprint', () => {
       const tampered = value.slice(0, -2) + (value.at(-2) === 'A' ? 'B' : 'A') + value.slice(-1)
       const err = qf1ErrorOf(() => decrypt(tampered, {QUONFIG_KEYSET_PROD: entryA}))
@@ -336,7 +382,7 @@ describe('qf1 library (qfg-mol-hle)', () => {
         qf1ErrorOf(() => decrypt(value.slice(0, -4) + 'AAAA', {QUONFIG_KEYSET_PROD: entryA})),
         qf1ErrorOf(() => parseKeysetEnv('QUONFIG_KEYSET_PROD', `${entryA}\u00A0`)),
         qf1ErrorOf(() =>
-          encrypt({keyset: 'QUONFIG_KEYSET', plaintext: 'SENTINEL-PLAINTEXT-0001\uD800', publicKey: pubA}),
+          encrypt({keyset: 'QUONFIG_KEYSET', plaintext: 'SENTINEL-PLAINTEXT-0001\uD800', recipient: pubEntryA}),
         ),
         qf1ErrorOf(() => parsePublicKeyEntry(entryA)),
       ]
@@ -404,10 +450,14 @@ describe('qf1 library (qfg-mol-hle)', () => {
       expect(k.fingerprint).to.equal(fingerprint(k.publicKey))
     })
 
-    it('redraws on a fingerprint collision', () => {
+    it('takes only the existing fingerprints (no injectable randomness)', () => {
+      expect(mintKeypair.length).to.equal(1)
+    })
+
+    it('redraws on a fingerprint collision (internal mintKeypairWith)', () => {
       const draws = [privA, privA, privB]
       let calls = 0
-      const k = mintKeypair(new Set([fingerprint(pubA)]), (n) => {
+      const k = mintKeypairWith(new Set([fingerprint(pubA)]), (n) => {
         expect(n).to.equal(32)
         return Buffer.from(draws[calls++])
       })

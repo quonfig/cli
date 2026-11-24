@@ -13,28 +13,33 @@ import {createHash, hkdfSync} from 'node:crypto'
 import * as path from 'node:path'
 import {fileURLToPath, pathToFileURL} from 'node:url'
 
+// The deterministic seam and the raw primitives live in the internal module;
+// only tests (and src/secrets/qf1.ts) import it.
+import {
+  buildAad,
+  deriveKeyAndNonce,
+  hkdf,
+  hkdfExpand,
+  hkdfExtract,
+  sealWithEphemeralKey,
+  x25519,
+} from '../../src/secrets/qf1-internal.js'
 import {
   HKDF_INFO,
   OKM_LENGTH,
   PRIVATE_KEY_PREFIX,
   PUBLIC_KEY_PREFIX,
   Qf1Error,
-  buildAad,
   decrypt,
-  deriveKeyAndNonce,
   encrypt,
   fingerprint,
   formatPrivateKeyEntry,
   formatPublicKeyEntry,
-  hkdf,
-  hkdfExpand,
-  hkdfExtract,
   parseKeysetEnv,
   parsePrivateKeyEntry,
   parsePublicKeyEntry,
   parseQf1,
   publicKeyFromPrivate,
-  x25519,
 } from '../../src/secrets/qf1.js'
 
 /** SHA-256 of project/plans/secrets-qf1/vectors.json as approved (Gate A, 2026-11-24, project 7449be4). */
@@ -230,13 +235,15 @@ describe('qf1 vectors (spec section 14, qfg-mol-hle)', () => {
         expect(hex(aad), 'AAD').to.equal(p.aadHex)
         expect(Buffer.from(aad).toString('latin1')).to.equal(p.aadAscii)
 
-        const ciphertext = encrypt({
-          ephemeralPrivateKey: ephemeralPrivate,
-          keyset: p.keyset,
-          plaintext: p.plaintext,
-          publicKey: recipient,
-        })
+        const ciphertext = sealWithEphemeralKey(
+          {keyset: p.keyset, plaintext: p.plaintext, publicKey: recipient},
+          ephemeralPrivate,
+        )
         expect(ciphertext, 'qf1 string').to.equal(p.ciphertext)
+        // The public writer (fresh ephemeral key, recipient as an entry) round-trips to the same key.
+        const fresh = encrypt({keyset: p.keyset, plaintext: p.plaintext, recipient: formatPublicKeyEntry(recipient)})
+        expect(fresh.startsWith(`qf1:${p.keyset}:${p.fingerprint}:`)).to.be.true
+        expect(decrypt(fresh, vectors.positiveEnv)).to.equal(p.plaintext)
         const parsed = parseQf1(ciphertext)
         expect(hex(parsed.ciphertextAndTag), 'C || T').to.equal(p.ciphertextAndTagHex)
         expect(hex(Buffer.concat([parsed.ephemeralPublicKey, parsed.ciphertextAndTag])), 'blob').to.equal(p.blobHex)
@@ -281,14 +288,15 @@ describe('qf1 vectors (spec section 14, qfg-mol-hle)', () => {
         const plaintext = String.fromCharCode(...w.plaintextUtf16CodeUnits) // eslint-disable-line unicorn/prefer-code-point
         expect(plaintext.length).to.equal(w.plaintextUtf16CodeUnits.length)
         const err = qf1ErrorOf(() =>
-          encrypt({
-            ephemeralPrivateKey: fromHex(w.ephemeralPrivateKeyHex),
-            keyset: w.keyset,
-            plaintext,
-            publicKey: fromHex(w.recipientPublicKeyHex),
-          }),
+          sealWithEphemeralKey(
+            {keyset: w.keyset, plaintext, publicKey: fromHex(w.recipientPublicKeyHex)},
+            fromHex(w.ephemeralPrivateKeyHex),
+          ),
         )
         expect(err.code, err.message).to.equal(w.expectedError)
+        // The public writer, given the recipient as a qf1-pub- entry, reaches the same class in the same order.
+        const recipient = formatPublicKeyEntry(fromHex(w.recipientPublicKeyHex))
+        expect(qf1ErrorOf(() => encrypt({keyset: w.keyset, plaintext, recipient})).code).to.equal(w.expectedError)
       })
     }
   })

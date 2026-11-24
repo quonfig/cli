@@ -13,6 +13,8 @@ import {fileURLToPath} from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const verifyDir = path.join(root, 'src', 'verify')
+const libDir = path.join(root, 'src', 'secrets')
+const INTERNAL_MODULE = path.join(libDir, 'qf1-internal.ts')
 
 /** Packages the hook build installs (keep in step with app-gitea/Dockerfile). */
 const HOOK_PACKAGES = new Set(['ajv', 'ajv-formats', 'zod'])
@@ -65,8 +67,22 @@ describe('dependency direction: src/verify imports nothing outside src/verify (q
     })
   }
 
+  it('within src/, only src/secrets/qf1.ts imports the internal qf1 module (seams and raw primitives)', () => {
+    const importers = tsFiles(path.join(root, 'src'))
+      .filter((f) => f !== INTERNAL_MODULE)
+      .filter((f) => specifiers(fs.readFileSync(f, 'utf8')).some((s) => /(^|\/)qf1-internal(\.js)?$/.test(s)))
+      .map((f) => path.relative(root, f).split(path.sep).join('/'))
+    expect(importers).to.deep.equal(['src/secrets/qf1.ts'])
+  })
+
+  it('no code in src/secrets reads NODE_ENV', () => {
+    for (const f of tsFiles(libDir)) {
+      expect(fs.readFileSync(f, 'utf8'), path.basename(f)).not.to.match(/NODE_ENV/)
+    }
+  })
+
   it('the qf1 library imports the shared keyless pieces from src/verify', () => {
-    const qf1 = fs.readFileSync(path.join(root, 'src', 'secrets', 'qf1.ts'), 'utf8')
-    expect(specifiers(qf1)).to.include('../verify/secrets.js')
+    const internal = fs.readFileSync(INTERNAL_MODULE, 'utf8')
+    expect(specifiers(internal)).to.include('../verify/secrets.js')
   })
 })
