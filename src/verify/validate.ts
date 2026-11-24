@@ -24,6 +24,8 @@
  *  - Rule structure (criteria + value present)
  *  - Value type consistency
  *  - Weighted values non-empty and consistent
+ *  - Secrets family (qfg-8seuf.4, secrets.ts): quonfig.json secrets.keysets,
+ *    qf1 values in secrets/ checked against them, no qf1 values elsewhere
  */
 
 import {z} from 'zod'
@@ -31,6 +33,15 @@ import {z} from 'zod'
 import {findMapKeyOrderWarnings, navigate, type OrderedNode, scanOrderedJson} from './map-key-order.js'
 import {compileSchema, validateAgainstSchema} from './schema-validator.js'
 import {checkRegexV1, REGEX_V1_DOCS_URL} from './regex-dialect.js'
+import {
+  checkNoQf1OutsideSecrets,
+  hasLegacyEncryptedRuleValue,
+  isTemporarySecretsDuplicate,
+  type KeysetRegistry,
+  type PooledKeyEntry,
+  validateSecretDocument,
+  validateSecretsManifest,
+} from './secrets.js'
 import {
   DURATION_FORMAT_HINT,
   INT_RANGE_FORMAT_HINT,
@@ -52,7 +63,7 @@ const LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'] as const
 
 // ── Schemas (subset of app-quonfig config-schemas.ts) ───────────────────
 
-const ConfigTypeSchema = z.enum(['feature_flag', 'config', 'log_level', 'segment', 'schema'])
+const ConfigTypeSchema = z.enum(['feature_flag', 'config', 'log_level', 'segment', 'schema', 'secret'])
 
 const ValueTypeSchema = z.enum(['bool', 'string', 'int', 'double', 'json', 'string_list', 'duration', 'log_level'])
 
@@ -265,12 +276,21 @@ export interface ValidationStats {
   rules: number
   schemaRefsChecked: number
   schemas: number
+  secrets: number
   segmentRefsChecked: number
   segments: number
   uniqueKeysVerified: number
 }
 
 export interface ValidateOptions {
+  /**
+   * The commit's `quonfig.json`, for the secrets keysets only (qfg-8seuf.4).
+   * The pre-receive hook passes it here instead of in the file map so that
+   * reading it does not also switch on the hook's environments checks, which
+   * key off `files.get('quonfig.json')`. A `quonfig.json` in the file map
+   * takes precedence.
+   */
+  quonfigJson?: string
   /**
    * Validate every schema-bound JSON value against its schema with Ajv
    * (qfg-phcv), and check that every schema compiles. The CLI callers (`qfg
@@ -294,6 +314,7 @@ const DIR_TO_TYPE: Record<string, string> = {
   'feature-flags': 'feature_flag',
   segments: 'segment',
   'log-levels': 'log_level',
+  secrets: 'secret',
 }
 
 /** The directories a config document can live in. Source of truth. */
@@ -469,6 +490,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
     segments: 0,
     logLevels: 0,
     schemas: 0,
+    secrets: 0,
     environmentOverrides: 0,
     rules: 0,
     segmentRefsChecked: 0,
@@ -478,12 +500,13 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
   }
 
   // Collect all configs for cross-reference checks
-  const allConfigs: Array<{key: string; type: string; dir: string; file: string}> = []
+  const allConfigs: PooledKeyEntry[] = []
   const allSchemaFiles: Array<{key: string; file: string}> = []
   const segmentKeys = new Set<string>()
   const schemaKeys = new Set<string>()
   const schemaDocuments = new Map<string, Record<string, unknown>>()
   const declaredEnvIds = new Set<string>()
+  let secretKeysets: KeysetRegistry = new Map()
 
   // Check for unexpected top-level entries
   let entries: fs.Dirent[]
@@ -555,6 +578,8 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
           suggestion: `Format: {"environments": ["production", "staging"]}`,
         })
       }
+
+      secretKeysets = validateSecretsManifest(quonfigParsed, issues)
     }
   } else {
     issues.push({
@@ -711,6 +736,11 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
         }
       }
 
+      // Secrets family (qfg-8seuf.4): the rules of a secrets/ document, and
+      // no qf1 value anywhere else.
+      if (dir === 'secrets') validateSecretDocument(parsed, relPath, secretKeysets, issues)
+      else checkNoQf1OutsideSecrets(parsed, relPath, issues)
+
       // Validate environment IDs are slugs, not UUIDs
       validateEnvironmentIds(config.environments, relPath, issues)
 
@@ -734,6 +764,9 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
         case 'log_level':
           stats.logLevels++
           break
+        case 'secret':
+          stats.secrets++
+          break
       }
 
       // Count rules and environment overrides
@@ -744,7 +777,13 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
       }
 
       // Collect for cross-reference
-      allConfigs.push({key: config.key, type: config.type, dir, file: relPath})
+      allConfigs.push({
+        key: config.key,
+        type: config.type,
+        dir,
+        file: relPath,
+        legacyEncrypted: hasLegacyEncryptedRuleValue(parsed),
+      })
     }
   }
 
@@ -837,7 +876,7 @@ export function validateWorkspace(workspaceDir: string, options: ValidateOptions
 
   // Check for duplicate keys across directories (case-insensitive — see
   // detectDuplicateKeys).
-  const uniqueConfigKeys = detectDuplicateKeys(allConfigs, 'key', issues)
+  const uniqueConfigKeys = detectDuplicateKeys(allConfigs, 'key', issues, isTemporarySecretsDuplicate)
   const uniqueSchemaKeys = detectDuplicateKeys(allSchemaFiles, 'schema key', issues)
 
   stats.uniqueKeysVerified = uniqueConfigKeys + uniqueSchemaKeys
@@ -854,6 +893,7 @@ function emptyStats(): ValidationStats {
     segments: 0,
     logLevels: 0,
     schemas: 0,
+    secrets: 0,
     environmentOverrides: 0,
     rules: 0,
     segmentRefsChecked: 0,
@@ -876,7 +916,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
   const segmentKeys = new Set<string>()
   const schemaKeys = new Set<string>()
   const allSchemaFiles: Array<{key: string; file: string}> = []
-  const allConfigs: Array<{key: string; file: string}> = []
+  const allConfigs: PooledKeyEntry[] = []
   const schemaDocuments = new Map<string, Record<string, unknown>>()
   const parsedConfigs: Array<{
     config: z.infer<typeof StoredConfigSchema>
@@ -914,6 +954,26 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
         })
       }
     }
+  }
+
+  // Secrets keysets (qfg-8seuf.4). Because the hook reads the commit's whole
+  // tree, every secrets/ value is re-checked against the keysets of the same
+  // commit, so a quonfig.json-only change that drops a key still in use is
+  // rejected (spec 11.5, decision 21).
+  let secretKeysets: KeysetRegistry = new Map()
+  const manifestText = quonfigContent ?? options.quonfigJson
+  if (manifestText !== undefined) {
+    let manifest: unknown
+    try {
+      manifest = JSON.parse(manifestText)
+    } catch {
+      // Invalid JSON in the map was reported above. Via options.quonfigJson it
+      // is not reported here (see ValidateOptions.quonfigJson): no keysets are
+      // registered, so any secret value is rejected as undeclared.
+      manifest = undefined
+    }
+
+    secretKeysets = validateSecretsManifest(manifest, issues)
   }
 
   for (const [relPath, content] of files) {
@@ -1044,6 +1104,11 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
       }
     }
 
+    // Secrets family (qfg-8seuf.4): the rules of a secrets/ document, and no
+    // qf1 value anywhere else.
+    if (dir === 'secrets') validateSecretDocument(parsed, relPath, secretKeysets, issues)
+    else checkNoQf1OutsideSecrets(parsed, relPath, issues)
+
     validateEnvironmentIds(config.environments, relPath, issues)
 
     validateRules(config.default.rules, relPath, 'default', config.valueType, issues, config.variants)
@@ -1051,7 +1116,13 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
       validateRules(env.rules, relPath, `environments[${env.id}]`, config.valueType, issues, config.variants)
     }
 
-    allConfigs.push({key: config.key, file: relPath})
+    allConfigs.push({
+      key: config.key,
+      type: config.type,
+      dir,
+      file: relPath,
+      legacyEncrypted: hasLegacyEncryptedRuleValue(parsed),
+    })
     parsedConfigs.push({config, dir, raw: parsed, relPath})
   }
 
@@ -1101,7 +1172,7 @@ export function validateFileMap(files: Map<string, string>, options: ValidateOpt
   detectReferenceCycles(parsedConfigs, issues)
 
   // Duplicate keys (case-insensitive — see detectDuplicateKeys).
-  detectDuplicateKeys(allConfigs, 'key', issues)
+  detectDuplicateKeys(allConfigs, 'key', issues, isTemporarySecretsDuplicate)
   detectDuplicateKeys(allSchemaFiles, 'schema key', issues)
 
   const hasErrors = issues.some((i) => i.severity === 'error')
@@ -1364,12 +1435,17 @@ export function validateKey(key: string, file: string, issues: ValidationIssue[]
 //   - all original keys byte-identical -> exact-duplicate message
 //   - they differ only by case        -> case-collision message
 // The audit found 0 such collisions today, so this is a hard error from day one.
-function detectDuplicateKeys(
-  entries: ReadonlyArray<{key: string; file: string}>,
+//
+// `isAllowedGroup` carries the ONE temporary exception (configs/ + secrets/,
+// spec 11.6): see isTemporarySecretsDuplicate in secrets.ts, removed by bead
+// qfg-8seuf.20.
+function detectDuplicateKeys<T extends {file: string; key: string}>(
+  entries: readonly T[],
   label: 'key' | 'schema key',
   issues: ValidationIssue[],
+  isAllowedGroup?: (group: readonly T[]) => boolean,
 ): number {
-  const byLowercase = new Map<string, Array<{key: string; file: string}>>()
+  const byLowercase = new Map<string, T[]>()
   for (const e of entries) {
     const lower = e.key.toLowerCase()
     const existing = byLowercase.get(lower) || []
@@ -1378,6 +1454,7 @@ function detectDuplicateKeys(
   }
   for (const group of byLowercase.values()) {
     if (group.length <= 1) continue
+    if (isAllowedGroup?.(group)) continue
     const files = group.map((g) => g.file).join(', ')
     const originalKeys = group.map((g) => g.key)
     const allIdentical = originalKeys.every((k) => k === originalKeys[0])
@@ -1772,6 +1849,7 @@ export function formatResult(result: ValidationResult): string {
   if (s.featureFlags > 0) fileCounts.push(`${s.featureFlags} feature flags`)
   if (s.segments > 0) fileCounts.push(`${s.segments} segments`)
   if (s.logLevels > 0) fileCounts.push(`${s.logLevels} log levels`)
+  if (s.secrets > 0) fileCounts.push(`${s.secrets} secrets`)
   if (s.schemas > 0) fileCounts.push(`${s.schemas} schemas`)
 
   if (fileCounts.length > 0) {

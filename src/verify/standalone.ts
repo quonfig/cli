@@ -13,7 +13,7 @@
 
 import {execFileSync, spawnSync} from 'node:child_process'
 import * as readline from 'node:readline'
-import {formatResult, validateFileMap, validateWorkspace} from './validate.js'
+import {formatResult, KNOWN_DIRS, validateFileMap, validateWorkspace} from './validate.js'
 
 async function main() {
   const args = process.argv.slice(2)
@@ -120,11 +120,14 @@ export function runHookChecks(refs: readonly RefUpdate[], opts: HookOptions): nu
     log(`qfg-verify: validating ${ref.refName} (${ref.newOid.slice(0, 8)})`)
 
     try {
-      const files = readFilesFromCommit(ref.newOid, cwd)
+      const {files, quonfigJson} = readCommitTree(ref.newOid, cwd)
       // validateValues: schema-bound JSON values must match their schema and
       // every schema must compile, same as the CLI and the app (qfg-q5f6.10,
       // plan 2026-09-25-advanced-schema-for-jev.md W1b Decision 10).
-      const result = validateFileMap(files, {validateValues: true})
+      // quonfigJson: the commit's secrets keysets (qfg-8seuf.4). Every
+      // secrets/ value in the tree is checked against them, so a push that
+      // changes only quonfig.json is still re-checked (spec 11.5).
+      const result = validateFileMap(files, {quonfigJson, validateValues: true})
       log(formatResult(result))
 
       if (!result.valid) {
@@ -281,8 +284,23 @@ main is append-only: every push must fast-forward from the current tip. What to 
  * validated dirs; validateFileMap is the layer that decides what is an error.
  */
 export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string, string> {
+  return readCommitTree(commitOid, cwd).files
+}
+
+/** The root manifest. Read for the secrets keysets only; see ValidateOptions.quonfigJson. */
+const QUONFIG_JSON = 'quonfig.json'
+
+/**
+ * Every file under the validated dirs (`files`, as readFilesFromCommit
+ * returns) plus the root `quonfig.json` when the commit has one, in the same
+ * two git processes.
+ */
+export function readCommitTree(commitOid: string, cwd?: string): {files: Map<string, string>; quonfigJson?: string} {
   const files = new Map<string, string>()
-  const dirs = ['configs', 'feature-flags', 'segments', 'log-levels', 'schemas', 'schemas-protected']
+  let quonfigJson: string | undefined
+  // KNOWN_DIRS is the validator's source of truth for content directories
+  // (includes secrets/ since qfg-8seuf.4), so the hook cannot drift from it.
+  const dirs = [...KNOWN_DIRS]
 
   // qfg-3nyi: exactly two git processes per call, whatever the tree size. One
   // `git show` per file cost ~10s on a 620-file workspace, all of it spawns.
@@ -290,11 +308,15 @@ export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string
   // List every leaf entry under the validated dirs at the given commit. A dir
   // that doesn't exist yields nothing (exit 0); a bad/unreadable OID throws —
   // fail closed, the hook rejects the push.
-  const listing = execFileSync('git', ['ls-tree', '-z', '-r', commitOid, '--', ...dirs.map((dir) => `${dir}/`)], {
-    cwd,
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
+  const listing = execFileSync(
+    'git',
+    ['ls-tree', '-z', '-r', commitOid, '--', ...dirs.map((dir) => `${dir}/`), QUONFIG_JSON],
+    {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  )
 
   // Each entry is `<mode> SP <type> SP <oid> TAB <path>`.
   const entries = listing
@@ -313,7 +335,7 @@ export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string
     if (type !== 'blob') throw new Error(`cannot read ${filePath}: tree entry is a ${type}, not a file`)
   }
 
-  if (entries.length === 0) return files
+  if (entries.length === 0) return {files}
 
   const output = execFileSync('git', ['cat-file', '--batch'], {
     cwd,
@@ -337,11 +359,13 @@ export function readFilesFromCommit(commitOid: string, cwd?: string): Map<string
 
     const start = headerEnd + 1
     const end = start + Number(size)
-    files.set(filePath, output.subarray(start, end).toString('utf8'))
+    const content = output.subarray(start, end).toString('utf8')
+    if (filePath === QUONFIG_JSON) quonfigJson = content
+    else files.set(filePath, content)
     offset = end + 1
   }
 
-  return files
+  return {files, quonfigJson}
 }
 
 // Only run as a program when compiled/executed as the entry point (Bun sets
