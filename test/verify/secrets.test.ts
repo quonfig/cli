@@ -1016,7 +1016,7 @@ describe('verify: parseQf1Keyless split (qfg-mol-hle)', () => {
       flag: m[2].slice(2),
       id: m[1],
     }))
-    expect(named.map((n) => n.id)).to.deep.equal(['create', 'set-default'])
+    expect(named.map((n) => n.id)).to.deep.equal(['set-default', 'create'])
     const {Config} = await import('@oclif/core')
     const config = await Config.load({root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')})
     for (const {flag, id} of named) {

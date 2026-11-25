@@ -16,7 +16,13 @@ import {Qf1Error} from './qf1.js'
 import {SecretDocumentError} from './secret-doc.js'
 import {SecretRefusal} from './secret-write-flow.js'
 import {localKeysetStatus} from './workspace-keysets.js'
-import {defaultSnapshotDeps, openWorkspaceSnapshot, type WorkspaceSnapshot} from './workspace-snapshot.js'
+import {
+  type SnapshotDeps,
+  SnapshotPathError,
+  type WorkspaceSnapshot,
+  defaultSnapshotDeps,
+  openWorkspaceSnapshot,
+} from './workspace-snapshot.js'
 import {SecretWriteError, pushWorkspaceFiles} from './write-secret.js'
 
 /** The docs page that lists the backend SDK versions that read secrets (spec 13.4, decision 26). */
@@ -60,7 +66,8 @@ export function readabilityNote(
     case 'holds-other-keys':
       return `This machine has ${choice.keyset} but not key ${choice.fingerprint}, so it cannot read this value. ${expected}`
     case 'invalid':
-      return `${choice.keyset} on this machine is unreadable${local.entry === undefined ? '' : ` (entry ${local.entry})`}, so it cannot read this value. ${expected}`
+      // A malformed env var is a problem to fix, not the expected state.
+      return `${choice.keyset} on this machine is malformed${local.entry === undefined ? '' : ` (entry ${local.entry})`}, so this machine cannot read this value; fix or remove it (writing needs no private key).`
     default:
       return `This machine cannot read ${choice.keyset} values (no ${choice.keyset} here). ${expected}`
   }
@@ -83,6 +90,11 @@ export class SecretCommandError extends Error {
   }
 }
 
+const cannotRead = (why: string) =>
+  new SecretCommandError(
+    `could not read the workspace's default access tier for new items (${why}); nothing was written`,
+  )
+
 /**
  * The access tier a NEW item gets in this workspace: app-quonfig's
  * `environments.getDefaultCreateAccess` (readable by any member; null means
@@ -90,17 +102,26 @@ export class SecretCommandError extends Error {
  * create does: a secret is never created at a guessed tier.
  */
 export async function defaultCreateAccess(command: APICommand): Promise<string> {
-  const request = await command.apiClient.post('/api/v1/environments/getDefaultCreateAccess', {
-    workspaceId: command.workspaceId,
-  })
-  if (!request.ok) {
-    throw new SecretCommandError(
-      `could not read the workspace's default access tier for new items (HTTP ${request.status}); nothing was written`,
-    )
+  if (!command.workspaceId) throw cannotRead('no target workspace')
+  let request: Awaited<ReturnType<APICommand['apiClient']['post']>>
+  try {
+    request = await command.apiClient.post('/api/v1/environments/getDefaultCreateAccess', {
+      workspaceId: command.workspaceId,
+    })
+  } catch {
+    throw cannotRead('the request failed')
   }
 
-  const tier = (request.json as {defaultCreateAccess?: unknown} | undefined)?.defaultCreateAccess
-  if (tier === null || tier === undefined) return 'standard'
+  if (!request.ok) throw cannotRead(`HTTP ${request.status}`)
+  // Only an explicit null means "unset" (= standard). A body without the
+  // member, or that is not an object, is not an answer.
+  const body = request.json as unknown
+  if (typeof body !== 'object' || body === null || Array.isArray(body) || !Object.hasOwn(body, 'defaultCreateAccess')) {
+    throw cannotRead('the server returned no tier')
+  }
+
+  const tier = (body as {defaultCreateAccess: unknown}).defaultCreateAccess
+  if (tier === null) return 'standard'
   if (typeof tier !== 'string' || !ACCESS_TIERS.has(tier)) {
     throw new SecretCommandError(
       'the server returned an access tier this qfg does not know for new items; nothing was written. Update qfg.',
@@ -114,9 +135,14 @@ export async function defaultCreateAccess(command: APICommand): Promise<string> 
 export async function openCommandSnapshot(
   command: APICommand,
   workspace: string | undefined,
+  deps?: SnapshotDeps,
 ): Promise<{orgSlug: string; snapshot: WorkspaceSnapshot; workspaceId: string}> {
-  const opened = await openWorkspaceSnapshot(workspace, await defaultSnapshotDeps(command))
-  if (command.workspaceId && opened.workspaceId !== command.workspaceId) {
+  if (!command.workspaceId) {
+    throw new SecretCommandError('the target workspace is not known, so it cannot be snapshotted; nothing was written')
+  }
+
+  const opened = await openWorkspaceSnapshot(workspace, deps ?? (await defaultSnapshotDeps(command)))
+  if (opened.workspaceId !== command.workspaceId) {
     await opened.snapshot.cleanup()
     throw new SecretCommandError(
       `the workspace snapshot is of ${opened.workspaceId}, not the target workspace ${command.workspaceId}; nothing was written`,
@@ -136,7 +162,8 @@ export function writeErrorMessage(error: SecretWriteError): string {
     )
   }
 
-  if (error.code === 'denied') {
+  // Only a denial that names the secret's path is a permission problem with it.
+  if (error.code === 'denied' && (error.denials?.length ?? 0) > 0) {
     return `you do not have permission to write this secret; nothing was written. ${error.message}`
   }
 
@@ -155,7 +182,8 @@ export function knownSecretFailure(error: unknown): string | undefined {
     error instanceof SecretCommandError ||
     error instanceof KeysetChoiceError ||
     error instanceof SecretDocumentError ||
-    error instanceof Qf1Error
+    error instanceof Qf1Error ||
+    error instanceof SnapshotPathError
   ) {
     return error.message
   }

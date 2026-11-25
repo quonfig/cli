@@ -210,6 +210,65 @@ describe('secret write planning (qfg-mol-hle PR 3)', function () {
     })
   })
 
+  describe('fix round of the PR 3a validation (qfg-mol-hle)', () => {
+    const base = {access: 'standard', interactive: false, key: 'stripe.key', plaintext: PLAINTEXT}
+
+    it('N10: refuses when quonfig.json secrets have problems (duplicate fingerprints, unknown member)', async () => {
+      for (const manifest of [
+        quonfigJson({QUONFIG_KEYSET: {publicKeys: [main.publicEntry, main.publicEntry]}}),
+        quonfigJson({QUONFIG_KEYSET: {extra: true, publicKeys: [main.publicEntry]}}),
+      ]) {
+        const snap = await snapshotOf({'quonfig.json': manifest})
+        const err = (await refusal(planSecretCreate({...base, snapshot: snap}))) as SecretRefusal
+        expect(err).to.be.instanceOf(SecretRefusal)
+        expect(err.code).to.equal('keysets_invalid')
+        expect(err.message).to.match(
+          /^quonfig.json secrets cannot be used, so no secret can be written:\n {2}quonfig.json: /,
+        )
+      }
+    })
+
+    it('an unparseable quonfig.json is reported as such, not as "no keysets", and its content is never shown', async () => {
+      const snap = await snapshotOf({'quonfig.json': '{"workspace": "SENTINEL-CONTENT", oops'})
+      const err = await refusal(planSecretCreate({...base, snapshot: snap}))
+      expect(err.message).to.include('quonfig.json is not valid JSON')
+      expect(err.message).to.not.include('SENTINEL-CONTENT')
+      expect(err.message).to.not.include('no keysets')
+    })
+
+    it('N11: an old-format value only inside an environment rule is detected', async () => {
+      const doc = JSON.parse(oldFormatConfig('env.only'))
+      doc.environments = [{id: 'production', rules: [{criteria: always, value: doc.default.rules[0].value}]}]
+      doc.default.rules[0].value = {type: 'string', value: 'plain'}
+      const snap = await snapshotOf({'configs/env.only.json': JSON.stringify(doc), 'quonfig.json': ONE_KEYSET})
+      const err = (await refusal(
+        planSecretUpdate({
+          interactive: false,
+          key: 'env.only',
+          plaintext: PLAINTEXT,
+          replaceTargeting: false,
+          snapshot: snap,
+        }),
+      )) as SecretRefusal
+      expect(err.code).to.equal('old_format')
+    })
+
+    it('N11: an update never reports firstSecret', async () => {
+      const snap = await snapshotOf({
+        'quonfig.json': TWO_KEYSETS,
+        'secrets/db.password.json': existingSecret('db.password'),
+      })
+      const plan = await planSecretUpdate({
+        interactive: false,
+        key: 'db.password',
+        plaintext: PLAINTEXT,
+        replaceTargeting: false,
+        snapshot: snap,
+      })
+      expect(plan.firstSecret).to.equal(false)
+    })
+  })
+
   describe('update', () => {
     const files = () => ({
       'quonfig.json': TWO_KEYSETS,
