@@ -11,17 +11,35 @@ import {
 import {APICommand} from '../index.js'
 import type {ConfigValue} from '@quonfig/node'
 import {JsonObj} from '../result.js'
+import {
+  SECRET_KEY_NAME_ERROR,
+  SecretCommandError,
+  VALUE_ARGV_WARNING,
+  defaultCreateAccess,
+  firstSecretNotice,
+  jsonValue,
+  cleanupQuietly,
+  knownSecretFailure,
+  mirrorSecretToDisk,
+  openCommandSnapshot,
+  pushPlan,
+  readabilityNote,
+} from '../secrets/secret-command.js'
+import {planSecretCreate} from '../secrets/secret-write-flow.js'
+import getKeyset from '../ui/get-keyset.js'
 import getValue from '../ui/get-value.js'
 import {TYPE_MAPPING, coerceBool, coerceIntoType} from '../util/coerce.js'
 import {checkmark} from '../util/color.js'
 import {mapConfigValueToDto, mapValueTypeToString} from '../util/config-value-dto.js'
-import {makeConfidentialValue} from '../util/encryption.js'
+import {redactToken} from '../util/git-ops.js'
+import isInteractive from '../util/is-interactive.js'
 import {EntitySubdir, writeStoredConfigToWorkspace} from '../util/local-config-writer.js'
 import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.js'
 import {policyAKeyError} from '../util/policy-a-key.js'
 import {RedactedSummary, redactedDisplay, redactedSummary, scrubConfidentialValues} from '../util/redact.js'
-import secretFlags, {parsedSecretFlags} from '../util/secret-flags.js'
-import {resolveValueSource, valueSourceFlags} from '../util/value-source.js'
+import {notice} from '../util/stderr-notice.js'
+import secretFlags, {SECRET_KEY_NAME_NOTE, parsedSecretFlags} from '../util/secret-flags.js'
+import {INVALID_UTF8_INPUT, resolveValueSource, valueSourceFlags} from '../util/value-source.js'
 
 export default class Create extends APICommand {
   static args = {
@@ -41,10 +59,14 @@ Use --type to specify the kind of item:
   duration      An ISO 8601 duration string, e.g. PT30S, PT5M, PT1H30M (SDK returns milliseconds)
   log_level     A dynamic log level (value must be one of ${LOG_LEVELS.join('/')})
 
-Secrets (--secret) are encrypted client-side and are STRING-ONLY: --secret
-implies --type string, so you can leave --type off. To store a JSON secret, store the JSON as a string secret and
+Secrets (--secret) are encrypted on this machine to one of the workspace's
+keysets (quonfig.json secrets.keysets) and stored in secrets/<key>.json. Writing
+needs no private key. With several keysets, pick one with --keyset (or at the
+prompt). Secrets are STRING-ONLY: --secret implies --type string, so you can
+leave --type off. To store a JSON secret, store the JSON as a string secret and
 JSON.parse it in your app. The CLI never prints a secret's plaintext: it shows
-a redacted fingerprint like [encrypted *****3fa9c, 51 chars, ends …a1b2].
+the keyset, its key fingerprint and a redacted summary like
+[encrypted *****3fa9c, 51 chars, ends …a1b2].
 
 Keep the value out of argv / shell history / agent transcripts with:
   --value-stdin             read the value from stdin
@@ -83,6 +105,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     '# Create a secret without the value ever appearing in argv (--secret implies --type string):',
     'pbpaste | <%= config.bin %> <%= command.id %> stripe.api-key --secret --value-stdin',
     '<%= config.bin %> <%= command.id %> stripe.api-key --secret --value-from-env STRIPE_API_KEY',
+    '<%= config.bin %> <%= command.id %> stripe.api-key --secret --keyset QUONFIG_KEYSET_PROD --value-stdin < key.txt',
     '# A JSON secret is a string secret holding JSON (JSON.parse it in your app):',
     '<%= config.bin %> <%= command.id %> gcp.service-account --secret --value-stdin < sa.json',
     '<%= config.bin %> <%= command.id %> my.new.string --type string --env-var=MY_ENV_VAR_NAME',
@@ -104,7 +127,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'duration', 'log_level'],
     }),
     value: Flags.string({
-      description: 'default value for your new item (for secrets prefer --value-stdin / --value-from-env)',
+      description:
+        "default value for your new item (for secrets prefer --value-stdin / --value-from-env). An empty value is allowed with --value=''",
       required: false,
     }),
     ...valueSourceFlags,
@@ -143,6 +167,18 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       )
     }
 
+    // Plan Q4: --secret-key-name named an old-format key config; a qf1 secret
+    // is encrypted to a keyset instead, so it is an error, not silently ignored.
+    if (secret.selected && secret.keyNameGiven) {
+      return this.err(SECRET_KEY_NAME_ERROR, {key: args.name, phase: 'validation'})
+    }
+
+    if (secret.keyNameGiven && !secret.selected) notice(SECRET_KEY_NAME_NOTE)
+
+    if (secret.keyset !== undefined && !secret.selected) {
+      return this.err('--keyset applies only to secrets: add --secret', {key: args.name, phase: 'validation'})
+    }
+
     // qfg-38lp: secrets are string-only, so --secret implies --type string.
     const type = flags.type ?? (secret.selected ? 'string' : undefined)
     if (type === undefined) {
@@ -172,15 +208,27 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
     // qfg-38lp: --value / --value-stdin / --value-from-env all resolve here.
     // (log_level rejects --env-var itself, with a more specific message.)
-    const valueSource = await resolveValueSource({
-      ...flags,
-      'env-var': type === 'log_level' ? undefined : flags['env-var'],
-    })
+    let invalidUtf8 = false
+    const valueSource = await resolveValueSource(
+      {
+        ...flags,
+        'env-var': type === 'log_level' ? undefined : flags['env-var'],
+      },
+      {
+        onInvalidUtf8() {
+          invalidUtf8 = true
+        },
+      },
+    )
     if (!valueSource.ok) {
       return this.err(valueSource.error ? valueSource.message : 'No value provided', {key: args.name, phase: 'input'})
     }
 
     const providedValue = valueSource.value
+    // Spec decision 39: a secret is never stored with replaced characters.
+    if (secret.selected && invalidUtf8) return this.err(INVALID_UTF8_INPUT, {key: args.name, phase: 'input'})
+    // Plan Q3: --value still works with --secret, with a warning.
+    if (secret.selected && flags.value !== undefined) notice(VALUE_ARGV_WARNING)
 
     if (type === 'boolean-flag') {
       return this.createBooleanFlag(args, providedValue, proposeOptions)
@@ -244,17 +292,11 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
         configValue = parsedConfigValue[0]
         valueType = parsedConfigValue[1]
 
-        if (secret.selected) {
-          const confidentialValueResult = await makeConfidentialValue(this, rawValue, secret, '')
+        // A secret is a qf1 document in secrets/, written through the
+        // workspace push route; never configs/create, never decryptWith.
+        if (secret.selected) return this.createSecret(key, rawValue, {...flags, keyset: secret.keyset})
 
-          if (!confidentialValueResult.ok) {
-            this.resultMessage(confidentialValueResult)
-            return
-          }
-
-          configValue = confidentialValueResult.value
-          redacted = redactedSummary({ciphertext: String(confidentialValueResult.value.value), plaintext: rawValue})
-        } else if (flags.confidential) {
+        if (flags.confidential) {
           redacted = redactedSummary({plaintext: rawValue})
         }
       } else if (valueInput.error) {
@@ -430,7 +472,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       'env-var'?: string
       interactive?: boolean
       secret: boolean
-      'secret-key-name': string
+      keyset?: string
+      'secret-key-name'?: string
       value?: string
       'value-from-env'?: string
       'value-stdin'?: boolean
@@ -579,6 +622,80 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
   }
 
   /**
+   * `qfg create <key> --secret` (plan 3.1): a new `secrets/<key>.json`, the
+   * value encrypted to the chosen keyset's first public key, at the
+   * workspace's default access tier, in one commit locked to a fresh
+   * snapshot. Nothing about the plaintext but the redacted summary is shown.
+   */
+  private async createSecret(
+    key: string,
+    plaintext: string,
+    flags: {interactive?: boolean; keyset?: string; profile?: string; workspace?: string},
+  ): Promise<JsonObj | void> {
+    const fail = (message: string) => this.err(`Failed to create secret: ${message}`, {key, phase: 'creation'})
+    let outcome: {error: string} | {json: JsonObj; notices: string[]; line: string}
+    let access: string
+    try {
+      access = await defaultCreateAccess(this)
+    } catch (error) {
+      return fail(secretFailure(error))
+    }
+
+    let target: Awaited<ReturnType<typeof openCommandSnapshot>>
+    try {
+      target = await openCommandSnapshot(this, flags.workspace ?? flags.profile)
+    } catch (error) {
+      const why =
+        error instanceof SecretCommandError
+          ? error.message
+          : redactToken(error instanceof Error ? error.message : String(error))
+      return fail(`could not read the workspace to write the secret: ${why}`)
+    }
+
+    try {
+      const plan = await planSecretCreate({
+        access,
+        env: process.env,
+        flagKeyset: flags.keyset,
+        interactive: isInteractive(flags),
+        key,
+        plaintext,
+        prompt: (options) => getKeyset(options),
+        snapshot: target.snapshot,
+      })
+      const commitSha = await pushPlan(plan, target)
+      await mirrorSecretToDisk(this, key, (plan.files[0] as {afterJson: string}).afterJson, 'Create')
+      const label = this.workspaceLabel ?? 'this workspace'
+      const notices = [
+        plan.firstSecret ? firstSecretNotice(label) : '',
+        readabilityNote(plan.choice, process.env) ?? '',
+      ]
+      outcome = {
+        json: {
+          commitSha,
+          ...(plan.firstSecret ? {firstSecretInWorkspace: true} : {}),
+          key,
+          keysetSource: plan.choice.source,
+          path: plan.path,
+          scope: 'default',
+          value: jsonValue(plan),
+        },
+        line: `${checkmark} Created secret: ${key} on ${plan.choice.keyset} (key ${plan.choice.fingerprint}) ${redactedDisplay(plan.redacted)}${this.targetSuffix()}`,
+        notices: notices.filter(Boolean),
+      }
+    } catch (error) {
+      outcome = {error: secretFailure(error)}
+    } finally {
+      await cleanupQuietly(this, target.snapshot)
+    }
+
+    if ('error' in outcome) return fail(outcome.error)
+    this.log(outcome.line)
+    for (const text of outcome.notices) notice(text)
+    return outcome.json
+  }
+
+  /**
    * Mirror the server-side create to disk under QUONFIG_DIR so the user can
    * `qfg verify` (or just open the JSON) without a follow-up `qfg pull`.
    * Best-effort — server already created the flag, so we never let local-disk
@@ -611,4 +728,11 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
   private targetSuffix(): string {
     return this.workspaceLabel ? ` in ${this.workspaceLabel}` : ''
   }
+}
+
+/** The text for a known secret-write failure; anything else is rethrown. */
+function secretFailure(error: unknown): string {
+  const known = knownSecretFailure(error)
+  if (known === undefined) throw error
+  return known
 }

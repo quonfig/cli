@@ -25,10 +25,6 @@ import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 const SERVER_TOO_OLD =
   'The server did not open a change request (it may be older than this CLI). Nothing is proposed and nothing went live.'
 
-// The FAKE 64-hex test key test/commands/set-default.test.ts uses; the
-// robocop-secret fixture's ciphertext was encrypted with it.
-const TEST_ENCRYPTION_KEY = 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221'
-
 const crUrl = (n: number) => `${getAppUrl()}/workspaces/${PROPOSE_WS}/change-requests/${n}`
 
 const SIMPLE_FLAG_AFTER = {
@@ -49,7 +45,8 @@ const forbidden = (path: string, message: string) => () =>
 describe('--propose on update commands (qfg-5bjew.37)', () => {
   before(() => {
     setupTestAuth()
-    server.listen()
+    // A request with no handler fails instead of reaching a real server.
+    server.listen({onUnhandledRequest: 'error'})
   })
   beforeEach(() => {
     flagsUpdateCapture.body = null
@@ -176,26 +173,22 @@ describe('--propose on update commands (qfg-5bjew.37)', () => {
       })
       .it('--title without --propose is refused')
 
-    // Rule 3.4: a secret keeps encrypting locally, so the proposal carries
-    // ciphertext with decryptWith and the plaintext never leaves the machine.
+    // An old-format (decryptWith) secret is never written again, proposed
+    // or not (qfg-mol-hle, plan Q6, Q7): refused before anything is sent.
     test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: TEST_ENCRYPTION_KEY})
       .add('handlers', () => server.use(...proposeHandlers()))
       .stdout()
       .stderr()
       .command(['set-default', 'robocop-secret', '--environment=Staging', '--value=hunter2', '--propose', '--json'])
-      .it('--propose on an encrypted config sends ciphertext, never the plaintext', (ctx) => {
-        expect(proposeCaptured.propose).to.have.length(1)
-        const change = proposeCaptured.propose[0].changes[0]
-        expect(change.op).to.equal('set_document')
-        const env = change.document.environments.find((e: {id: string}) => e.id === 'Staging')
-        const {value} = env.rules.at(-1)
-        expect(value.decryptWith).to.be.a('string').and.not.equal('')
-        expect(value.value).to.be.a('string').and.not.equal('hunter2')
-        expect(JSON.stringify(proposeCaptured.propose)).to.not.contain('hunter2')
-        expect(ctx.stdout).to.not.contain('hunter2')
-        expect(ctx.stderr).to.not.contain('hunter2')
-        expect(JSON.parse(ctx.stdout).proposed).to.equal(true)
+      .catch((error) => {
+        expect(error.message).to.equal(
+          'robocop-secret holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).',
+        )
+        expect(proposeCaptured.propose).to.have.length(0)
+        expect(error.message).to.not.contain('hunter2')
+      })
+      .it('--propose on an old-format encrypted config is refused and nothing is proposed', (ctx) => {
+        expect(ctx.stdout + ctx.stderr).to.not.contain('hunter2')
       })
   })
 
@@ -365,18 +358,17 @@ describe('--propose on update commands (qfg-5bjew.37)', () => {
       })
 
     test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: TEST_ENCRYPTION_KEY})
       .add('forbidden', forbidden('configs/update', MESSAGE))
       .stdout()
       .stderr()
       .command(['set-default', 'robocop-secret', '--environment=Staging', '--value=hunter2', '--confirm'])
       .catch((error) => {
         expect(error.message).to.not.contain('hunter2')
-        expect(error.message).to.contain(
-          'qfg set-default robocop-secret --environment=Staging --value=<value> --confirm --propose',
+        expect(error.message).to.equal(
+          'robocop-secret holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).',
         )
       })
-      .it('set-default never echoes a secret value in the hint')
+      .it('set-default on an old-format secret is refused, never echoing the value (no propose hint for it)')
 
     test
       .add('forbidden', forbidden('flags/update', MESSAGE))

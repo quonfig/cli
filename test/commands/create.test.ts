@@ -5,7 +5,6 @@ import {Readable} from 'node:stream'
 
 import {expect, test} from '@oclif/test'
 
-import {decrypt} from '../../src/util/encryption.js'
 import {resetClientCache} from '../../src/util/get-client.js'
 import * as createResponses from '../responses/create.js'
 import {server} from '../responses/create.js'
@@ -26,7 +25,8 @@ const restoreStdin = () => {
 describe('create', () => {
   before(() => {
     setupTestAuth()
-    server.listen()
+    // A request with no handler fails instead of reaching a real server.
+    server.listen({onUnhandledRequest: 'error'})
   })
   afterEach(() => {
     server.resetHandlers()
@@ -618,40 +618,14 @@ describe('create', () => {
   // qfg-38lp: no create path may print a secret's plaintext, and the value
   // can be supplied without ever entering argv (stdin / local env var).
   describe('secret ergonomics (qfg-38lp)', () => {
-    const KEY = 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221'
     const PLAINTEXT = 'sk_live_FAKE_create_0123456789'
 
     afterEach(() => {
       delete process.env.QFG38_FAKE_SRC
     })
 
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .stdout()
-      .stderr()
-      .command(['create', 'brand.new.secret', '--type=string', `--value=${PLAINTEXT}`, '--secret'])
-      .it('create --secret never prints the plaintext and shows the redacted fingerprint', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        expect(ctx.stdout).to.match(
-          /Created config: brand\.new\.secret \[encrypted \*{5}[\da-f]{5}, 30 chars, ends …6789]/,
-        )
-      })
-
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .stdout()
-      .stderr()
-      .command(['create', 'brand.new.secret', '--type=string', `--value=${PLAINTEXT}`, '--secret', '--json'])
-      .it('create --secret --json carries a redacted summary instead of the value', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        const parsed = JSON.parse(ctx.stdout)
-        expect(parsed.key).to.equal('brand.new.secret')
-        expect(parsed.value.redacted).to.equal(true)
-        expect(parsed.value.fingerprint).to.match(/^\*{5}[\da-f]{5}$/)
-        expect(parsed.value.length).to.equal(PLAINTEXT.length)
-        expect(parsed.value.last4).to.equal('6789')
-      })
-
+    // The qf1 --secret write path (text, --json, --value-stdin,
+    // --value-from-env) is covered by create-secret.test.ts (qfg-mol-hle).
     test
       .stdout()
       .stderr()
@@ -669,37 +643,12 @@ describe('create', () => {
       })
 
     test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .do(() => setStdin(`${PLAINTEXT}\n`))
-      .finally(restoreStdin)
-      .stdout()
-      .stderr()
-      .command(['create', 'brand.new.secret', '--type=string', '--value-stdin', '--secret'])
-      .it('--value-stdin reads the value from stdin (one trailing newline stripped) and encrypts it', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        const dv = createResponses.capturedCreateConfigInput.config.defaultValue
-        expect(dv.decryptWith).to.equal('quonfig.secrets.encryption.key')
-        expect(decrypt(dv.value, KEY)).to.equal(PLAINTEXT)
-      })
-
-    test
       .do(() => setStdin('plain from stdin\n\n'))
       .finally(restoreStdin)
       .stdout()
       .command(['create', 'brand.new.string', '--type=string', '--value-stdin'])
       .it('--value-stdin strips exactly ONE trailing newline', () => {
         expect(createResponses.capturedCreateConfigInput.config.defaultValue.value).to.equal('plain from stdin\n')
-      })
-
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY, QFG38_FAKE_SRC: PLAINTEXT})
-      .stdout()
-      .stderr()
-      .command(['create', 'brand.new.secret', '--type=string', '--value-from-env=QFG38_FAKE_SRC', '--secret'])
-      .it('--value-from-env reads the value from a local env var and encrypts it', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        const dv = createResponses.capturedCreateConfigInput.config.defaultValue
-        expect(decrypt(dv.value, KEY)).to.equal(PLAINTEXT)
       })
 
     test
@@ -751,73 +700,6 @@ describe('create', () => {
   })
 
   describe('secret', () => {
-    describe('when encryption key does not exist in metadata', () => {
-      test
-        .command([
-          'create',
-          'brand.new.string',
-          '--type=string',
-          '--value=hello.world',
-          '--secret',
-          '--secret-key-name=missing.secret.key',
-        ])
-        .catch((error) => {
-          expect(error.message).to.contain(
-            `Failed to create secret: encryption key 'missing.secret.key' does not exist. Please create it first or use --secret-key-name to specify a different key.`,
-          )
-        })
-        .it('checks metadata and returns helpful error', () => {
-          // Error assertion done in catch block
-        })
-    })
-
-    describe('type=string', () => {
-      test
-        .env({
-          QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
-        })
-        .stdout()
-        .command(['create', 'brand.new.secret', '--type=string', '--value=hello.world', '--secret'])
-        .it('can create a string', (ctx) => {
-          expect(ctx.stdout).to.contain(`Created config: brand.new.secret`)
-        })
-    })
-
-    describe('with literal encryption key value', () => {
-      test
-        .stdout()
-        .command([
-          'create',
-          'secret.with.literal.key',
-          '--type=string',
-          '--value=hello.world',
-          '--secret',
-          '--secret-key-name=literal.encryption.key',
-        ])
-        .it('can create a secret using literal encryption key', (ctx) => {
-          expect(ctx.stdout).to.contain(`Created config: secret.with.literal.key`)
-        })
-    })
-
-    describe('with new format encryption key (type: provided)', () => {
-      test
-        .env({
-          QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        })
-        .stdout()
-        .command([
-          'create',
-          'secret.with.new.format.key',
-          '--type=string',
-          '--value=hello.world',
-          '--secret',
-          '--secret-key-name=new.format.encryption.key',
-        ])
-        .it('can create a secret using new format encryption key', (ctx) => {
-          expect(ctx.stdout).to.contain(`Created config: secret.with.new.format.key`)
-        })
-    })
-
     describe('type=NOT_STRING', () => {
       test
         .stderr()
@@ -934,20 +816,9 @@ describe('create', () => {
 
   // qfg-38lp fix pass: leaks / gaps the QA leak matrix and newcomer testers found.
   describe('secret leak fixes (qfg-38lp QA)', () => {
-    const KEY = 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221'
     const PLAINTEXT = 'sk_live_FAKE_createqa_0123456789'
 
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .stdout()
-      .stderr()
-      .command(['create', 'brand.new.secret', '--secret', `--value=${PLAINTEXT}`])
-      .it('create --secret without --type defaults to a string secret', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        expect(ctx.stdout).to.contain('Created config: brand.new.secret [encrypted')
-        expect(createResponses.capturedCreateConfigInput.config.valueType).to.equal('string')
-      })
-
+    // create --secret without --type: create-secret.test.ts (qfg-mol-hle).
     test
       .command(['create', 'brand.new.string', '--value=hello'])
       .catch((error) => {
@@ -1001,7 +872,6 @@ describe('create', () => {
       })
 
     test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
       .stdout()
       .stderr()
       .command(['create', 'brand.new.secret', 'sk_live_FAKE_POSITIONAL_42', '--type=string', '--secret'])

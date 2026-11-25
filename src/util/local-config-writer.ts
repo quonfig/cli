@@ -9,7 +9,7 @@ import {addAndCommitFile, isGitRepo} from './git-ops.js'
  * `app-quonfig/src/lib/orpc/routes/{flags,configs,log-levels}.ts`). Keep these
  * in lock-step or `qfg pull` and `qfg create` will disagree on file paths.
  */
-export type EntitySubdir = 'feature-flags' | 'configs' | 'log-levels'
+export type EntitySubdir = 'configs' | 'feature-flags' | 'log-levels' | 'secrets'
 
 export interface WriteResult {
   /** True when the file was committed to local git too. */
@@ -47,6 +47,8 @@ export const writeStoredConfigToWorkspace = async (opts: {
   subdir: EntitySubdir
   key: string
   storedConfig: Record<string, unknown>
+  /** The local commit message's verb (default Create). */
+  verb?: 'Create' | 'Update'
   /** Override QUONFIG_DIR for testing. */
   quonfigDir?: string
 }): Promise<WriteResult | null> => {
@@ -78,9 +80,15 @@ export const writeStoredConfigToWorkspace = async (opts: {
   // "untracked file would be overwritten" trap.)
   if (await isGitRepo(resolvedDir)) {
     const relPath = path.relative(resolvedDir, filePath)
-    const entityLabel = opts.subdir === 'feature-flags' ? 'flag' : opts.subdir === 'log-levels' ? 'log level' : 'config'
+    const entityLabel = {configs: 'config', 'feature-flags': 'flag', 'log-levels': 'log level', secrets: 'secret'}[
+      opts.subdir
+    ]
     try {
-      const committed = await addAndCommitFile(resolvedDir, relPath, `Create ${entityLabel}: ${opts.key}`)
+      const committed = await addAndCommitFile(
+        resolvedDir,
+        relPath,
+        `${opts.verb ?? 'Create'} ${entityLabel}: ${opts.key}`,
+      )
       return {filePath, committed}
     } catch (error) {
       return {filePath, committed: false, skippedCommitReason: String(error)}

@@ -66,4 +66,11 @@ describe('redact helper (qfg-38lp)', () => {
     // ciphertext is not plaintext; it stays
     expect(scrubbed).to.contain('a--b--c')
   })
+
+  it('last4 is the last four characters (code points), with control characters escaped (qfg-mol-hle N6)', () => {
+    expect(redactedSummary({plaintext: 'abcdefghij-line\n'}).last4).to.equal('ine\\u000a')
+    expect(redactedSummary({plaintext: 'abcdefghijkl-\u{1F511}'}).last4).to.equal('kl-\u{1F511}')
+    // eslint-disable-next-line no-control-regex
+    expect(redactedDisplay(redactedSummary({plaintext: 'abcdefghijkl\u0007\u001B[2J'}))).to.not.match(/[\u0000-\u001F]/)
+  })
 })

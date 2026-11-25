@@ -16,24 +16,41 @@ import getString from '../ui/get-string.js'
 export const valueSourceFlags = {
   'value-from-env': Flags.string({
     description:
-      'read the value to store from this LOCAL env var now (keeps it out of argv/shell history). Not the same as --env-var',
+      'read the value to store from this LOCAL env var now (keeps it out of argv/shell history; an empty variable is refused). Not the same as --env-var',
     helpValue: 'VAR',
   }),
   'value-stdin': Flags.boolean({
     default: false,
-    description: 'read the value to store from stdin (one trailing newline is stripped). Keeps it out of argv',
+    description:
+      'read the value to store from stdin (one trailing newline is stripped; empty input is refused; a secret must be UTF-8). Keeps it out of argv',
   }),
 }
 
-/** Read all of stdin (tests swap `process.stdin` for a Readable). */
-const readStdin = async (): Promise<string> => {
+/**
+ * Read all of stdin (tests swap `process.stdin` for a Readable). Decoded
+ * leniently, as before (invalid bytes become U+FFFD), but `onInvalidUtf8` is
+ * called when the bytes are not well-formed UTF-8, so a secret write can
+ * refuse them instead (spec decision 39: a writer rejects, never replaces).
+ */
+const readStdin = async (onInvalidUtf8?: () => void): Promise<string> => {
   const chunks: Buffer[] = []
   for await (const chunk of process.stdin) {
     chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer))
   }
 
-  return Buffer.concat(chunks).toString('utf8')
+  const bytes = Buffer.concat(chunks)
+  try {
+    // ignoreBOM: a leading U+FEFF is part of the value and is kept.
+    return new TextDecoder('utf8', {fatal: true, ignoreBOM: true}).decode(bytes)
+  } catch {
+    onInvalidUtf8?.()
+    return bytes.toString('utf8')
+  }
 }
+
+/** The refusal for a secret whose stdin bytes are not UTF-8. Never echoes the bytes. */
+export const INVALID_UTF8_INPUT =
+  '--value-stdin: the input is not valid UTF-8. A secret is stored exactly as given, so nothing was written; convert the input to UTF-8 first.'
 
 type ValueSourceInput = {
   'env-var'?: string
@@ -54,7 +71,10 @@ export const stripOneTrailingNewline = (s: string): string => {
  * that at most one of those (or --env-var) is given. Returns `undefined` when
  * none was given (the caller may then prompt or use --env-var).
  */
-export const resolveValueSource = async (flags: ValueSourceInput): Promise<Result<string | undefined>> => {
+export const resolveValueSource = async (
+  flags: ValueSourceInput,
+  options: {onInvalidUtf8?: () => void} = {},
+): Promise<Result<string | undefined>> => {
   const given = [
     flags.value === undefined ? undefined : '--value',
     flags['value-stdin'] ? '--value-stdin' : undefined,
@@ -74,7 +94,7 @@ export const resolveValueSource = async (flags: ValueSourceInput): Promise<Resul
     // hidden prompt instead (one line, nothing echoed).
     const value = process.stdin.isTTY
       ? ((await getString({allowBlank: true, mask: true, message: 'Value (input is hidden)'})) ?? '')
-      : stripOneTrailingNewline(await readStdin())
+      : stripOneTrailingNewline(await readStdin(options.onInvalidUtf8))
     if (value === '') {
       return failure(
         '--value-stdin read an empty value from stdin. Pipe the value in, e.g. `pbpaste | qfg ... --value-stdin`.',
