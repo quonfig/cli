@@ -159,7 +159,6 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
         fingerprint: prodKey.fingerprint,
         key: 'db.password',
         keyset: 'QUONFIG_KEYSET_PROD',
-        scope: 'production',
         verb: 'set',
       }),
     )
@@ -172,9 +171,7 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
         path: 'secrets/db.password.json',
       },
     ])
-    expect(sent.message).to.equal(
-      `qfg: set secret db.password (production) on QUONFIG_KEYSET_PROD ${prodKey.fingerprint}`,
-    )
+    expect(sent.message).to.equal(`qfg: set secret db.password on QUONFIG_KEYSET_PROD ${prodKey.fingerprint}`)
   })
 
   it('a delete sends the snapshot content as beforeJson', async () => {
@@ -198,8 +195,8 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
     expect(calls[0].body.json.message).to.not.match(/\d+ chars|length/)
   })
 
-  it('maps 409 to the retry message', async () => {
-    stub(409, {json: {message: 'workspace moved', status: 409}})
+  it('maps the stale-base 409 to the retry message', async () => {
+    stub(409, {json: {message: 'Workspace HEAD moved (expected a, got b). Run `qfg pull` and retry.', status: 409}})
     const err = await refusalOf(write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}]))
     expect(err.code).to.equal('conflict')
     expect(err.message).to.equal('the workspace changed while writing; nothing was written; run the command again')
@@ -268,7 +265,17 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
       const doc = setSecretScopeValue(newSecretDocument('stripe.key'), {
         value: secretValue(encrypt({keyset: 'QUONFIG_KEYSET_OTHER', plaintext: 'x', recipient: stranger.publicEntry})),
       }).document
-      const err = await refusalOf(write([{afterJson: serializeSecretDocument(doc), path: 'secrets/stripe.key.json'}]))
+      const err = await refusalOf(
+        write(
+          [{afterJson: serializeSecretDocument(doc), path: 'secrets/stripe.key.json'}],
+          secretCommitMessage({
+            fingerprint: stranger.fingerprint,
+            key: 'stripe.key',
+            keyset: 'QUONFIG_KEYSET_OTHER',
+            verb: 'create',
+          }),
+        ),
+      )
       expect(err.code).to.equal('refused')
       expect(err.message).to.include('QUONFIG_KEYSET_OTHER is not declared in quonfig.json')
     })
@@ -324,22 +331,14 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
 
   it('ignores a lock, kind or beforeJson the caller tries to supply: the request carries the snapshot values', async () => {
     stub(200, {json: {commitSha: 'c'.repeat(40)}})
-    const afterJson = secretDocText('db.password')
+    const afterJson = secretDocText('db.password', 'QUONFIG_KEYSET_PROD')
     await pushWorkspaceFiles({
       expectedSha: 'f'.repeat(40),
-      files: [
-        {afterJson, beforeJson: '{"forged":true}', kind: 'add', path: 'secrets/db.password.json'},
-        {
-          afterJson: secretDocText('stripe.key'),
-          beforeJson: '{"forged":true}',
-          kind: 'modify',
-          path: 'secrets/stripe.key.json',
-        },
-      ],
+      files: [{afterJson, beforeJson: '{"forged":true}', kind: 'add', path: 'secrets/db.password.json'}],
       message: secretCommitMessage({
-        fingerprint: key.fingerprint,
+        fingerprint: prodKey.fingerprint,
         key: 'db.password',
-        keyset: 'QUONFIG_KEYSET',
+        keyset: 'QUONFIG_KEYSET_PROD',
         verb: 'set',
       }),
       orgSlug: 'acme',
@@ -348,78 +347,33 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
     } as never)
     const sent = calls[0].body.json
     expect(sent.expectedSha).to.equal(headSha)
-    expect(sent.files[0]).to.deep.equal({
-      afterJson,
-      beforeJson: snap.readFile('secrets/db.password.json'),
-      kind: 'modify',
-      path: 'secrets/db.password.json',
-    })
-    expect(sent.files[1]).to.not.have.property('beforeJson')
-    expect(sent.files[1].kind).to.equal('add')
+    expect(sent.files).to.deep.equal([
+      {
+        afterJson,
+        beforeJson: snap.readFile('secrets/db.password.json'),
+        kind: 'modify',
+        path: 'secrets/db.password.json',
+      },
+    ])
   })
 
-  describe('quonfig.json changes (keyset commands)', () => {
-    const manifestWithout = (drop: string) => {
-      const m = JSON.parse(MANIFEST)
-      delete m.secrets.keysets[drop]
-      return JSON.stringify(m, null, 2)
+  it('a quonfig.json write is refused today: no message kind describes it (keyset commands come later)', async () => {
+    stub(200, {json: {commitSha: 'c'.repeat(40)}})
+    const m = JSON.parse(MANIFEST)
+    delete m.secrets.keysets.QUONFIG_KEYSET_PROD
+    for (const files of [
+      [{afterJson: JSON.stringify(m, null, 2), path: 'quonfig.json'}],
+      [
+        {afterJson: JSON.stringify(m, null, 2), path: 'quonfig.json'},
+        {afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'},
+      ],
+    ]) {
+      const err = await refusalOf(write(files))
+      expect(err.code).to.equal('invalid_input')
+      expect(err.message).to.match(/^the commit message does not describe this write/)
     }
 
-    it('refuses a quonfig.json that drops a keyset an existing secret still uses', async () => {
-      stub(200, {json: {commitSha: 'c'.repeat(40)}})
-      const err = await refusalOf(
-        write(
-          [
-            {afterJson: manifestWithout('QUONFIG_KEYSET'), path: 'quonfig.json'},
-            {afterJson: secretDocText('db.password'), path: 'secrets/db.password.json'},
-          ],
-          secretCommitMessage({
-            fingerprint: key.fingerprint,
-            key: 'db.password',
-            keyset: 'QUONFIG_KEYSET',
-            verb: 'set',
-          }),
-        ),
-      )
-      expect(err.code).to.equal('refused')
-      expect(err.message).to.include('secrets/db.password.json')
-      expect(calls).to.deep.equal([])
-    })
-
-    it('validates against the NEW quonfig.json: a new keyset and a secret on it pass together', async () => {
-      stub(200, {json: {commitSha: 'c'.repeat(40)}})
-      const fresh = testKey()
-      const m = JSON.parse(MANIFEST)
-      m.secrets.keysets.QUONFIG_KEYSET_NEW = {publicKeys: [fresh.publicEntry]}
-      const doc = setSecretScopeValue(newSecretDocument('new.secret'), {
-        value: secretValue(encrypt({keyset: 'QUONFIG_KEYSET_NEW', plaintext: 'x', recipient: fresh.publicEntry})),
-      }).document
-      await write(
-        [
-          {afterJson: JSON.stringify(m, null, 2), path: 'quonfig.json'},
-          {afterJson: serializeSecretDocument(doc), path: 'secrets/new.secret.json'},
-        ],
-        secretCommitMessage({
-          fingerprint: fresh.fingerprint,
-          key: 'new.secret',
-          keyset: 'QUONFIG_KEYSET_NEW',
-          verb: 'create',
-        }),
-      )
-      expect(calls).to.have.length(1)
-    })
-
-    it('a quonfig.json write that keeps every used keyset passes', async () => {
-      stub(200, {json: {commitSha: 'c'.repeat(40)}})
-      await write(
-        [
-          {afterJson: manifestWithout('QUONFIG_KEYSET_PROD'), path: 'quonfig.json'},
-          {afterJson: secretDocText('db.password'), path: 'secrets/db.password.json'},
-        ],
-        secretCommitMessage({fingerprint: key.fingerprint, key: 'db.password', keyset: 'QUONFIG_KEYSET', verb: 'set'}),
-      )
-      expect(calls[0].body.json.files[0].kind).to.equal('modify')
-    })
+    expect(calls).to.deep.equal([])
   })
 
   it('pre-existing errors in other families do not block a secrets-only write', async () => {
@@ -451,16 +405,16 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
     }
   })
 
-  it('a deleted file is not kept in the preflight tree (case-variant rename in one write)', async () => {
+  it('a write of two secret files is refused: the message names exactly one', async () => {
     stub(200, {json: {commitSha: 'c'.repeat(40)}})
-    await write(
-      [
-        {delete: true, path: 'secrets/db.password.json'},
-        {afterJson: secretDocText('DB.password'), path: 'secrets/DB.password.json'},
-      ],
-      secretCommitMessage({fingerprint: key.fingerprint, key: 'DB.password', keyset: 'QUONFIG_KEYSET', verb: 'create'}),
+    const err = await refusalOf(
+      write([
+        {afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'},
+        {afterJson: secretDocText('other.key'), path: 'secrets/other.key.json'},
+      ]),
     )
-    expect(calls).to.have.length(1)
+    expect(err.message).to.match(/^the commit message does not describe this write/)
+    expect(calls).to.deep.equal([])
   })
 
   it('the same path twice in one write is refused before any request', async () => {
@@ -533,12 +487,54 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
       })
     }
 
-    it('a network failure -> transport', async () => {
-      globalThis.fetch = (async () => {
-        throw new TypeError('fetch failed')
-      }) as typeof globalThis.fetch
-      const err = await refusalOf(write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}]))
-      expect(err.code).to.equal('transport')
+    const UNKNOWN =
+      'the result is unknown: the write may or may not have been applied; check with `qfg info stripe.key` (or the app) before retrying'
+    const stripe = () => write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}])
+
+    for (const [label, error] of [
+      ['the connection drops after sending (commit may have landed)', new TypeError('fetch failed')],
+      ['a timeout', new DOMException('The operation timed out.', 'TimeoutError')],
+    ] as const) {
+      it(`${label} -> unknown_result, never "did not reach the server"`, async () => {
+        globalThis.fetch = (async () => {
+          throw error
+        }) as typeof globalThis.fetch
+        const err = await refusalOf(stripe())
+        expect(err.code).to.equal('unknown_result')
+        expect(err.message).to.include(UNKNOWN)
+        expect(err.message).to.not.match(/nothing was written|did not reach/)
+      })
+    }
+
+    it('a 200 with a non-JSON body, or without a commit sha -> "answered 200 but returned no commit"', async () => {
+      for (const body of ['<html>ok</html>', {json: {}}]) {
+        if (typeof body === 'string') {
+          globalThis.fetch = (async () => ({ok: true, status: 200, text: async () => body})) as never
+        } else stub(200, body)
+        const err = await refusalOf(stripe())
+        expect(err.code).to.equal('unknown_result')
+        expect(err.message).to.equal(`the server answered 200 but returned no commit: ${UNKNOWN}`)
+      }
+    })
+
+    for (const status of [404, 426, 500, 502]) {
+      it(`HTTP ${status} says what the server answered and that the result is unknown`, async () => {
+        stub(status, {json: {message: 'nope'}})
+        const err = await refusalOf(stripe())
+        expect(err.message).to.match(new RegExp(`^the server answered HTTP ${status}: `))
+        expect(err.message).to.include(UNKNOWN)
+        expect(err.message).to.not.include('nothing was written')
+      })
+    }
+
+    it('a 403 without denials does not claim a permission problem with the secret', async () => {
+      stub(403, {json: {message: 'Billing is not active'}})
+      const err = await refusalOf(stripe())
+      expect(err.code).to.equal('denied')
+      expect(err.denials).to.deep.equal([])
+      expect(err.message).to.equal(
+        'the server refused the request (HTTP 403): configs.push failed (HTTP 403): Billing is not active',
+      )
     })
 
     it('a tier denial is code denied and names the path, reason and permission', async () => {
@@ -586,12 +582,17 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
   it('the tree the push would create passes the real push hook (readCommitTree + validateFileMap)', async () => {
     stub(200, {json: {commitSha: 'c'.repeat(40)}})
     const created = secretDocText('stripe.key', 'QUONFIG_KEYSET_PROD')
-    const updated = secretDocText('db.password', 'QUONFIG_KEYSET')
-    await write([
-      {afterJson: created, path: 'secrets/stripe.key.json'},
-      {afterJson: updated, path: 'secrets/db.password.json'},
-    ])
-    // Apply exactly what was sent onto the snapshot's commit, as the server would.
+    await write(
+      [{afterJson: created, path: 'secrets/stripe.key.json'}],
+      secretCommitMessage({
+        fingerprint: prodKey.fingerprint,
+        key: 'stripe.key',
+        keyset: 'QUONFIG_KEYSET_PROD',
+        verb: 'create',
+      }),
+    )
+    // The snapshot is never checked out; check out its commit, apply exactly what was sent, as the server would.
+    git(snap.dir, 'checkout', '-q', '-f', 'HEAD', '--', '.')
     for (const f of calls[0].body.json.files as Array<{afterJson: string; path: string}>) {
       fs.writeFileSync(path.join(snap.dir, f.path), f.afterJson)
     }
@@ -607,6 +608,106 @@ describe('pushWorkspaceFiles (qfg-mol-hle)', function () {
     const control = validateFileMap(files, {quonfigJson: qj, validateValues: true})
     expect(control.issues.map((i) => i.message).join('\n')).to.include('QUONFIG_KEYSET_GONE is not declared')
   })
+  describe('fix round of the PR 3a validation (qfg-mol-hle)', () => {
+    const create = (k: string, ks: 'QUONFIG_KEYSET' | 'QUONFIG_KEYSET_PROD' = 'QUONFIG_KEYSET', scope?: string) =>
+      secretCommitMessage({
+        fingerprint: ks === 'QUONFIG_KEYSET' ? key.fingerprint : prodKey.fingerprint,
+        key: k,
+        keyset: ks,
+        scope,
+        verb: 'create',
+      })
+
+    it('N1: the message keyset, key fingerprint and scope must match the document sent', async () => {
+      stub(200, {json: {commitSha: 'c'.repeat(40)}})
+      const doc = secretDocText('stripe.key', 'QUONFIG_KEYSET')
+      for (const message of [
+        create('stripe.key', 'QUONFIG_KEYSET_PROD'),
+        create('stripe.key', 'QUONFIG_KEYSET', 'production'),
+      ]) {
+        const err = await refusalOf(write([{afterJson: doc, path: 'secrets/stripe.key.json'}], message))
+        expect(err.message, message.text).to.match(/^the commit message does not describe this write: .* has no /)
+      }
+
+      expect(calls).to.deep.equal([])
+    })
+
+    it('N1: a modify that does not change the file is refused', async () => {
+      stub(200, {json: {commitSha: 'c'.repeat(40)}})
+      const same = snap.readFile('secrets/db.password.json')!
+      const err = await refusalOf(
+        write(
+          [{afterJson: same, path: 'secrets/db.password.json'}],
+          secretCommitMessage({
+            fingerprint: key.fingerprint,
+            key: 'db.password',
+            keyset: 'QUONFIG_KEYSET',
+            verb: 'set',
+          }),
+        ),
+      )
+      expect(err.message).to.include('would not change')
+      expect(calls).to.deep.equal([])
+    })
+
+    it('N2: the files, each change and its content are read once; what was checked is what is sent', async () => {
+      stub(200, {json: {commitSha: 'c'.repeat(40)}})
+      const good = secretDocText('stripe.key')
+      let reads = 0
+      const change = {
+        get afterJson() {
+          reads++
+          return reads === 1 ? good : '{"key":"stripe.key","forged":true}'
+        },
+        path: 'secrets/stripe.key.json',
+      }
+      await write([change as never], create('stripe.key'))
+      expect(calls[0].body.json.files[0].afterJson).to.equal(good)
+      expect(reads).to.equal(1)
+    })
+
+    it('N4: error.denials holds the scrubbed, capped list, not the raw server list', async () => {
+      const LEAKS = `qf1:QUONFIG_KEYSET:${key.fingerprint}:RAWCIPHERTEXT https://u:RAWTOKEN@x.example/y`
+      stub(403, {
+        json: {
+          data: {
+            denials: Array.from({length: 30}, (_, i) => ({
+              path: `secrets/s${i}.json ${LEAKS}`,
+              reason: 'tier',
+              requiredPermission: 'p',
+            })),
+          },
+        },
+      })
+      const err = await refusalOf(write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}]))
+      expect(err.denials).to.have.length(20)
+      expect(JSON.stringify(err.denials)).to.not.match(/RAWCIPHERTEXT|RAWTOKEN/)
+      expect(err.message).to.include('... and 10 more')
+      expect(err.message.split('\n')).to.have.length(22)
+    })
+
+    it('N6: a 409 that is not a stale base does not say the workspace changed', async () => {
+      stub(409, {json: {message: 'Could not read the current contents of secrets/stripe.key.json'}})
+      const err = await refusalOf(write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}]))
+      expect(err.code).to.equal('conflict')
+      expect(err.message).to.equal(
+        'the server refused the write as a conflict (HTTP 409): Could not read the current contents of secrets/stripe.key.json; nothing was written',
+      )
+    })
+
+    it('N6/N11: an empty 400 has no dangling colon; only the allow-list 400 says secrets/ is not supported', async () => {
+      stub(400, {json: {message: ''}})
+      const empty = await refusalOf(write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}]))
+      expect(empty.message).to.equal('the server refused the write (HTTP 400)')
+      stub(400, {json: {message: 'secrets/stripe.key.json: invalid document'}})
+      const other = await refusalOf(write([{afterJson: secretDocText('stripe.key'), path: 'secrets/stripe.key.json'}]))
+      expect(other.message).to.equal(
+        'the server refused the write (HTTP 400): secrets/stripe.key.json: invalid document',
+      )
+      expect(other.message).to.not.include('does not accept secrets/')
+    })
+  })
+
   describe('carry-ins from the PR 2 validation (qfg-mol-hle PR 3)', () => {
     const createStripe = () =>
       secretCommitMessage({fingerprint: key.fingerprint, key: 'stripe.key', keyset: 'QUONFIG_KEYSET', verb: 'create'})

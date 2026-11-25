@@ -4,26 +4,33 @@
  * the other families from, and whose HEAD sha is the write's lock
  * (`configs.push` `expectedSha`). Bead qfg-mol-hle, plan section 0.
  *
+ * Read from git objects, never from a checkout. The tip is fetched into an
+ * empty repo and NOT checked out: the tree is listed with `git ls-tree -r -z`
+ * and the documents are read with `git cat-file --batch`, as the push hook's
+ * `readCommitTree` does. So the local file system's rules never apply: on a
+ * case-insensitive file system (macOS, Windows) a tree holding `Secrets/`
+ * and `secrets/` is still two directories here, `secrets/db.json` is never
+ * found under the name `secrets/DB.json`, and a committed symlink is only an
+ * entry with mode 120000, never a link that a read could follow out of the
+ * repo. Paths match exactly, byte for byte, as git stores them.
+ *
  * Credentials. The clone URL carries a Gitea token. `git clone <url>` (what
  * `qfg generate` and the `qfg push` probe do) stores that URL, token
  * included, as `remote.origin.url` in the clone's `.git/config`. Here the
  * repo is created empty and the tip is fetched BY URL, which records no
  * remote at all; `FETCH_HEAD` (which names the source) is deleted after the
- * checkout. Nothing in the clone's `.git` names the URL afterwards. git runs
+ * fetch. Nothing in the clone's `.git` names the URL afterwards. git runs
  * through `runGit` (no credential helper, no prompts, tokens redacted from
  * errors). The temp directory is removed on every failure inside this
  * module, and by `cleanup()` / `withWorkspaceSnapshot` otherwise. On
  * SIGINT/SIGTERM mid-write it is left behind in the OS temp directory (no
- * signal handler is installed here); it holds the workspace's committed
- * files and no token.
+ * signal handler is installed here); it holds the workspace's git objects
+ * and no token.
  *
- * Containment. The push hook accepts symlinks in a workspace repo, so a
- * committed symlink must never make a read return a LOCAL file (which a
- * write would then send as `beforeJson`). Two layers: the checkout runs with
- * `core.symlinks=false`, and every read and listing walks the path with
- * lstat, refusing any component that is a symlink or a git symlink /
- * submodule entry. `.git` (any case), `..` and absolute paths are refused
- * after normalization.
+ * Containment. Only `quonfig.json` and files under the validated directories
+ * (src/verify KNOWN_DIRS) are read. A path through or onto a symlink or
+ * submodule entry is refused; `.git` (any case), `..` and absolute paths are
+ * refused after normalization.
  */
 import * as fs from 'node:fs'
 import * as os from 'node:os'
@@ -32,7 +39,7 @@ import * as path from 'node:path'
 import type {BaseCommand} from '../index.js'
 
 import {KNOWN_DIRS} from '../verify/validate.js'
-import {runGit, streamGitNulEntries} from '../util/git-ops.js'
+import {readGitBlobs, runGit, streamGitNulEntries} from '../util/git-ops.js'
 
 export type PooledKeyMatch = {dir: string; file: string; key: string}
 
@@ -95,94 +102,82 @@ function segmentsOf(rel: string): string[] {
   return parts
 }
 
-/**
- * Where a git symlink or submodule entry sits, by path. The checkout runs
- * with `core.symlinks=false`, so such an entry is a small text file on disk
- * holding the link target; this set is what tells it apart from a document.
- *
- * `git ls-tree -r -z` is read as a stream and parsed entry by entry: a
- * workspace of tens of thousands of files lists far more than Node's 1 MiB
- * default output limit for `execFile`, and only the few non-file entries are
- * kept (carry-in S1).
- */
-async function nonFileEntries(dir: string): Promise<Set<string>> {
-  const out = new Set<string>()
+type TreeEntry = {mode: string; oid: string; type: string}
+
+const isRegularFile = (e: TreeEntry) => e.type === 'blob' && (e.mode === '100644' || e.mode === '100755')
+
+/** The documents a snapshot reads: `quonfig.json` and everything under a validated directory. */
+const isReadable = (p: string) => {
+  const slash = p.indexOf('/')
+  return p === 'quonfig.json' || (slash > 0 && KNOWN_DIRS.has(p.slice(0, slash)))
+}
+
+/** Every entry of the commit's tree, by exact path, streamed (a large workspace lists far more than 1 MiB). */
+async function listTree(dir: string): Promise<Map<string, TreeEntry>> {
+  const out = new Map<string, TreeEntry>()
   await streamGitNulEntries(['-C', dir, 'ls-tree', '-r', '-z', '--full-tree', 'HEAD'], (entry) => {
     const tab = entry.indexOf('\t')
     if (tab === -1) return
-    const mode = entry.slice(0, entry.indexOf(' '))
-    if (mode !== '100644' && mode !== '100755') out.add(entry.slice(tab + 1))
+    const [mode, type, oid] = entry.slice(0, tab).split(' ')
+    out.set(entry.slice(tab + 1), {mode, oid, type})
   })
   return out
 }
 
-function snapshotAt(dir: string, headSha: string, nonFiles: ReadonlySet<string>): WorkspaceSnapshot {
-  /**
-   * Resolve `rel` to an on-disk path, checking every component with lstat:
-   * none may be a symlink (or a git symlink / submodule entry), the last must
-   * be a `kind`. Undefined when a component does not exist.
-   */
-  const listings = new Map<string, Set<string>>()
-  const namesIn = (parent: string): Set<string> => {
-    let names = listings.get(parent)
-    if (!names) {
-      names = new Set(fs.readdirSync(parent))
-      listings.set(parent, names)
-    }
-
-    return names
-  }
-
-  const resolve = (rel: string, kind: 'dir' | 'file'): string | undefined => {
+function snapshotAt(
+  dir: string,
+  headSha: string,
+  tree: ReadonlyMap<string, TreeEntry>,
+  blobs: ReadonlyMap<string, string>,
+): WorkspaceSnapshot {
+  /** Refuse a path through or onto a symlink / submodule entry. Returns the normalized path. */
+  const checked = (rel: string): string => {
     const parts = segmentsOf(rel)
-    let current = dir
-    for (const [i, part] of parts.entries()) {
-      if (nonFiles.has(parts.slice(0, i + 1).join('/'))) {
+    for (let i = 1; i <= parts.length; i++) {
+      const prefix = parts.slice(0, i).join('/')
+      const entry = tree.get(prefix)
+      if (entry && !isRegularFile(entry)) {
         throw new SnapshotPathError(rel, 'is not a regular file in the workspace repo (a symlink or submodule)')
       }
 
-      // On a case-insensitive filesystem (macOS, Windows) lstat finds
-      // `DB.json` for `db.json`; the snapshot's paths are git's, which are
-      // exact, so the entry must be listed with this exact name.
-      if (!namesIn(current).has(part)) return undefined
-      current = path.join(current, part)
-      let stat: fs.Stats
-      try {
-        stat = fs.lstatSync(current)
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (code === 'ENOENT' || code === 'ENOTDIR') return undefined
-        throw error
-      }
-
-      const last = i === parts.length - 1
-      const ok = last ? (kind === 'file' ? stat.isFile() : stat.isDirectory()) : stat.isDirectory()
-      if (!ok) throw new SnapshotPathError(rel, `is not a regular ${kind} inside the workspace snapshot`)
+      if (entry && i < parts.length) throw new SnapshotPathError(rel, 'is not inside a directory of the workspace repo')
     }
 
-    return current
+    return parts.join('/')
   }
 
   const readFile = (rel: string) => {
-    const full = resolve(rel, 'file')
-    return full === undefined ? undefined : fs.readFileSync(full, 'utf8')
+    const p = checked(rel)
+    const entry = tree.get(p)
+    if (!entry) {
+      const prefix = `${p}/`
+      for (const other of tree.keys()) {
+        if (other.startsWith(prefix)) throw new SnapshotPathError(rel, 'is a directory, not a regular file')
+      }
+
+      return
+    }
+
+    if (!isReadable(p)) throw new SnapshotPathError(rel, 'is not a document this snapshot reads')
+    const text = blobs.get(p)
+    if (text === undefined) throw new SnapshotPathError(rel, 'could not be read from the workspace repo')
+    return text
   }
 
-  /** Regular files directly in `subdir` (symlinks, submodules and directories are left out). */
+  /** Names of the regular files directly in `subdir`. */
   const entries = (subdir: string): string[] => {
-    const full = resolve(subdir, 'dir')
-    if (full === undefined) return []
-    const prefix = segmentsOf(subdir).join('/')
-    return fs
-      .readdirSync(full, {withFileTypes: true})
-      .filter((d) => d.isFile() && !nonFiles.has(`${prefix}/${d.name}`))
-      .map((d) => d.name)
+    const prefix = `${checked(subdir)}/`
+    const names: string[] = []
+    for (const [p, entry] of tree) {
+      if (!p.startsWith(prefix)) continue
+      const rest = p.slice(prefix.length)
+      if (!rest.includes('/') && isRegularFile(entry)) names.push(rest)
+    }
+
+    return names.sort()
   }
 
-  const listJson = (subdir: string) =>
-    entries(subdir)
-      .filter((name) => name.endsWith('.json') && !name.startsWith('.'))
-      .sort()
+  const listJson = (subdir: string) => entries(subdir).filter((name) => name.endsWith('.json') && !name.startsWith('.'))
 
   let removed: Promise<void> | undefined
   return {
@@ -194,7 +189,7 @@ function snapshotAt(dir: string, headSha: string, nonFiles: ReadonlySet<string>)
     documents() {
       const out = new Map<string, string>()
       for (const sub of [...KNOWN_DIRS].sort()) {
-        for (const name of entries(sub)) out.set(`${sub}/${name}`, readFile(`${sub}/${name}`) ?? '')
+        for (const name of entries(sub)) out.set(`${sub}/${name}`, readFile(`${sub}/${name}`)!)
       }
 
       return out
@@ -236,23 +231,18 @@ export async function cloneWorkspaceSnapshot(
     const {stdout} = await runGit(['-C', dir, 'rev-parse', '--verify', 'FETCH_HEAD^{commit}'])
     const headSha = stdout.trim()
     if (!SHA_RE.test(headSha)) throw new Error(`workspace snapshot: unexpected HEAD ${JSON.stringify(headSha)}`)
-    // core.symlinks=false: a symlink in the repo is checked out as a small
-    // text file, never as a link that could point outside the clone.
-    await runGit([
-      '-C',
-      dir,
-      '-c',
-      'core.symlinks=false',
-      '-c',
-      'advice.detachedHead=false',
-      'checkout',
-      '-q',
-      '--detach',
-      headSha,
-    ])
+    // HEAD names the fetched commit; nothing is checked out (see the header).
+    await runGit(['-C', dir, 'update-ref', 'HEAD', headSha])
     // FETCH_HEAD names the fetch source; nothing reads it after this point.
     await fs.promises.rm(path.join(dir, '.git', 'FETCH_HEAD'), {force: true})
-    return snapshotAt(dir, headSha, await nonFileEntries(dir))
+    const tree = await listTree(dir)
+    const wanted = [...tree].filter(([p, e]) => isReadable(p) && isRegularFile(e))
+    const bytes = await readGitBlobs(
+      dir,
+      wanted.map(([, e]) => e.oid),
+    )
+    const blobs = new Map(wanted.map(([p, e]) => [p, bytes.get(e.oid)!.toString('utf8')]))
+    return snapshotAt(dir, headSha, tree, blobs)
   } catch (error) {
     await removeDir(dir)
     throw error

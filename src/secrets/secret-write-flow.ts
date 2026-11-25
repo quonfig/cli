@@ -25,7 +25,7 @@ import {readWorkspaceKeysets} from './workspace-keysets.js'
 import type {WorkspaceSnapshot} from './workspace-snapshot.js'
 import {type SecretCommitMessage, type WorkspaceFileChange, secretCommitMessage} from './write-secret.js'
 
-export type SecretRefusalCode = 'exists' | 'is_config' | 'not_found' | 'old_format' | 'other_family'
+export type SecretRefusalCode = 'exists' | 'is_config' | 'keysets_invalid' | 'not_found' | 'old_format' | 'other_family'
 
 /** A write the commands refuse, with the exact text to show. Never carries a value. */
 export class SecretRefusal extends Error {
@@ -110,7 +110,17 @@ function hasOldFormatValue(text: string): boolean {
 }
 
 async function encryptTo(input: PlanInput, inherited?: string) {
-  const keysets = readWorkspaceKeysets(input.snapshot.readFile('quonfig.json')).keysets
+  const manifest = input.snapshot.readFile('quonfig.json')
+  const {keysets, problems} = readWorkspaceKeysets(manifest)
+  // A quonfig.json the push hook would reject (unparseable, duplicate
+  // fingerprints, unknown members) is refused here rather than sent.
+  if (manifest !== undefined && problems.length > 0) {
+    throw new SecretRefusal(
+      'keysets_invalid',
+      `quonfig.json secrets cannot be used, so no secret can be written:\n${problems.map((p) => `  ${p}`).join('\n')}`,
+    )
+  }
+
   const choice = await chooseKeyset({
     env: input.env,
     flagKeyset: input.flagKeyset,

@@ -483,7 +483,7 @@ export function validateSecretDocument(
 
 /** The fix suggested for a bad secrets/ value: the commands that write one (each is checked to exist by a test). */
 export const SECRET_VALUE_HINT =
-  'secrets/ values are written by `qfg create --secret` and `qfg set-default --secret`; do not edit them by hand'
+  'do not edit secrets/ values by hand: rewrite this value with `qfg set-default --secret` (a new secret is made with `qfg create --secret`)'
 
 function checkQf1Value(
   value: unknown,
