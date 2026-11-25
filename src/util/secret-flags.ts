@@ -1,8 +1,5 @@
 import {Flags} from '@oclif/core'
 
-/** The old-format key config `makeConfidentialValue` encrypted to (removed with it in qfg-8seuf.21). */
-export const LEGACY_SECRET_KEY_NAME = 'quonfig.secrets.encryption.key'
-
 const secretFlags = (secretDescription: string) => ({
   keyset: Flags.string({
     description:
@@ -11,13 +8,19 @@ const secretFlags = (secretDescription: string) => ({
   }),
   secret: Flags.boolean({default: false, description: secretDescription}),
   'secret-key-name': Flags.string({
-    deprecated: {message: '--secret-key-name no longer applies: qf1 secrets are encrypted to a keyset (--keyset)'},
     description: 'no longer used: secrets are encrypted to a keyset from quonfig.json (see --keyset)',
   }),
 })
 
+/**
+ * Printed once when --secret-key-name is passed without --secret (with
+ * --secret it is an error). Not oclif's `deprecated`, which warns on every
+ * parse: three times per command.
+ */
+export const SECRET_KEY_NAME_NOTE =
+  'Note: --secret-key-name no longer applies: qf1 secrets are encrypted to a keyset (--keyset).'
+
 export type Secret = {
-  keyName: string
   /** True when --secret-key-name was passed (an error with a qf1 secret, plan Q4). */
   keyNameGiven: boolean
   keyset?: string
@@ -25,7 +28,6 @@ export type Secret = {
 }
 
 export const parsedSecretFlags = (flags: {keyset?: string; secret: boolean; 'secret-key-name'?: string}): Secret => ({
-  keyName: flags['secret-key-name'] ?? LEGACY_SECRET_KEY_NAME,
   keyNameGiven: flags['secret-key-name'] !== undefined,
   keyset: flags.keyset,
   selected: flags.secret,
