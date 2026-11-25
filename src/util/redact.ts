@@ -32,6 +32,21 @@ export const fingerprint = (value: string): string =>
   `${FINGERPRINT_PREFIX}${createHash('md5').update(value).digest('hex').slice(0, 5)}`
 
 /**
+ * The last four characters of a plaintext, by code point (an emoji is one
+ * character, never half a surrogate pair), with control characters escaped
+ * as \\uXXXX so a trailing newline or escape sequence cannot break or
+ * restyle the line it is printed on. Never more characters than before.
+ */
+const lastFour = (plaintext: string): string =>
+  [...plaintext]
+    .slice(-4)
+    .map((ch) => {
+      const cp = ch.codePointAt(0)!
+      return cp < 0x20 || (cp >= 0x7f && cp <= 0x9f) ? `\\u${cp.toString(16).padStart(4, '0')}` : ch
+    })
+    .join('')
+
+/**
  * Build the redacted summary for a value.
  *
  * - `ciphertext` given: an encrypted value. Like the SDK resolver, the
@@ -60,7 +75,7 @@ export const redactedSummary = ({
 
   if (hashed !== undefined) summary.fingerprint = fingerprint(hashed)
   if (plaintext !== undefined) summary.length = plaintext.length
-  if (plaintext !== undefined && plaintext.length >= LAST4_MIN_LENGTH) summary.last4 = plaintext.slice(-4)
+  if (plaintext !== undefined && plaintext.length >= LAST4_MIN_LENGTH) summary.last4 = lastFour(plaintext)
 
   return summary
 }
