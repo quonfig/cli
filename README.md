@@ -996,11 +996,12 @@ FLAGS
   --title=<value>               change request title (with --propose; defaults to a summary of the change)
   --type=<option>               kind of item to create (required, except with --secret, which implies string)
                                 <options: boolean-flag|boolean|string|double|int|string-list|json|duration|log_level>
-  --value=<value>               default value for your new item (for secrets prefer --value-stdin / --value-from-env)
-  --value-from-env=VAR          read the value to store from this LOCAL env var now (keeps it out of argv/shell
-                                history). Not the same as --env-var
-  --value-stdin                 read the value to store from stdin (one trailing newline is stripped). Keeps it out of
-                                argv
+  --value=<value>               default value for your new item (for secrets prefer --value-stdin / --value-from-env).
+                                An empty value is allowed with --value=''
+  --value-from-env=VAR          read the value to store from this LOCAL env var now (keeps it out of argv/shell history;
+                                an empty variable is refused). Not the same as --env-var
+  --value-stdin                 read the value to store from stdin (one trailing newline is stripped; empty input is
+                                refused; a secret must be UTF-8). Keeps it out of argv
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -2475,11 +2476,12 @@ FLAGS
   --secret                      encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>     no longer used: secrets are encrypted to a keyset from quonfig.json (see --keyset)
   --title=<value>               change request title (with --propose; defaults to a summary of the change)
-  --value=<value>               new default value (for secrets prefer --value-stdin / --value-from-env)
-  --value-from-env=VAR          read the value to store from this LOCAL env var now (keeps it out of argv/shell
-                                history). Not the same as --env-var
-  --value-stdin                 read the value to store from stdin (one trailing newline is stripped). Keeps it out of
-                                argv
+  --value=<value>               new default value (for secrets prefer --value-stdin / --value-from-env). An empty value
+                                is allowed with --value=''
+  --value-from-env=VAR          read the value to store from this LOCAL env var now (keeps it out of argv/shell history;
+                                an empty variable is refused). Not the same as --env-var
+  --value-stdin                 read the value to store from stdin (one trailing newline is stripped; empty input is
+                                refused; a secret must be UTF-8). Keeps it out of argv
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)
@@ -2737,11 +2739,12 @@ FLAGS
   --secret                      encrypt the value of this item (string-only; the CLI never prints the plaintext)
   --secret-key-name=<value>     no longer used: secrets are encrypted to a keyset from quonfig.json (see --keyset)
   --title=<value>               change request title (with --propose; defaults to a summary of the change)
-  --value=<value>               new default value (for secrets prefer --value-stdin / --value-from-env)
-  --value-from-env=VAR          read the value to store from this LOCAL env var now (keeps it out of argv/shell
-                                history). Not the same as --env-var
-  --value-stdin                 read the value to store from stdin (one trailing newline is stripped). Keeps it out of
-                                argv
+  --value=<value>               new default value (for secrets prefer --value-stdin / --value-from-env). An empty value
+                                is allowed with --value=''
+  --value-from-env=VAR          read the value to store from this LOCAL env var now (keeps it out of argv/shell history;
+                                an empty variable is refused). Not the same as --env-var
+  --value-stdin                 read the value to store from stdin (one trailing newline is stripped; empty input is
+                                refused; a secret must be UTF-8). Keeps it out of argv
 
 GLOBAL FLAGS
   -w, --workspace=<value>  Workspace slug to use (overrides QUONFIG_WORKSPACE env var and saved default)

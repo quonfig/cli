@@ -39,7 +39,7 @@ describe('set-default', () => {
       .command(['set-default', 'robocop-secret', '--environment=Staging', '--confirm', `--value=${PLAINTEXT}`])
       .catch((error) => {
         expect(error.message).to.equal(
-          'robocop-secret holds old-format encrypted values; move it with `qfg secret migrate` (coming) before changing it',
+          'robocop-secret holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).',
         )
         expect(error.message).to.not.contain(PLAINTEXT)
       })

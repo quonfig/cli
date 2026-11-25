@@ -10,7 +10,7 @@ import {HttpResponse, http} from 'msw'
 import {setupServer} from 'msw/node'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import {Readable} from 'node:stream'
+import {PassThrough, Readable} from 'node:stream'
 import {pathToFileURL} from 'node:url'
 
 import {encrypt} from '../../src/secrets/qf1.js'
@@ -22,6 +22,9 @@ import {
 } from '../../src/secrets/secret-doc.js'
 import {bareWorkspaceRepo, quonfigJson, testKey, tmpDir} from '../secrets/plumbing-fixtures.js'
 import {getApiBase} from '../test-domain-helper.js'
+
+/** A second workspace of the test org, for --workspace tests. */
+export const WORKSPACE_B = '00000000-0000-4000-8000-00000000000b'
 
 export const keys = {main: testKey(), prod: testKey(), second: testKey()}
 
@@ -52,6 +55,8 @@ export type FakeServerState = {
   push: {body: unknown; status: number}
   requests: Recorded[]
   repoUrl: string
+  /** gitea/token: a status to fail with, else a token for repoUrl. */
+  tokenStatus?: number
 }
 
 export const state: FakeServerState = {
@@ -78,6 +83,7 @@ export function resetState(): void {
   state.listed = []
   state.push = {body: {json: {commitSha: 'c'.repeat(40)}}, status: 200}
   state.requests = []
+  state.tokenStatus = undefined
 }
 
 export function removeWorkspaces(): void {
@@ -101,6 +107,7 @@ const record = async (request: Request) => {
 export const server = setupServer(
   http.post(`${api}/api/v1/gitea/token`, async ({request}) => {
     await record(request)
+    if (state.tokenStatus) return HttpResponse.json({json: {message: 'no token for you'}}, {status: state.tokenStatus})
     // Already expired, so every command mints again and never reuses an
     // earlier test's repo URL from the token store.
     return HttpResponse.json({
@@ -140,6 +147,26 @@ export const server = setupServer(
     const doc = state.documents[state.requests.at(-1)?.body?.json?.key as string]
     return doc ? HttpResponse.json({json: doc}) : HttpResponse.json({json: {message: 'not found'}}, {status: 404})
   }),
+  // `--workspace test-organization/ws-b` resolves here (OAuth org-scoped path).
+  http.post(`${api}/api/v1/userWorkspaces/list`, async ({request}) => {
+    await record(request)
+    return HttpResponse.json({
+      json: [
+        {
+          organizationName: 'Test Organization',
+          workosOrgId: 'org_workspace-123',
+          workspaceId: 'workspace-123',
+          workspaceSlug: 'test-workspace',
+        },
+        {
+          organizationName: 'Test Organization',
+          workosOrgId: 'org_workspace-123',
+          workspaceId: WORKSPACE_B,
+          workspaceSlug: 'ws-b',
+        },
+      ],
+    })
+  }),
   http.post(`${api}/api/v1/:family/:action`, async ({request}) => {
     await record(request)
     return HttpResponse.json({json: {message: 'route not faked in secret tests'}}, {status: 500})
@@ -159,10 +186,19 @@ export const restoreStdin = (): void => {
 }
 
 /** A stored secret: default on QUONFIG_KEYSET; Production has a targeting rule and a fallback on QUONFIG_KEYSET_PROD. */
-export function storedSecret(key: string): string {
+export function storedSecret(key: string, options: {defaultTargeting?: boolean} = {}): string {
   const on = (keyset: string, recipient: string) =>
     secretValue(encrypt({keyset, plaintext: 'FAKE_OLD_STORED_VALUE_0001', recipient}))
   const doc = setSecretScopeValue(newSecretDocument(key), {value: on('QUONFIG_KEYSET', keys.main.publicEntry)}).document
+  if (options.defaultTargeting) {
+    doc.default.rules.unshift({
+      criteria: [
+        {operator: 'PROP_IS_ONE_OF', propertyName: 'user.key', valueToMatch: {type: 'string_list', value: ['u2']}},
+      ],
+      value: on('QUONFIG_KEYSET', keys.main.publicEntry),
+    })
+  }
+
   doc.environments = [
     {
       id: 'production',
@@ -210,3 +246,37 @@ export function oldFormatConfig(key: string): Record<string, unknown> {
 
 /** Every recorded request, as text, for leak checks. */
 export const allRequestText = (): string => JSON.stringify(state.requests)
+
+/** Feed raw bytes to --value-stdin. */
+export const setStdinBytes = (bytes: Buffer): void => {
+  savedStdin = Object.getOwnPropertyDescriptor(process, 'stdin')
+  Object.defineProperty(process, 'stdin', {configurable: true, value: Readable.from([bytes])})
+}
+
+let savedStdoutTty: PropertyDescriptor | undefined
+/**
+ * Make the command think it runs on a terminal, and type `keys` into it after
+ * a short delay: what an interactive prompt prints lands in the captured
+ * stdout. Pair with restoreTty.
+ */
+export const fakeTty = (keys: string, delayMs = 300): void => {
+  savedStdin = Object.getOwnPropertyDescriptor(process, 'stdin')
+  const input = new PassThrough() as {isTTY?: boolean; setRawMode?: () => void} & PassThrough
+  input.isTTY = true
+  input.setRawMode = () => {}
+  Object.defineProperty(process, 'stdin', {configurable: true, value: input})
+  // A redirected stdout (a file, CI) has a read-only isTTY: define it instead.
+  savedStdoutTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+  Object.defineProperty(process.stdout, 'isTTY', {configurable: true, value: true, writable: true})
+  if (keys) setTimeout(() => input.write(keys), delayMs)
+}
+
+export const restoreTty = (): void => {
+  restoreStdin()
+  if (savedStdoutTty) Object.defineProperty(process.stdout, 'isTTY', savedStdoutTty)
+  else delete (process.stdout as {isTTY?: boolean}).isTTY
+}
+
+/** Prompt text with terminal wrapping and escapes removed, for matching. */
+export const flat = (text: string): string =>
+  text.replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[\\d;?]*[A-Za-z]`, 'g'), '').replaceAll(/\s+/g, ' ')

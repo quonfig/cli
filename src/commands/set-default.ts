@@ -22,14 +22,16 @@ import {
   VALUE_ARGV_WARNING,
   encryptedPhrase,
   jsonValue,
+  cleanupQuietly,
   knownSecretFailure,
+  mirrorSecretToDisk,
   openCommandSnapshot,
   pushPlan,
   readabilityNote,
   twinNotice,
 } from '../secrets/secret-command.js'
 import {secretPath} from '../secrets/secret-doc.js'
-import {planSecretUpdate} from '../secrets/secret-write-flow.js'
+import {checkSecretUpdatable, oldFormatRefusal, planSecretUpdate} from '../secrets/secret-write-flow.js'
 import getConfirmation, {confirmFlag} from '../ui/get-confirmation.js'
 import getEnvironment from '../ui/get-environment.js'
 import getKeyset from '../ui/get-keyset.js'
@@ -55,8 +57,14 @@ import {
 } from '../util/rules.js'
 import {RedactedSummary, redactedDisplay, redactedSummary} from '../util/redact.js'
 import {notice} from '../util/stderr-notice.js'
-import secretFlags, {Secret, parsedSecretFlags} from '../util/secret-flags.js'
-import {resolveValueSource, valueSourceFlags} from '../util/value-source.js'
+import secretFlags, {SECRET_KEY_NAME_NOTE, Secret, parsedSecretFlags} from '../util/secret-flags.js'
+import {INVALID_UTF8_INPUT, resolveValueSource, valueSourceFlags} from '../util/value-source.js'
+
+/** Every stored rule value of a document, default and per-environment. */
+const valuesOf = (doc: ScopedDocument) =>
+  [...(doc.default?.rules ?? []), ...(doc.environments ?? []).flatMap((env) => env.rules ?? [])].map(
+    (rule) => rule.value as {confidential?: boolean; decryptWith?: string; type?: string} | undefined,
+  )
 
 /** `1 targeting rule`, `2 targeting rules`. */
 const plural = (n: number) => `${n} targeting rule${n === 1 ? '' : 's'}`
@@ -158,7 +166,10 @@ To target specific organizations or users, write rules on their KEY
       description:
         "set the value for EVERYONE: delete this environment's targeting rules instead of keeping them (they stay in git history)",
     }),
-    value: Flags.string({description: 'new default value (for secrets prefer --value-stdin / --value-from-env)'}),
+    value: Flags.string({
+      description:
+        "new default value (for secrets prefer --value-stdin / --value-from-env). An empty value is allowed with --value=''",
+    }),
     ...valueSourceFlags,
     ...confirmFlag,
     ...secretFlags('encrypt the value of this item (string-only; the CLI never prints the plaintext)'),
@@ -172,6 +183,8 @@ To target specific organizations or users, write rules on their KEY
 
     const secret = parsedSecretFlags(flags)
     if (secret.selected && secret.keyNameGiven) return this.err(SECRET_KEY_NAME_ERROR)
+
+    if (secret.keyNameGiven && !secret.selected) notice(SECRET_KEY_NAME_NOTE)
 
     // qfg-5bjew.37: --propose / --cr <n> send the same document to
     // changeRequests.propose instead of the update route.
@@ -188,7 +201,12 @@ To target specific organizations or users, write rules on their KEY
     }
 
     // qfg-38lp: --value / --value-stdin / --value-from-env all resolve here.
-    const valueSource = await resolveValueSource(flags)
+    let invalidUtf8 = false
+    const valueSource = await resolveValueSource(flags, {
+      onInvalidUtf8() {
+        invalidUtf8 = true
+      },
+    })
     if (!valueSource.ok) {
       return this.err(valueSource.error ? valueSource.message : 'Value is required')
     }
@@ -265,7 +283,7 @@ To target specific organizations or users, write rules on their KEY
     // A secret lives in secrets/ and is written there (qfg-mol-hle). A key
     // the server does not list may still be one: a server that does not list
     // secrets yet (app-quonfig rule 1) leaves them out, so the snapshot decides.
-    const secretWrite = {flags, key, proposeOptions, secret, value: valueSource.value}
+    const secretWrite = {flags, invalidUtf8, key, proposeOptions, secret, value: valueSource.value}
     if (secret.selected || config?.type === 'secret') return this.setSecret({...secretWrite, mode: 'explicit'})
     if (!config) return this.setSecret({...secretWrite, mode: 'unlisted'})
 
@@ -289,10 +307,7 @@ To target specific organizations or users, write rules on their KEY
     // Auto-detect from EVERY stored rule value, default and per-environment
     // (qfg-r3a47): an update to an encrypted or confidential key must not
     // silently store the new value in the clear.
-    const storedValues = [
-      ...(currentConfig.default?.rules ?? []),
-      ...(currentConfig.environments ?? []).flatMap((env) => env.rules ?? []),
-    ].map((rule) => rule.value as {confidential?: boolean; decryptWith?: string; type?: string} | undefined)
+    const storedValues = valuesOf(currentConfig)
 
     // An old-format (decryptWith) value is never written again (qfg-mol-hle,
     // plan Q6). The key may already have a secrets/ copy (the transition
@@ -322,11 +337,17 @@ To target specific organizations or users, write rules on their KEY
       proposeContext = {docType, inRequest, options: proposeOptions, token}
     }
 
+    // With --cr <n> the write is based on #n's version of the key, so its
+    // values decide too (validator B1): an old-format value in either copy
+    // refuses the write, and a confidential value in #n keeps it confidential.
+    const baseValues = proposeContext?.inRequest ? valuesOf(currentConfig) : storedValues
+    if (baseValues.some((value) => value?.decryptWith)) return this.err(oldFormatRefusal(key), {key})
+
     let confidential = flags.confidential === true
     if (
       flags.confidential === undefined &&
       !secret.selected &&
-      storedValues.some((value) => value?.confidential && value.type !== 'provided')
+      baseValues.some((value) => value?.confidential && value.type !== 'provided')
     ) {
       confidential = true
       this.logToStderr(
@@ -523,6 +544,7 @@ To target specific organizations or users, write rules on their KEY
     key,
     mode,
     proposeOptions,
+    invalidUtf8,
     secret,
     value: givenValue,
   }: {
@@ -538,15 +560,14 @@ To target specific organizations or users, write rules on their KEY
       workspace?: string
     }
     key: string
+    /** --value-stdin read bytes that are not UTF-8 (refused for a secret, S3). */
+    invalidUtf8: boolean
     mode: 'explicit' | 'old-format' | 'unlisted'
     proposeOptions: ProposeOptions | undefined
     secret: Secret
     value: string | undefined
   }): Promise<JsonObj | void> {
-    const fallbackText =
-      mode === 'unlisted'
-        ? `Could not find config named ${key}`
-        : `${key} holds old-format encrypted values; move it with \`qfg secret migrate\` (coming) before changing it`
+    const fallbackText = mode === 'unlisted' ? `Could not find config named ${key}` : oldFormatRefusal(key)
     const refusal = this.secretFlagRefusal(flags, proposeOptions, secret)
     if (mode === 'explicit' && refusal) return this.err(refusal, {key})
 
@@ -558,7 +579,10 @@ To target specific organizations or users, write rules on their KEY
         error instanceof SecretCommandError ? error.message : redactToken(String((error as Error)?.message ?? error))
       if (mode !== 'explicit') {
         this.verboseLog('secrets', `workspace snapshot failed: ${why}`)
-        return this.err(fallbackText, {key})
+        // N3: say the secrets/ lookup could not run (no token, URL or detail).
+        const unchecked =
+          mode === 'unlisted' ? ' (secrets/ could not be checked: qfg could not read the workspace repo)' : ''
+        return this.err(`${fallbackText}${unchecked}`, {key})
       }
 
       return this.err(`Failed to change default: could not read the workspace to write the secret: ${why}`, {key})
@@ -570,13 +594,14 @@ To target specific organizations or users, write rules on their KEY
       }
 
       if (refusal) return this.err(refusal, {key})
+      if (invalidUtf8) return this.err(INVALID_UTF8_INPUT, {key})
       return await this.writeSecretScope({flags, givenValue, key, secret, target})
     } catch (error) {
       const known = knownSecretFailure(error)
       if (known === undefined) throw error
       return this.err(`Failed to change default: ${known}`, {key})
     } finally {
-      await target.snapshot.cleanup()
+      await cleanupQuietly(this, target.snapshot)
     }
   }
 
@@ -869,6 +894,8 @@ To target specific organizations or users, write rules on their KEY
     secret: Secret
     target: Awaited<ReturnType<typeof openCommandSnapshot>>
   }): Promise<JsonObj | void> {
+    // Refuse what does not depend on the environment or the value before prompting for either (N7).
+    await checkSecretUpdatable({flagKeyset: secret.keyset, key, snapshot: target.snapshot})
     const environment = await getEnvironment({
       command: this,
       flags,
@@ -911,6 +938,7 @@ To target specific organizations or users, write rules on their KEY
     if (!(await getConfirmation({flags, message}))) return
 
     const commitSha = await pushPlan(plan, target)
+    await mirrorSecretToDisk(this, key, (plan.files[0] as {afterJson: string}).afterJson, 'Update')
     const scopeLabel = envName ?? 'the default'
     const sentences = replaceTargeting
       ? [`Set ${scopeLabel} to ${phrase} for everyone.`, replacedTargetingNote(replaced, target.snapshot.headSha)]

@@ -10,6 +10,7 @@ import type {JsonObj} from '../result.js'
 import type {KeysetChoice} from './choose-keyset.js'
 import type {SecretWritePlan} from './secret-write-flow.js'
 
+import {writeStoredConfigToWorkspace} from '../util/local-config-writer.js'
 import {redactedDisplay} from '../util/redact.js'
 import {KeysetChoiceError} from './choose-keyset.js'
 import {Qf1Error} from './qf1.js'
@@ -204,6 +205,49 @@ export async function pushPlan(
     workspaceId: target.workspaceId,
   })
   return commitSha
+}
+
+/**
+ * Remove a snapshot after the command's outcome is decided. A failure here
+ * (a locked temp directory) never changes that outcome: after a successful
+ * push the commit has landed. Logged with --verbose only (S1).
+ */
+export async function cleanupQuietly(command: APICommand, snapshot: WorkspaceSnapshot): Promise<void> {
+  try {
+    await snapshot.cleanup()
+  } catch (error) {
+    command.verboseLog(
+      'secrets',
+      `could not remove the workspace snapshot: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
+/**
+ * Mirror a written secret document to QUONFIG_DIR/secrets/ (plan 3.1 step
+ * 10), best effort: the write already landed, so a local failure is only
+ * logged with --verbose.
+ */
+export async function mirrorSecretToDisk(
+  command: APICommand,
+  key: string,
+  afterJson: string,
+  verb: 'Create' | 'Update',
+): Promise<void> {
+  try {
+    const result = await writeStoredConfigToWorkspace({
+      key,
+      storedConfig: JSON.parse(afterJson) as Record<string, unknown>,
+      subdir: 'secrets',
+      verb,
+    })
+    command.verboseLog(
+      'LocalWrite',
+      result ? {committed: result.committed, path: result.filePath} : 'skipped: QUONFIG_DIR not set or not a workspace',
+    )
+  } catch (error) {
+    command.verboseLog('LocalWrite', `Failed to mirror ${key} to disk: ${String(error)}`)
+  }
 }
 
 export {SecretWriteError} from './write-secret.js'

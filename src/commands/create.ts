@@ -18,7 +18,9 @@ import {
   defaultCreateAccess,
   firstSecretNotice,
   jsonValue,
+  cleanupQuietly,
   knownSecretFailure,
+  mirrorSecretToDisk,
   openCommandSnapshot,
   pushPlan,
   readabilityNote,
@@ -36,8 +38,8 @@ import {LOG_LEVELS, LOG_LEVEL_KEY_PREFIX, isLogLevel} from '../util/log-levels.j
 import {policyAKeyError} from '../util/policy-a-key.js'
 import {RedactedSummary, redactedDisplay, redactedSummary, scrubConfidentialValues} from '../util/redact.js'
 import {notice} from '../util/stderr-notice.js'
-import secretFlags, {parsedSecretFlags} from '../util/secret-flags.js'
-import {resolveValueSource, valueSourceFlags} from '../util/value-source.js'
+import secretFlags, {SECRET_KEY_NAME_NOTE, parsedSecretFlags} from '../util/secret-flags.js'
+import {INVALID_UTF8_INPUT, resolveValueSource, valueSourceFlags} from '../util/value-source.js'
 
 export default class Create extends APICommand {
   static args = {
@@ -125,7 +127,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       options: ['boolean-flag', 'boolean', 'string', 'double', 'int', 'string-list', 'json', 'duration', 'log_level'],
     }),
     value: Flags.string({
-      description: 'default value for your new item (for secrets prefer --value-stdin / --value-from-env)',
+      description:
+        "default value for your new item (for secrets prefer --value-stdin / --value-from-env). An empty value is allowed with --value=''",
       required: false,
     }),
     ...valueSourceFlags,
@@ -170,6 +173,8 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
       return this.err(SECRET_KEY_NAME_ERROR, {key: args.name, phase: 'validation'})
     }
 
+    if (secret.keyNameGiven && !secret.selected) notice(SECRET_KEY_NAME_NOTE)
+
     if (secret.keyset !== undefined && !secret.selected) {
       return this.err('--keyset applies only to secrets: add --secret', {key: args.name, phase: 'validation'})
     }
@@ -203,15 +208,25 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
 
     // qfg-38lp: --value / --value-stdin / --value-from-env all resolve here.
     // (log_level rejects --env-var itself, with a more specific message.)
-    const valueSource = await resolveValueSource({
-      ...flags,
-      'env-var': type === 'log_level' ? undefined : flags['env-var'],
-    })
+    let invalidUtf8 = false
+    const valueSource = await resolveValueSource(
+      {
+        ...flags,
+        'env-var': type === 'log_level' ? undefined : flags['env-var'],
+      },
+      {
+        onInvalidUtf8() {
+          invalidUtf8 = true
+        },
+      },
+    )
     if (!valueSource.ok) {
       return this.err(valueSource.error ? valueSource.message : 'No value provided', {key: args.name, phase: 'input'})
     }
 
     const providedValue = valueSource.value
+    // Spec decision 39: a secret is never stored with replaced characters.
+    if (secret.selected && invalidUtf8) return this.err(INVALID_UTF8_INPUT, {key: args.name, phase: 'input'})
     // Plan Q3: --value still works with --secret, with a warning.
     if (secret.selected && flags.value !== undefined) notice(VALUE_ARGV_WARNING)
 
@@ -649,7 +664,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
         snapshot: target.snapshot,
       })
       const commitSha = await pushPlan(plan, target)
-      await this.syncConfigToDisk('secrets', key, JSON.parse((plan.files[0] as {afterJson: string}).afterJson))
+      await mirrorSecretToDisk(this, key, (plan.files[0] as {afterJson: string}).afterJson, 'Create')
       const label = this.workspaceLabel ?? 'this workspace'
       const notices = [
         plan.firstSecret ? firstSecretNotice(label) : '',
@@ -671,7 +686,7 @@ When this flag has done its job, mark readyForCleanup: true in the UI and run \`
     } catch (error) {
       outcome = {error: secretFailure(error)}
     } finally {
-      await target.snapshot.cleanup()
+      await cleanupQuietly(this, target.snapshot)
     }
 
     if ('error' in outcome) return fail(outcome.error)

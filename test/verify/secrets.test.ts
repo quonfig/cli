@@ -1024,6 +1024,13 @@ describe('verify: parseQf1Keyless split (qfg-mol-hle)', () => {
       expect(command, `qfg ${id} is not a command`).to.exist
       expect(Object.keys(command!.flags), `qfg ${id} has no --${flag}`).to.include(flag)
     }
+
+    // The claim behind the hint (qfg-mol-hle PR 3b): these commands write qf1
+    // values to secrets/, through the secret write planner.
+    const src = (f: string) =>
+      fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/commands', f), 'utf8')
+    expect(src('set-default.ts')).to.match(/\bplanSecretUpdate\(/)
+    expect(src('create.ts')).to.match(/\bplanSecretCreate\(/)
   })
 })
 

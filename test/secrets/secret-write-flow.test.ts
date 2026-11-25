@@ -361,7 +361,7 @@ describe('secret write planning (qfg-mol-hle PR 3)', function () {
         [
           'legacy.secret',
           'old_format',
-          'legacy.secret holds old-format encrypted values; move it with `qfg secret migrate` (coming) before changing it',
+          'legacy.secret holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).',
         ],
         [
           'plain.config',

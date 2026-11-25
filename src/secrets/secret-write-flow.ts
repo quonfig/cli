@@ -25,6 +25,21 @@ import {readWorkspaceKeysets} from './workspace-keysets.js'
 import type {WorkspaceSnapshot} from './workspace-snapshot.js'
 import {type SecretCommitMessage, type WorkspaceFileChange, secretCommitMessage} from './write-secret.js'
 
+/**
+ * The newest released qfg that still writes old-format (decryptWith) values
+ * (checked with `npm view @quonfig/cli version` and the v* tags, 2026-11-24).
+ */
+export const LAST_OLD_FORMAT_WRITER = '0.13.0'
+
+/**
+ * Why a key holding old-format values cannot be changed, and what to do
+ * instead. One place, so the `qfg secret migrate` PR (qfg-8seuf.6) changes it once.
+ */
+export const oldFormatRefusal = (key: string): string =>
+  `${key} holds old-format encrypted values, which this version of qfg cannot change. ` +
+  '`qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with ' +
+  `qfg ${LAST_OLD_FORMAT_WRITER} or earlier (npm install -g @quonfig/cli@${LAST_OLD_FORMAT_WRITER}).`
+
 export type SecretRefusalCode = 'exists' | 'is_config' | 'keysets_invalid' | 'not_found' | 'old_format' | 'other_family'
 
 /** A write the commands refuse, with the exact text to show. Never carries a value. */
@@ -109,11 +124,10 @@ function hasOldFormatValue(text: string): boolean {
   })
 }
 
-async function encryptTo(input: PlanInput, inherited?: string) {
-  const manifest = input.snapshot.readFile('quonfig.json')
+/** The workspace's keysets; refuses a quonfig.json the push hook would reject (unparseable, duplicates, unknown members). */
+function usableKeysets(snapshot: SnapshotView) {
+  const manifest = snapshot.readFile('quonfig.json')
   const {keysets, problems} = readWorkspaceKeysets(manifest)
-  // A quonfig.json the push hook would reject (unparseable, duplicate
-  // fingerprints, unknown members) is refused here rather than sent.
   if (manifest !== undefined && problems.length > 0) {
     throw new SecretRefusal(
       'keysets_invalid',
@@ -121,6 +135,11 @@ async function encryptTo(input: PlanInput, inherited?: string) {
     )
   }
 
+  return keysets
+}
+
+async function encryptTo(input: PlanInput, inherited?: string) {
+  const keysets = usableKeysets(input.snapshot)
   const choice = await chooseKeyset({
     env: input.env,
     flagKeyset: input.flagKeyset,
@@ -164,26 +183,14 @@ export async function planSecretCreate(input: {access: string} & PlanInput): Pro
   }
 }
 
-/**
- * `qfg set-default <key>` on a secret: one scope's fallback (or, with
- * `replaceTargeting`, the whole scope) gets the new value. The keyset is
- * inherited from the value being replaced unless `flagKeyset` names another
- * (then `movedNotice` says so). The document's access tier is never changed.
- */
-export async function planSecretUpdate(
-  input: {envName?: string; replaceTargeting: boolean} & PlanInput,
-): Promise<SecretWritePlan> {
-  const {envName, key, snapshot} = input
-  const path = secretPath(key)
-  const configCopy = `configs/${key}.json`
-  const text = snapshot.readFile(path)
+/** The text of `secrets/<key>.json`, or the refusal that says why the key cannot take a secret write. */
+function existingSecretText(snapshot: SnapshotView, key: string): string {
+  const text = snapshot.readFile(secretPath(key))
   if (text === undefined) {
+    const configCopy = `configs/${key}.json`
     const config = snapshot.readFile(configCopy)
     if (config !== undefined && hasOldFormatValue(config)) {
-      throw new SecretRefusal(
-        'old_format',
-        `${key} holds old-format encrypted values; move it with \`qfg secret migrate\` (coming) before changing it`,
-      )
+      throw new SecretRefusal('old_format', oldFormatRefusal(key))
     }
 
     if (config !== undefined) {
@@ -206,6 +213,38 @@ export async function planSecretUpdate(
     throw new SecretRefusal('not_found', `Could not find a secret named ${key}`)
   }
 
+  return text
+}
+
+/**
+ * Everything a set-default on a secret can refuse before it knows the
+ * environment or the value (validator N7): the key is a secret, quonfig.json
+ * is usable, and a --keyset names a declared, writable keyset. Run before any
+ * prompt, so a doomed write never asks for input first.
+ */
+export async function checkSecretUpdatable(input: {
+  flagKeyset?: string
+  key: string
+  snapshot: SnapshotView
+}): Promise<void> {
+  existingSecretText(input.snapshot, input.key)
+  const keysets = usableKeysets(input.snapshot)
+  if (input.flagKeyset !== undefined) await chooseKeyset({flagKeyset: input.flagKeyset, interactive: false, keysets})
+}
+
+/**
+ * `qfg set-default <key>` on a secret: one scope's fallback (or, with
+ * `replaceTargeting`, the whole scope) gets the new value. The keyset is
+ * inherited from the value being replaced unless `flagKeyset` names another
+ * (then `movedNotice` says so). The document's access tier is never changed.
+ */
+export async function planSecretUpdate(
+  input: {envName?: string; replaceTargeting: boolean} & PlanInput,
+): Promise<SecretWritePlan> {
+  const {envName, key, snapshot} = input
+  const path = secretPath(key)
+  const configCopy = `configs/${key}.json`
+  const text = existingSecretText(snapshot, key)
   const doc = parseSecretDocument(text, key)
   const scope = envName ?? 'default'
   const {choice, redacted, value} = await encryptTo(input, inheritedKeyset(doc, envName))

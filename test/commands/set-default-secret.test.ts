@@ -28,7 +28,7 @@ import {
 
 const PLAINTEXT = 'FAKE_SET_DEFAULT_secret_value_0077'
 const MIGRATE =
-  'db.password holds old-format encrypted values; move it with `qfg secret migrate` (coming) before changing it'
+  'db.password holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).'
 
 const sentDoc = () => JSON.parse(pushes()[0].files[0].afterJson)
 const prodRules = () => sentDoc().environments.find((e: {id: string}) => e.id === 'production').rules
@@ -323,7 +323,10 @@ describe('set-default on a secret writes qf1 to secrets/ (qfg-mol-hle PR 3)', fu
 
   test
     .do(() => {
-      state.push = {body: {json: {message: 'expected sha mismatch', status: 409}}, status: 409}
+      state.push = {
+        body: {json: {message: 'Workspace HEAD moved (expected a, got b). Run `qfg pull` and retry.', status: 409}},
+        status: 409,
+      }
     })
     .stdout()
     .stderr()

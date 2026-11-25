@@ -47,6 +47,8 @@ export const writeStoredConfigToWorkspace = async (opts: {
   subdir: EntitySubdir
   key: string
   storedConfig: Record<string, unknown>
+  /** The local commit message's verb (default Create). */
+  verb?: 'Create' | 'Update'
   /** Override QUONFIG_DIR for testing. */
   quonfigDir?: string
 }): Promise<WriteResult | null> => {
@@ -82,7 +84,11 @@ export const writeStoredConfigToWorkspace = async (opts: {
       opts.subdir
     ]
     try {
-      const committed = await addAndCommitFile(resolvedDir, relPath, `Create ${entityLabel}: ${opts.key}`)
+      const committed = await addAndCommitFile(
+        resolvedDir,
+        relPath,
+        `${opts.verb ?? 'Create'} ${entityLabel}: ${opts.key}`,
+      )
       return {filePath, committed}
     } catch (error) {
       return {filePath, committed: false, skippedCommitReason: String(error)}

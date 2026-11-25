@@ -182,7 +182,7 @@ describe('--propose on update commands (qfg-5bjew.37)', () => {
       .command(['set-default', 'robocop-secret', '--environment=Staging', '--value=hunter2', '--propose', '--json'])
       .catch((error) => {
         expect(error.message).to.equal(
-          'robocop-secret holds old-format encrypted values; move it with `qfg secret migrate` (coming) before changing it',
+          'robocop-secret holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).',
         )
         expect(proposeCaptured.propose).to.have.length(0)
         expect(error.message).to.not.contain('hunter2')
@@ -365,7 +365,7 @@ describe('--propose on update commands (qfg-5bjew.37)', () => {
       .catch((error) => {
         expect(error.message).to.not.contain('hunter2')
         expect(error.message).to.equal(
-          'robocop-secret holds old-format encrypted values; move it with `qfg secret migrate` (coming) before changing it',
+          'robocop-secret holds old-format encrypted values, which this version of qfg cannot change. `qfg secret migrate` (in a later release) will move them to secrets/; until then, change the value with qfg 0.13.0 or earlier (npm install -g @quonfig/cli@0.13.0).',
         )
       })
       .it('set-default on an old-format secret is refused, never echoing the value (no propose hint for it)')
