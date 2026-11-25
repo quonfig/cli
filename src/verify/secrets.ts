@@ -481,6 +481,10 @@ export function validateSecretDocument(
   }
 }
 
+/** The fix suggested for a bad secrets/ value: the commands that write one (each is checked to exist by a test). */
+export const SECRET_VALUE_HINT =
+  'do not edit secrets/ values by hand: rewrite this value with `qfg set-default --secret` (a new secret is made with `qfg create --secret`)'
+
 function checkQf1Value(
   value: unknown,
   ctx: string,
@@ -489,10 +493,7 @@ function checkQf1Value(
 ): void {
   const parsed = parseQf1Keyless(value)
   if (!parsed.ok) {
-    error(
-      `${ctx}: qf1 ${parsed.errorClass}: ${parsed.reason}`,
-      `secrets/ values are encrypted by qfg; do not edit them by hand`,
-    )
+    error(`${ctx}: qf1 ${parsed.errorClass}: ${parsed.reason}`, SECRET_VALUE_HINT)
     return
   }
 

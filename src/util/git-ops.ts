@@ -55,6 +55,128 @@ export const runGit = async (args: string[], options?: RunGitOptions): Promise<{
   }
 }
 
+/** How long a streamed git command may run before it is killed (default 2 minutes). */
+const STREAM_TIMEOUT_MS = 120_000
+
+/**
+ * Run a git command whose output is NUL-separated (`-z`) and hand each entry
+ * to `onEntry` as it arrives, so a listing of any size is never held whole
+ * (`runGit`'s execFile stops at Node's 1 MiB output limit). Same safe
+ * args/env as `runGit`. Rejects, with git's stderr and tokens redacted, on a
+ * non-zero exit, on a timeout, or when `onEntry` throws (git is killed).
+ */
+export const streamGitNulEntries = (
+  args: string[],
+  onEntry: (entry: string) => void,
+  options?: {timeoutMs?: number} & RunGitOptions,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const env = {...process.env, ...GIT_SAFE_ENV, ...options?.env}
+    const child = spawn('git', [...GIT_SAFE_ARGS, ...args], {cwd: options?.cwd, env, stdio: ['ignore', 'pipe', 'pipe']})
+    let settled = false
+    const fail = (error: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.kill()
+      reject(error)
+    }
+
+    const timer = setTimeout(
+      () => fail(new Error(redactToken(`git ${args.join(' ')} timed out`))),
+      options?.timeoutMs ?? STREAM_TIMEOUT_MS,
+    )
+    let pending = Buffer.alloc(0)
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (settled) return
+      pending = Buffer.concat([pending, chunk])
+      try {
+        let nul = pending.indexOf(0)
+        while (nul !== -1) {
+          onEntry(pending.subarray(0, nul).toString('utf8'))
+          pending = pending.subarray(nul + 1)
+          nul = pending.indexOf(0)
+        }
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)))
+      }
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < 4096) stderr += chunk.toString('utf8')
+    })
+    child.on('error', fail)
+    child.on('close', (code) => {
+      if (settled) return
+      if (code !== 0) {
+        fail(new Error(redactToken(`git ${args.join(' ')} failed (exit ${code}): ${stderr.trim()}`)))
+        return
+      }
+
+      try {
+        if (pending.length > 0) onEntry(pending.toString('utf8'))
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)))
+        return
+      }
+
+      settled = true
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+
+/**
+ * The content of each blob `oids` names, read with one `git cat-file --batch`
+ * in `cwd`. Rejects on a missing object or a non-blob reply.
+ */
+export const readGitBlobs = (cwd: string, oids: readonly string[]): Promise<Map<string, Buffer>> =>
+  new Promise((resolve, reject) => {
+    const out = new Map<string, Buffer>()
+    if (oids.length === 0) {
+      resolve(out)
+      return
+    }
+
+    const env = {...process.env, ...GIT_SAFE_ENV}
+    const child = spawn('git', [...GIT_SAFE_ARGS, '-C', cwd, 'cat-file', '--batch'], {
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    const chunks: Buffer[] = []
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < 4096) stderr += chunk.toString('utf8')
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`git cat-file failed (exit ${code}): ${stderr.trim()}`))
+        return
+      }
+
+      const output = Buffer.concat(chunks)
+      let offset = 0
+      for (const oid of oids) {
+        const headerEnd = output.indexOf(0x0a, offset)
+        const header = headerEnd === -1 ? '' : output.subarray(offset, headerEnd).toString('utf8')
+        const [replyOid, type, size] = header.split(' ')
+        if (replyOid !== oid || type !== 'blob') {
+          reject(new Error(`git cat-file could not read ${oid}: "${header}"`))
+          return
+        }
+
+        const start = headerEnd + 1
+        out.set(oid, output.subarray(start, start + Number(size)))
+        offset = start + Number(size) + 1
+      }
+
+      resolve(out)
+    })
+    child.stdin.end(`${oids.join('\n')}\n`)
+  })
+
 export interface SpawnGitOptions {
   cwd?: string
   env?: NodeJS.ProcessEnv

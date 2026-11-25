@@ -54,10 +54,21 @@ export const callConfigsPush = async (input: ConfigPushInput, orgSlug: string): 
   })
 
   if (res.ok) {
-    const body = (await res.json()) as OrpcEnvelope<{commitSha: string}>
-    const commitSha = body.json?.commitSha
+    // A 2xx whose body is not JSON, or carries no commit sha, is reported as
+    // such: the caller cannot tell whether the commit landed.
+    const raw = await res.text().catch(() => '')
+    let body: OrpcEnvelope<{commitSha?: string}> | undefined
+    try {
+      body = JSON.parse(raw) as OrpcEnvelope<{commitSha?: string}>
+    } catch {
+      body = undefined
+    }
+
+    const commitSha = body?.json?.commitSha
     if (!commitSha) {
-      throw new Error(`configs.push returned 200 but no commitSha (body=${JSON.stringify(body)})`)
+      throw new Error(
+        `configs.push returned ${res.status} but no commitSha (body=${body === undefined ? 'not JSON' : JSON.stringify(body).slice(0, 200)})`,
+      )
     }
 
     return {kind: 'success', commitSha}

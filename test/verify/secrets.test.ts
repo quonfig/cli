@@ -21,6 +21,7 @@ import {
   parseQf1Keyless,
   parseQf1Structure,
   quoteUntrustedName,
+  SECRET_VALUE_HINT,
 } from '../../src/verify/secrets.js'
 import {readFilesFromCommit, runHookChecks} from '../../src/verify/standalone.js'
 import {validateFileMap, validateWorkspace} from '../../src/verify/validate.js'
@@ -1006,8 +1007,23 @@ describe('verify: parseQf1Keyless split (qfg-mol-hle)', () => {
     const {issues} = validateFileMap(workspace({'secrets/a.b.json': doc}), {validateValues: true})
     const issue = issues.find((i) => /qf1 malformed/.test(i.message))
     expect(issue, JSON.stringify(issues)).to.exist
-    expect(issue!.suggestion).to.equal('secrets/ values are encrypted by qfg; do not edit them by hand')
+    expect(issue!.suggestion).to.equal(SECRET_VALUE_HINT)
     expect(issue!.suggestion).not.to.match(/qfg secret set/)
+  })
+
+  it('the hint names the commands that write secrets, and each exists with that flag (qfg-mol-hle PR 3)', async () => {
+    const named = [...SECRET_VALUE_HINT.matchAll(/`qfg ([a-z-]+) (--[a-z-]+)`/g)].map((m) => ({
+      flag: m[2].slice(2),
+      id: m[1],
+    }))
+    expect(named.map((n) => n.id)).to.deep.equal(['set-default', 'create'])
+    const {Config} = await import('@oclif/core')
+    const config = await Config.load({root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')})
+    for (const {flag, id} of named) {
+      const command = config.findCommand(id)
+      expect(command, `qfg ${id} is not a command`).to.exist
+      expect(Object.keys(command!.flags), `qfg ${id} has no --${flag}`).to.include(flag)
+    }
   })
 })
 
