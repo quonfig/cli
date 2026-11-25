@@ -1,27 +1,14 @@
 import {expect, test} from '@oclif/test'
-import {Readable} from 'node:stream'
 
-import {decrypt} from '../../src/util/encryption.js'
 import {resetClientCache} from '../../src/util/get-client.js'
 import {configsUpdateCapture, server} from '../responses/set-default.js'
 import {cleanupTestAuth, setupTestAuth} from '../test-auth-helper.js'
 
-// qfg-38lp: feed --value-stdin by swapping process.stdin for a Readable.
-let savedStdin: PropertyDescriptor | undefined
-const setStdin = (text: string) => {
-  savedStdin = Object.getOwnPropertyDescriptor(process, 'stdin')
-  Object.defineProperty(process, 'stdin', {configurable: true, value: Readable.from([text])})
-}
-
-const restoreStdin = () => {
-  if (savedStdin) Object.defineProperty(process, 'stdin', savedStdin)
-  savedStdin = undefined
-}
-
 describe('set-default', () => {
   before(() => {
     setupTestAuth()
-    server.listen()
+    // A request with no handler fails instead of reaching a real server.
+    server.listen({onUnhandledRequest: 'error'})
   })
   afterEach(() => {
     server.resetHandlers()
@@ -36,7 +23,6 @@ describe('set-default', () => {
   // qfg-38lp: set-default must never print a secret's plaintext (success line,
   // confirm prompt, --json), and the value can come from stdin / a local env var.
   describe('secret ergonomics (qfg-38lp)', () => {
-    const KEY = 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221'
     const PLAINTEXT = 'sk_live_FAKE_setdefault_0123456789'
     const stagingRuleValue = () => {
       const environments = configsUpdateCapture.body.json.config.environments as Array<{id: string; rules: any[]}>
@@ -48,51 +34,18 @@ describe('set-default', () => {
     })
 
     test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .stdout()
-      .stderr()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Staging',
-        '--confirm',
-        '--secret',
-        `--value=${PLAINTEXT}`,
-      ])
-      .it('set-default --secret prints a redacted fingerprint, never the plaintext', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        expect(ctx.stdout).to.match(/Set Staging fallback to \[encrypted \*{5}[\da-f]{5}, 34 chars, ends …6789]/)
-      })
-
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .stdout()
-      .stderr()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Staging',
-        '--confirm',
-        '--secret',
-        `--value=${PLAINTEXT}`,
-        '--json',
-      ])
-      .it('set-default --secret --json returns a redacted summary in place of the value', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        const parsed = JSON.parse(ctx.stdout)
-        expect(parsed.value).to.deep.include({length: PLAINTEXT.length, last4: '6789', redacted: true})
-        expect(parsed.value.fingerprint).to.match(/^\*{5}[\da-f]{5}$/)
-      })
-
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
       .stdout()
       .stderr()
       .command(['set-default', 'robocop-secret', '--environment=Staging', '--confirm', `--value=${PLAINTEXT}`])
-      .it('auto-detected encryption also redacts', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        expect(ctx.stdout).to.contain('[encrypted *****')
+      .catch((error) => {
+        expect(error.message).to.equal(
+          'robocop-secret holds old-format encrypted values; move it with `qfg secret migrate` (coming) before changing it',
+        )
+        expect(error.message).to.not.contain(PLAINTEXT)
       })
+      .it(
+        'an old-format (decryptWith) key is refused with the migrate pointer, without echoing the value (qfg-mol-hle)',
+      )
 
     test
       .stdout()
@@ -108,42 +61,6 @@ describe('set-default', () => {
       .it('--confidential redacts the value too', (ctx) => {
         expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
         expect(ctx.stdout).to.contain('[confidential *****')
-      })
-
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
-      .do(() => setStdin(`${PLAINTEXT}\n`))
-      .finally(restoreStdin)
-      .stdout()
-      .stderr()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Staging',
-        '--confirm',
-        '--secret',
-        '--value-stdin',
-      ])
-      .it('--value-stdin feeds the encrypted write', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        expect(decrypt(stagingRuleValue().value, KEY)).to.equal(PLAINTEXT)
-      })
-
-    test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY, QFG38_FAKE_SRC: PLAINTEXT})
-      .stdout()
-      .stderr()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Staging',
-        '--confirm',
-        '--secret',
-        '--value-from-env=QFG38_FAKE_SRC',
-      ])
-      .it('--value-from-env feeds the encrypted write', (ctx) => {
-        expect(ctx.stdout + ctx.stderr).to.not.contain(PLAINTEXT)
-        expect(decrypt(stagingRuleValue().value, KEY)).to.equal(PLAINTEXT)
       })
 
     test
@@ -189,7 +106,6 @@ describe('set-default', () => {
       .it('--value and --value-from-env are mutually exclusive')
 
     test
-      .env({QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: KEY})
       .command(['set-default', 'test.json', '--environment=Staging', '--confirm', '--secret', '--value={"a":1}'])
       .catch((error) => {
         expect(error.message).to.contain('secrets are string-only')
@@ -349,88 +265,6 @@ describe('set-default', () => {
           type: 'provided',
           value: {source: 'ENV_VAR', lookup: 'GREETING'},
         })
-      })
-
-    test
-      .env({
-        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
-      })
-      .stdout()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Staging',
-        '--confirm',
-        '--secret',
-        '--value=hello',
-      ])
-      .it('can create a secret string', (ctx) => {
-        expect(ctx.stdout).to.match(/Set Staging fallback to \[encrypted \*{5}[\da-f]{5}, 5 chars]/)
-        expect(ctx.stdout).to.not.contain('hello')
-      })
-
-    // Regression for qfg-ytw: a --secret write must persist confidential:true
-    // and decryptWith:<keyName> on the rule value. Without these fields the
-    // SDK can't decrypt at runtime and the ciphertext is eligible to leak to
-    // client SDKs / logs.
-    test
-      .env({
-        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
-      })
-      .stdout()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Staging',
-        '--confirm',
-        '--secret',
-        '--value=hello',
-      ])
-      .it('secret writes include confidential + decryptWith on the emitted rule', () => {
-        const body = configsUpdateCapture.body
-        expect(body, 'configs/update was never called').to.not.be.null
-        const environments = body.json.config.environments as Array<{id: string; rules: Array<{value: any}>}>
-        const stagingEnv = environments.find((e) => e.id === 'Staging')
-        expect(stagingEnv, 'staging env missing from update payload').to.exist
-        const ruleValue = stagingEnv!.rules[0].value
-        expect(ruleValue.type).to.equal('string')
-        expect(ruleValue.value, 'encrypted ciphertext missing').to.match(/--.+--/)
-        expect(ruleValue.confidential, 'confidential:true must be set on secret rules').to.equal(true)
-        expect(ruleValue.decryptWith, 'decryptWith must point at the secret key name').to.equal(
-          'quonfig.secrets.encryption.key',
-        )
-      })
-
-    test
-      .env({
-        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c87ba22d8662282abe8a0e4651327b579cb64a454ab0f4c170b45b15f049a221',
-      })
-      .stdout()
-      .command(['set-default', 'robocop-secret', '--environment=Staging', '--confirm', '--value=hello'])
-      .it('uses encryption if any existing value for the key is encrypted', (ctx) => {
-        expect(ctx.stdout).to.match(/Set Staging fallback.*encrypted/)
-      })
-
-    // Regression for qfg-o4m: per-env encryption key override must be resolved
-    // by env slug (environments[].id in the stored config), not by DB UUID.
-    test
-      .env({
-        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY_PROD:
-          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      })
-      .stdout()
-      .command([
-        'set-default',
-        'jeffreys.test.key.reforge',
-        '--environment=Production',
-        '--confirm',
-        '--secret',
-        '--value=hello',
-      ])
-      .it('uses the per-environment encryption key for production secrets', (ctx) => {
-        expect(ctx.stdout).to.contain('Encrypting with key from env var: QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY_PROD')
-        expect(ctx.stdout).to.match(/Set Production fallback to \[encrypted \*{5}[\da-f]{5}, 5 chars]/)
       })
 
     test
@@ -847,15 +681,14 @@ describe('set-default', () => {
       })
 
     test
-      .env({
-        QUONFIG_INTEGRATION_TEST_ENCRYPTION_KEY: 'c8'.repeat(32),
-      })
       .stdout()
       .stderr()
       .command(['set-default', 'env-only.secret', '--environment=Staging', '--value=FAKE_ENV_ONLY_9', '--confirm'])
-      .it('auto-detects encryption from environment rules, not only the default', (ctx) => {
-        expect(lastRuleValue('Staging').decryptWith).to.equal('quonfig.secrets.encryption.key')
-        expect(ctx.stdout + ctx.stderr).to.not.contain('FAKE_ENV_ONLY_9')
+      .catch((error) => {
+        expect(error.message).to.contain('env-only.secret holds old-format encrypted values')
+        expect(error.message).to.not.contain('FAKE_ENV_ONLY_9')
+        expect(configsUpdateCapture.body, 'the old encrypted write path is gone').to.equal(null)
       })
+      .it('detects old-format encryption in environment rules, not only the default, and refuses it (qfg-mol-hle)')
   })
 })
