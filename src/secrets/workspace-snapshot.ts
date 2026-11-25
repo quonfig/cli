@@ -32,7 +32,7 @@ import * as path from 'node:path'
 import type {BaseCommand} from '../index.js'
 
 import {KNOWN_DIRS} from '../verify/validate.js'
-import {runGit} from '../util/git-ops.js'
+import {runGit, streamGitNulEntries} from '../util/git-ops.js'
 
 export type PooledKeyMatch = {dir: string; file: string; key: string}
 
@@ -99,17 +99,20 @@ function segmentsOf(rel: string): string[] {
  * Where a git symlink or submodule entry sits, by path. The checkout runs
  * with `core.symlinks=false`, so such an entry is a small text file on disk
  * holding the link target; this set is what tells it apart from a document.
+ *
+ * `git ls-tree -r -z` is read as a stream and parsed entry by entry: a
+ * workspace of tens of thousands of files lists far more than Node's 1 MiB
+ * default output limit for `execFile`, and only the few non-file entries are
+ * kept (carry-in S1).
  */
 async function nonFileEntries(dir: string): Promise<Set<string>> {
-  const {stdout} = await runGit(['-C', dir, 'ls-tree', '-r', '-z', '--full-tree', 'HEAD'])
   const out = new Set<string>()
-  for (const entry of stdout.split('\0')) {
+  await streamGitNulEntries(['-C', dir, 'ls-tree', '-r', '-z', '--full-tree', 'HEAD'], (entry) => {
     const tab = entry.indexOf('\t')
-    if (tab === -1) continue
+    if (tab === -1) return
     const mode = entry.slice(0, entry.indexOf(' '))
     if (mode !== '100644' && mode !== '100755') out.add(entry.slice(tab + 1))
-  }
-
+  })
   return out
 }
 
@@ -119,6 +122,17 @@ function snapshotAt(dir: string, headSha: string, nonFiles: ReadonlySet<string>)
    * none may be a symlink (or a git symlink / submodule entry), the last must
    * be a `kind`. Undefined when a component does not exist.
    */
+  const listings = new Map<string, Set<string>>()
+  const namesIn = (parent: string): Set<string> => {
+    let names = listings.get(parent)
+    if (!names) {
+      names = new Set(fs.readdirSync(parent))
+      listings.set(parent, names)
+    }
+
+    return names
+  }
+
   const resolve = (rel: string, kind: 'dir' | 'file'): string | undefined => {
     const parts = segmentsOf(rel)
     let current = dir
@@ -127,6 +141,10 @@ function snapshotAt(dir: string, headSha: string, nonFiles: ReadonlySet<string>)
         throw new SnapshotPathError(rel, 'is not a regular file in the workspace repo (a symlink or submodule)')
       }
 
+      // On a case-insensitive filesystem (macOS, Windows) lstat finds
+      // `DB.json` for `db.json`; the snapshot's paths are git's, which are
+      // exact, so the entry must be listed with this exact name.
+      if (!namesIn(current).has(part)) return undefined
       current = path.join(current, part)
       let stat: fs.Stats
       try {

@@ -12,9 +12,11 @@
  * the rest of the workspace (the value's keyset and fingerprint declared in
  * quonfig.json, environment ids, pooled keys) is checked by
  * `pushWorkspaceFiles`' preflight, which runs the push hook's validator
- * (src/verify) before anything is sent. The guard is never looser than the
- * hook; it matches it member for member (`environments` may be absent, as
- * the hook allows; documents built here always have it).
+ * (src/verify) before anything is sent. On real documents the guard is
+ * never STRICTER than the hook (it refuses nothing the hook would accept;
+ * `environments` may be absent, as the hook allows, and documents built here
+ * always have it). It is not a full copy of the hook either: the preflight is
+ * what guarantees a written document is hook-valid.
  *
  * Rule edits reuse the shared rulebook in src/util/rules.ts, so a secret's
  * scope is edited exactly as `qfg set-default` edits a config's.

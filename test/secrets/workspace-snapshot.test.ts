@@ -4,6 +4,7 @@
  * PR 2). Runs against a file:// bare repo.
  */
 import {expect} from 'chai'
+import {execFileSync} from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import {pathToFileURL} from 'node:url'
@@ -99,6 +100,18 @@ describe('workspace snapshot (qfg-mol-hle)', function () {
         'configs/Stripe.Key.json',
         'secrets/.keep',
       ])
+    } finally {
+      await snap.cleanup()
+    }
+  })
+
+  it('readFile matches the letter case of the path exactly, even on a case-insensitive filesystem', async () => {
+    const snap = await cloneWorkspaceSnapshot(url, {tmpRoot: root})
+    try {
+      expect(snap.readFile('configs/Stripe.Key.json')).to.equal(configDoc('Stripe.Key'))
+      expect(snap.readFile('configs/stripe.key.json'), 'a case variant is a different file').to.equal(undefined)
+      expect(snap.readFile('CONFIGS/Stripe.Key.json')).to.equal(undefined)
+      expect(snap.listJson('Configs')).to.deep.equal([])
     } finally {
       await snap.cleanup()
     }
@@ -406,5 +419,57 @@ describe('workspace snapshot branch rule (qfg-mol-hle)', function () {
 
     expect(caught).to.be.instanceOf(Error)
     expect(fs.readdirSync(root)).to.deep.equal(before)
+  })
+})
+
+describe('workspace snapshot of a large workspace (qfg-mol-hle PR 3, carry-in S1)', function () {
+  this.timeout(180_000) // 15,000 files are checked out; slow on windows-latest
+  let root: string
+
+  afterEach(() => fs.rmSync(root, {force: true, maxRetries: 3, recursive: true}))
+
+  /**
+   * A bare repo whose main holds quonfig.json and `count` files, built with
+   * plumbing (one shared blob, `update-index --index-info`, `write-tree`,
+   * `commit-tree`) so no file is written to build it. `git ls-tree -r` of
+   * this tree is well over Node's default 1 MiB child-process output limit.
+   */
+  function largeRepo(count: number): {bare: string; headSha: string} {
+    const bare = path.join(root, 'large.git')
+    git(root, 'init', '-q', '--bare', bare)
+    const blob = execFileSync('git', ['-C', bare, 'hash-object', '-w', '--stdin'], {encoding: 'utf8', input: '{}\n'})
+      .toString()
+      .trim()
+    const manifest = execFileSync('git', ['-C', bare, 'hash-object', '-w', '--stdin'], {
+      encoding: 'utf8',
+      input: quonfigJson({}),
+    }).trim()
+    const lines = [`100644 ${manifest}\tquonfig.json`]
+    for (let i = 0; i < count; i++) {
+      lines.push(
+        `100644 ${blob}\tassets/a-fairly-long-asset-file-name-to-fill-the-listing-${String(i).padStart(6, '0')}.json`,
+      )
+    }
+
+    const env = {...process.env, GIT_INDEX_FILE: path.join(root, 'large.index')}
+    execFileSync('git', ['-C', bare, 'update-index', '--index-info'], {env, input: `${lines.join('\n')}\n`})
+    const tree = execFileSync('git', ['-C', bare, 'write-tree'], {encoding: 'utf8', env}).trim()
+    const commit = git(root, '-C', bare, 'commit-tree', tree, '-m', 'large')
+    git(root, '-C', bare, 'update-ref', 'refs/heads/main', commit)
+    return {bare, headSha: commit}
+  }
+
+  it('snapshots a workspace of 15,000 files (git ls-tree output above 1 MiB)', async () => {
+    root = tmpDir('qfg-snap-large-')
+    const {bare, headSha} = largeRepo(15_000)
+    const listing = execFileSync('git', ['-C', bare, 'ls-tree', '-r', '-z', 'main'], {maxBuffer: 64 * 1024 * 1024})
+    expect(listing.length, 'the fixture must exceed the default 1 MiB limit').to.be.greaterThan(1024 * 1024)
+    const snap = await cloneWorkspaceSnapshot(pathToFileURL(bare).href, {tmpRoot: root})
+    try {
+      expect(snap.headSha).to.equal(headSha)
+      expect(snap.readFile('quonfig.json')).to.equal(quonfigJson({}))
+    } finally {
+      await snap.cleanup()
+    }
   })
 })

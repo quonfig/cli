@@ -25,15 +25,21 @@
  *   - the commit message is an object only `secretCommitMessage` issues,
  *     built from parts validated at run time, so no plaintext, length or
  *     tail can reach it;
+ *   - the message names a file this write changes, with a matching kind
+ *     (create = add, set = modify, delete = delete);
+ *   - `quonfig.json`, when written, is a JSON object;
  *   - every failure, including statuses `callConfigsPush` does not map, is
- *     a SecretWriteError whose text carries no token and no qf1 value.
+ *     a SecretWriteError; every piece of server text in it (messages,
+ *     denial paths, reasons and permissions) goes through one scrubber that
+ *     removes token-bearing URLs, bearer tokens and qf1 values and caps its
+ *     length.
  * No plaintext and no private key exists anywhere on this path.
  */
 import type {ConfigPushInput, ConfigPushResult, PushDenial, ServerFileDelta} from '../push/run-push.js'
 
 import {KEYSET_NAME_RE, FINGERPRINT_RE} from './qf1.js'
 import {SecretDocumentError, assertWritableSecretDocument, secretPath} from './secret-doc.js'
-import type {WorkspaceSnapshot} from './workspace-snapshot.js'
+import {SnapshotPathError, type WorkspaceSnapshot} from './workspace-snapshot.js'
 import {validateFileMap} from '../verify/validate.js'
 import {redactToken} from '../util/git-ops.js'
 
@@ -46,7 +52,8 @@ export type WorkspaceFileChange = {afterJson: string; path: string} | {delete: t
  */
 export type SecretCommitMessage = {readonly text: string}
 
-const ISSUED_MESSAGES = new WeakSet<object>()
+/** What each issued message describes, so the writer can check it against the files written. */
+const ISSUED_MESSAGES = new WeakMap<object, {key: string; verb: 'create' | 'delete' | 'set'}>()
 
 export type PushWorkspaceFilesInput = {
   files: WorkspaceFileChange[]
@@ -108,30 +115,34 @@ const VERBS: ReadonlySet<unknown> = new Set(['create', 'delete', 'set'])
  */
 export function secretCommitMessage(parts: CommitParts): SecretCommitMessage {
   if (typeof parts !== 'object' || parts === null) bad('no parts')
-  if (!VERBS.has(parts.verb)) bad('unknown verb')
-  if (typeof parts.key !== 'string') bad('the key is not a valid secret key')
+  // Each part is read exactly once: an accessor cannot return one value to
+  // the checks below and another to the text.
+  const p = parts as Record<string, unknown>
+  const verb = p.verb
+  const key = p.key
+  if (!VERBS.has(verb)) bad('unknown verb')
+  if (typeof key !== 'string') bad('the key is not a valid secret key')
   try {
-    secretPath(parts.key)
+    secretPath(key)
   } catch {
     bad('the key is not a valid secret key')
   }
 
   let text: string
-  if (parts.verb === 'delete') {
-    text = `qfg: delete secret ${parts.key}`
+  if (verb === 'delete') {
+    text = `qfg: delete secret ${key}`
   } else {
-    if (typeof parts.keyset !== 'string' || !KEYSET_NAME_RE.test(parts.keyset)) bad('invalid keyset name')
-    if (typeof parts.fingerprint !== 'string' || !FINGERPRINT_RE.test(parts.fingerprint)) bad('invalid fingerprint')
-    if (parts.scope !== undefined && (typeof parts.scope !== 'string' || !SCOPE_RE.test(parts.scope))) {
-      bad('invalid scope')
-    }
-
-    const scope = parts.scope === undefined ? '' : ` (${parts.scope})`
-    text = `qfg: ${parts.verb} secret ${parts.key}${scope} on ${parts.keyset} ${parts.fingerprint}`
+    const keyset = p.keyset
+    const fingerprint = p.fingerprint
+    const scope = p.scope
+    if (typeof keyset !== 'string' || !KEYSET_NAME_RE.test(keyset)) bad('invalid keyset name')
+    if (typeof fingerprint !== 'string' || !FINGERPRINT_RE.test(fingerprint)) bad('invalid fingerprint')
+    if (scope !== undefined && (typeof scope !== 'string' || !SCOPE_RE.test(scope))) bad('invalid scope')
+    text = `qfg: ${verb} secret ${key}${scope === undefined ? '' : ` (${scope})`} on ${keyset} ${fingerprint}`
   }
 
   const message = Object.freeze({text})
-  ISSUED_MESSAGES.add(message)
+  ISSUED_MESSAGES.set(message, {key, verb: verb as 'create' | 'delete' | 'set'})
   return message
 }
 
@@ -162,6 +173,19 @@ function toDeltas(input: PushWorkspaceFilesInput): ServerFileDelta[] {
     }
 
     if (typeof change.afterJson !== 'string') invalid(`${filePath}: no content`)
+    if (filePath === QUONFIG_JSON) {
+      let manifest: unknown
+      try {
+        manifest = JSON.parse(change.afterJson)
+      } catch {
+        invalid('quonfig.json must be a JSON object')
+      }
+
+      if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) {
+        invalid('quonfig.json must be a JSON object')
+      }
+    }
+
     if (match) {
       let doc: unknown
       try {
@@ -184,6 +208,21 @@ function toDeltas(input: PushWorkspaceFilesInput): ServerFileDelta[] {
       ? {afterJson: change.afterJson, kind: 'add', path: filePath}
       : {afterJson: change.afterJson, beforeJson: before, kind: 'modify', path: filePath}
   })
+}
+
+const KIND_FOR_VERB = {create: 'add', delete: 'delete', set: 'modify'} as const
+
+/** The message must name a secret file this write changes, with the matching kind. */
+function checkMessageMatches(issued: {key: string; verb: keyof typeof KIND_FOR_VERB}, deltas: ServerFileDelta[]): void {
+  const file = secretPath(issued.key)
+  const delta = deltas.find((d) => d.path === file)
+  if (!delta || delta.kind !== KIND_FOR_VERB[issued.verb]) {
+    invalid(
+      `the commit message does not describe this write: it says ${issued.verb} ${file}, which the write ${
+        delta ? `changes as ${delta.kind}` : 'does not change'
+      }`,
+    )
+  }
 }
 
 /**
@@ -217,6 +256,8 @@ function preflight(input: PushWorkspaceFilesInput, deltas: ServerFileDelta[]): v
     )
   }
 }
+
+const MAX_DENIALS_SHOWN = 20
 
 /** Server text made safe to show: no token-bearing URL, no bearer token, no qf1 value, bounded length. */
 function scrub(text: string): string {
@@ -254,8 +295,15 @@ export async function pushWorkspaceFiles(
     throw new SecretWriteError('invalid_input', 'the commit message must come from secretCommitMessage')
   }
 
-  const deltas = toDeltas(input)
-  preflight(input, deltas)
+  let deltas: ServerFileDelta[]
+  try {
+    deltas = toDeltas(input)
+    checkMessageMatches(ISSUED_MESSAGES.get(input.message)!, deltas)
+    preflight(input, deltas)
+  } catch (error) {
+    if (error instanceof SnapshotPathError) throw new SecretWriteError('invalid_input', error.message)
+    throw error
+  }
 
   const send = push ?? (await import('../push/config-push-client.js')).callConfigsPush
   let result: ConfigPushResult
@@ -276,20 +324,24 @@ export async function pushWorkspaceFiles(
         'conflict',
         'the workspace changed while writing; nothing was written; run the command again',
       )
-    case 'denied':
-      throw new SecretWriteError(
-        'denied',
-        `the server refused the write:\n${result.denials
-          .map((d) => `  ${d.path}: ${d.reason} (needs ${d.requiredPermission})`)
-          .join('\n')}`,
-        result.denials,
+    case 'denied': {
+      const shown = result.denials.slice(0, MAX_DENIALS_SHOWN)
+      const more = result.denials.length - shown.length
+      const lines = shown.map(
+        (d) => `  ${scrub(String(d.path))}: ${scrub(String(d.reason))} (needs ${scrub(String(d.requiredPermission))})`,
       )
-    default:
+      if (more > 0) lines.push(`  ... and ${more} more`)
+      throw new SecretWriteError('denied', `the server refused the write:\n${lines.join('\n')}`, result.denials)
+    }
+
+    default: {
+      const message = scrub(String(result.message))
       throw new SecretWriteError(
         'bad_request',
-        /push allow-list/i.test(result.message) && /secrets\//.test(result.message)
-          ? `this Quonfig server does not accept secrets/ yet (${result.message})`
-          : `the server refused the write: ${result.message}`,
+        /push allow-list/i.test(message) && /secrets\//.test(message)
+          ? `this Quonfig server does not accept secrets/ yet (${message})`
+          : `the server refused the write: ${message}`,
       )
+    }
   }
 }

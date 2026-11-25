@@ -55,6 +55,46 @@ export const runGit = async (args: string[], options?: RunGitOptions): Promise<{
   }
 }
 
+/**
+ * Run a git command whose output is NUL-separated (`-z`) and hand each entry
+ * to `onEntry` as it arrives, so a listing of any size is never held whole
+ * (`runGit`'s execFile stops at Node's 1 MiB output limit). Same safe
+ * args/env as `runGit`; the error carries git's stderr with tokens redacted.
+ */
+export const streamGitNulEntries = (
+  args: string[],
+  onEntry: (entry: string) => void,
+  options?: RunGitOptions,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const env = {...process.env, ...GIT_SAFE_ENV, ...options?.env}
+    const child = spawn('git', [...GIT_SAFE_ARGS, ...args], {cwd: options?.cwd, env, stdio: ['ignore', 'pipe', 'pipe']})
+    let pending = Buffer.alloc(0)
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => {
+      pending = Buffer.concat([pending, chunk])
+      let nul = pending.indexOf(0)
+      while (nul !== -1) {
+        onEntry(pending.subarray(0, nul).toString('utf8'))
+        pending = pending.subarray(nul + 1)
+        nul = pending.indexOf(0)
+      }
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < 4096) stderr += chunk.toString('utf8')
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(redactToken(`git ${args.join(' ')} failed (exit ${code}): ${stderr.trim()}`)))
+        return
+      }
+
+      if (pending.length > 0) onEntry(pending.toString('utf8'))
+      resolve()
+    })
+  })
+
 export interface SpawnGitOptions {
   cwd?: string
   env?: NodeJS.ProcessEnv
