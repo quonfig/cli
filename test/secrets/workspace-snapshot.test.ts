@@ -15,6 +15,7 @@ import {
   openWorkspaceSnapshot,
   withWorkspaceSnapshot,
 } from '../../src/secrets/workspace-snapshot.js'
+import {streamGitNulEntries} from '../../src/util/git-ops.js'
 import {bareWorkspaceRepo, configDoc, git, quonfigJson, tmpDir} from './plumbing-fixtures.js'
 
 /** Every file under `dir`, as text (binary files decode lossily, which is fine for a substring search). */
@@ -326,9 +327,9 @@ describe('workspace snapshot never reads outside the clone through symlinks (qfg
       expect(() => snap.listJson('configs')).to.throw(SnapshotPathError)
       expect(() => snap.documents(), 'a symlinked family directory fails the whole read').to.throw(SnapshotPathError)
       expect(everything(snap)).to.not.include(SENTINEL)
-      // core.symlinks=false: what is on disk is a plain file, never a link.
-      expect(fs.lstatSync(path.join(snap.dir, 'quonfig.json')).isSymbolicLink()).to.equal(false)
-      expect(fs.lstatSync(path.join(snap.dir, 'configs')).isSymbolicLink()).to.equal(false)
+      // Nothing is checked out: no file, link or not, exists in the snapshot dir.
+      expect(fs.existsSync(path.join(snap.dir, 'quonfig.json'))).to.equal(false)
+      expect(fs.existsSync(path.join(snap.dir, 'configs'))).to.equal(false)
     } finally {
       await snap.cleanup()
     }
@@ -353,26 +354,23 @@ describe('workspace snapshot never reads outside the clone through symlinks (qfg
       expect([...snap.documents().keys()]).to.deep.equal(['secrets/ok.json'])
       expect(snap.findKey('x')).to.deep.equal([])
       expect(everything(snap)).to.not.include(SENTINEL)
-      expect(fs.lstatSync(path.join(snap.dir, 'secrets', 'x.json')).isSymbolicLink()).to.equal(false)
+      expect(fs.existsSync(path.join(snap.dir, 'secrets'))).to.equal(false)
     } finally {
       await snap.cleanup()
     }
   })
 
-  // The lstat layer on its own: a link planted on disk after the checkout.
-  // Creating symlinks needs privileges on Windows, so this runs on POSIX only.
+  // Nothing is read from the working tree, so a link planted in the snapshot
+  // dir after the fetch changes nothing (qfg-mol-hle PR 3a, D1).
   const posix = process.platform === 'win32' ? it.skip : it
-  posix('an on-disk symlink file or parent directory in the clone is refused (lstat layer)', async () => {
+  posix('a symlink planted in the snapshot directory is never read', async () => {
     const {bare} = bareWorkspaceRepo(path.join(root, 'repo'), {'quonfig.json': '{}', 'secrets/ok.json': '{}'})
     const snap = await cloneWorkspaceSnapshot(pathToFileURL(bare).href, {tmpRoot: root})
     try {
-      fs.rmSync(path.join(snap.dir, 'quonfig.json'))
       fs.symlinkSync(outsideFile, path.join(snap.dir, 'quonfig.json'))
-      fs.rmSync(path.join(snap.dir, 'secrets'), {recursive: true})
       fs.symlinkSync(outsideDir, path.join(snap.dir, 'secrets'))
-      expect(() => snap.readFile('quonfig.json')).to.throw(SnapshotPathError, /regular file/)
-      expect(() => snap.readFile('secrets/x.json')).to.throw(SnapshotPathError, /regular/)
-      expect(() => snap.listJson('secrets')).to.throw(SnapshotPathError)
+      expect(snap.readFile('quonfig.json')).to.equal('{}')
+      expect(snap.listJson('secrets')).to.deep.equal(['ok.json'])
       expect(everything(snap)).to.not.include(SENTINEL)
     } finally {
       await snap.cleanup()
@@ -471,5 +469,149 @@ describe('workspace snapshot of a large workspace (qfg-mol-hle PR 3, carry-in S1
     } finally {
       await snap.cleanup()
     }
+  })
+})
+
+describe('workspace snapshot reads git objects, not a checkout (qfg-mol-hle PR 3a, D1)', function () {
+  this.timeout(60_000)
+  let root: string
+
+  beforeEach(() => {
+    root = tmpDir('qfg-snap-objects-')
+  })
+  afterEach(() => fs.rmSync(root, {force: true, maxRetries: 3, recursive: true}))
+
+  /**
+   * A bare repo whose main holds `files` (path -> text) and `gitlinks` (path ->
+   * commit sha), built with plumbing and core.ignorecase=false, so trees with
+   * case-variant paths can be built on any file system.
+   */
+  function plumbingRepo(files: Record<string, string>, gitlinks: Record<string, string> = {}): string {
+    const bare = path.join(root, 'ws.git')
+    git(root, 'init', '-q', '--bare', bare)
+    const lines: string[] = []
+    for (const [p, text] of Object.entries(files)) {
+      const oid = execFileSync('git', ['-C', bare, 'hash-object', '-w', '--stdin'], {
+        encoding: 'utf8',
+        input: text,
+      }).trim()
+      lines.push(`100644 ${oid}\t${p}`)
+    }
+
+    for (const [p, sha] of Object.entries(gitlinks)) lines.push(`160000 ${sha}\t${p}`)
+    const env = {...process.env, GIT_INDEX_FILE: path.join(root, 'ws.index')}
+    execFileSync('git', ['-c', 'core.ignorecase=false', '-C', bare, 'update-index', '--index-info'], {
+      env,
+      input: `${lines.join('\n')}\n`,
+    })
+    const tree = execFileSync('git', ['-C', bare, 'write-tree'], {encoding: 'utf8', env}).trim()
+    const commit = git(root, '-C', bare, 'commit-tree', tree, '-m', 'seed')
+    git(root, '-C', bare, 'update-ref', 'refs/heads/main', commit)
+    return pathToFileURL(bare).href
+  }
+
+  it('a case-variant top-level directory does not hide secrets/ (Secrets/ and secrets/ in one tree)', async () => {
+    const url = plumbingRepo({
+      'Secrets/zzz.json': '{"key":"zzz"}',
+      'quonfig.json': quonfigJson({}),
+      'secrets/db.json': '{"key":"db"}',
+    })
+    const snap = await cloneWorkspaceSnapshot(url, {tmpRoot: root})
+    try {
+      expect(snap.listJson('secrets')).to.deep.equal(['db.json'])
+      expect(snap.readFile('secrets/db.json')).to.equal('{"key":"db"}')
+      expect(snap.findKey('db')).to.deep.equal([{dir: 'secrets', file: 'secrets/db.json', key: 'db'}])
+      expect(snap.hasSecrets()).to.equal(true)
+      expect([...snap.documents().keys()]).to.deep.equal(['secrets/db.json'])
+    } finally {
+      await snap.cleanup()
+    }
+  })
+
+  it('two files that differ only in case are two files', async () => {
+    const url = plumbingRepo({
+      'quonfig.json': quonfigJson({}),
+      'secrets/DB.json': '{"key":"DB"}',
+      'secrets/db.json': '{"key":"db"}',
+    })
+    const snap = await cloneWorkspaceSnapshot(url, {tmpRoot: root})
+    try {
+      expect(snap.listJson('secrets')).to.deep.equal(['DB.json', 'db.json'])
+      expect(snap.readFile('secrets/DB.json')).to.equal('{"key":"DB"}')
+      expect(snap.readFile('secrets/db.json')).to.equal('{"key":"db"}')
+    } finally {
+      await snap.cleanup()
+    }
+  })
+
+  it('a submodule entry is not a file: reads through it are refused and listings leave it out', async () => {
+    const url = plumbingRepo({'configs/a.json': '{}', 'quonfig.json': quonfigJson({})}, {'secrets/sub': 'a'.repeat(40)})
+    const snap = await cloneWorkspaceSnapshot(url, {tmpRoot: root})
+    try {
+      expect(() => snap.readFile('secrets/sub')).to.throw(SnapshotPathError)
+      expect(() => snap.readFile('secrets/sub/x.json')).to.throw(SnapshotPathError)
+      expect(snap.listJson('secrets')).to.deep.equal([])
+    } finally {
+      await snap.cleanup()
+    }
+  })
+})
+
+describe('streamGitNulEntries (qfg-mol-hle PR 3a, N8)', function () {
+  this.timeout(60_000)
+  let root: string
+  let bare: string
+
+  before(() => {
+    root = tmpDir('qfg-stream-')
+    bare = path.join(root, 'r.git')
+    git(root, 'init', '-q', '--bare', bare)
+    const blob = execFileSync('git', ['-C', bare, 'hash-object', '-w', '--stdin'], {
+      encoding: 'utf8',
+      input: 'x',
+    }).trim()
+    const lines = Array.from({length: 5000}, (_, i) => `100644 ${blob}\tdir/entry-${String(i).padStart(5, '0')}.json`)
+    const env = {...process.env, GIT_INDEX_FILE: path.join(root, 'r.index')}
+    execFileSync('git', ['-C', bare, 'update-index', '--index-info'], {env, input: `${lines.join('\n')}\n`})
+    const tree = execFileSync('git', ['-C', bare, 'write-tree'], {encoding: 'utf8', env}).trim()
+    git(root, '-C', bare, 'update-ref', 'refs/heads/main', git(root, '-C', bare, 'commit-tree', tree, '-m', 's'))
+  })
+  after(() => fs.rmSync(root, {force: true, maxRetries: 3, recursive: true}))
+
+  it('delivers every entry whole, even when entries are split across stdout chunks', async () => {
+    const seen: string[] = []
+    await streamGitNulEntries(['-C', bare, 'ls-tree', '-r', '-z', 'main'], (e) => seen.push(e))
+    expect(seen).to.have.length(5000)
+    expect(seen.every((e) => /^100644 blob [\da-f]{40}\tdir\/entry-\d{5}\.json$/.test(e))).to.equal(true)
+  })
+
+  it('rejects when onEntry throws, instead of an uncaught exception', async () => {
+    const err = await streamGitNulEntries(['-C', bare, 'ls-tree', '-r', '-z', 'main'], () => {
+      throw new Error('stop here')
+    }).then(
+      () => {},
+      (error: Error) => error,
+    )
+    expect(err?.message).to.equal('stop here')
+  })
+
+  it('rejects on a non-zero exit, with tokens redacted', async () => {
+    const err = await streamGitNulEntries(
+      ['-C', bare, 'ls-tree', '-r', '-z', 'https://u:SENTINELTOKEN@example.invalid/x'],
+      () => {},
+    ).then(
+      () => {},
+      (error: Error) => error,
+    )
+    expect(err?.message).to.match(/failed \(exit \d+\)/)
+    expect(err?.message).to.not.include('SENTINELTOKEN')
+  })
+
+  it('rejects on a timeout', async () => {
+    const err = await streamGitNulEntries(['-C', bare, 'ls-tree', '-r', '-z', 'main'], () => {}, {timeoutMs: 1}).then(
+      () => {},
+      (error: Error) => error,
+    )
+    expect(err?.message).to.match(/timed out/)
   })
 })
